@@ -13,14 +13,15 @@ Une interface rattachée à STM permettant à la **Programmation (DMP)** de noti
 
 ## 2. Décisions figées (validées)
 
-- **Non-linéaire** = offre de contenu digital rattachée à un programme, avec une **date de mise en ligne** (pas d'heure d'antenne).
-- **Rattachement** = à un **programme STM existant via son `programme_id`** (pas de création de zéro). Option secondaire « hors programme » pour une campagne social pure.
+- **Non-linéaire** = contenu streaming (type Forja.ma) : pas d'antenne, pas d'heure_fin. Timing de l'offre = **date_mise_en_ligne** (+ fenêtre de dispo optionnelle).
+- **Rattachement OBLIGATOIRE** : toute offre est liée à un **programme existant de la grille via son `programme_id`**. Pas de mode « hors programme ».
+- **But central** : notifier le marketing **au minimum 2 mois avant la mise en ligne**. Une notification envoyée à moins de 2 mois = alerte « retard ».
 - **Accès données STM** = **import de fichiers xlsx** (mock STM) — les grilles réelles fournies.
 - **Notification** = déclenchée **après validation**, pas d'étape d'approbation dans l'outil.
 - **Canal** = **inbox intégrée** (vue marketing dans l'app).
 - **Rôles** = **login simple** à 2 rôles : `PROGRAMMATION`, `DIGITAL`.
 - **Champs** = FR pour l'instant (structure prête pour l'AR). Voir §4.
-- **Délai d'avance** = **paramétrable** par offre.
+- **Délai d'avance** = **paramétrable** par offre, en **mois/jours, minimum 2 mois** (alerte si non respecté).
 - **Annulation** = gérée, se répercute dans l'inbox.
 - **Langue UI** = FR.
 
@@ -50,7 +51,7 @@ type Programme = {
 // Offre non linéaire (la couche digitale ajoutée)
 type Offre = {
   id: string;                    // uuid
-  programme_id: string | null;   // null si "hors programme"
+  programme_id: string;           // toujours rattaché à un programme de la grille (obligatoire)
   titre: string;                 // repris de STM ou saisi
   genre: string;
   chaine: string;
@@ -62,7 +63,7 @@ type Offre = {
   fenetre_fin?: string;
   visuel?: { kind: "url" | "upload"; value: string }; // value = URL ou base64
   lien?: string;                 // deep-link VOD / page
-  delai_avance: { valeur: number; unite: "HEURES" | "JOURS" }; // paramétrable
+  delai_avance: { valeur: number; unite: "MOIS" | "JOURS" };   // paramétrable, minimum 2 mois, alerte si non respecté
   cree_par: string;              // user PROGRAMMATION
   cree_le: string;               // ISO
 };
@@ -133,12 +134,13 @@ But : **ne jamais notifier une donnée incohérente** au marketing.
 
 ### Phase 4 — Écran Émetteur (créer + notifier)
 **Tâches**
-- Recherche/sélection d'un programme importé (par `programme_id` ou titre) **ou** bascule « hors programme ».
-- Formulaire couche digitale (tous les champs `Offre`), **upload image (base64) OU URL**.
+- Recherche/sélection **obligatoire** d'un programme importé (par `programme_id` ou titre) — pas de bascule « hors programme ».
+- Formulaire couche digitale (tous les champs `Offre`), timing = **`date_mise_en_ligne`** (+ fenêtre de dispo optionnelle), pas d'heure_fin. **Upload image (base64) OU URL**.
 - Validation des champs requis + **aperçu du payload**.
+- Contrôle : si `date_mise_en_ligne` est à **moins de 2 mois**, afficher une alerte « notification tardive » (non bloquante mais visible).
 - « Notifier le Digital » → crée `Offre` + `Notification{statut:ENVOYEE}`.
 
-**Test** ✅ Créer une notification de bout en bout → elle apparaît dans le storage et dans « mes notifications » avec statut ENVOYEE.
+**Test** ✅ Créer une notification de bout en bout → elle apparaît dans le storage et dans « mes notifications » avec statut ENVOYEE. Une offre créée avec `date_mise_en_ligne` à moins de 2 mois déclenche l'alerte de retard.
 
 ### Phase 5 — Inbox Marketing (Digital)
 **Tâches**
@@ -163,13 +165,13 @@ But : **ne jamais notifier une donnée incohérente** au marketing.
 
 **Test** ✅ Les compteurs correspondent aux données ; filtrer par statut « VUE » n'affiche que les VUE.
 
-### Phase 8 — Délai paramétrable + fenêtre « à publier bientôt »
+### Phase 8 — Délai d'avance (≥ 2 mois) + suivi des retards
 **Tâches**
-- Prise en compte de `delai_avance` par offre.
-- Dashboard : surbrillance des offres dont `date_mise_en_ligne` tombe **dans** la fenêtre (`maintenant …  date_mise_en_ligne - delai_avance` dépassé).
-- Tri par urgence.
+- Prise en compte de `delai_avance` par offre, en **mois/jours, minimum 2 mois**.
+- Calcul du délai réel = `date_mise_en_ligne − envoyee_le` ; marquer la notification **« notifiée en retard »** si ce délai est **inférieur à 2 mois**.
+- Dashboard : surbrillance des offres à notifier bientôt + **compteur des notifications en retard**. Tri par urgence.
 
-**Test** ✅ Une offre avec mise en ligne proche (dans la fenêtre du délai) est mise en évidence « à publier bientôt » ; une offre lointaine ne l'est pas.
+**Test** ✅ Une offre notifiée à moins de 2 mois de sa mise en ligne apparaît « en retard » ; une offre notifiée largement à l'avance n'est pas signalée.
 
 ### Phase 9 — Finition + déploiement
 **Tâches**

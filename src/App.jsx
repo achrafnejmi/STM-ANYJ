@@ -1,3 +1,5 @@
+import ImportSTM from './screens/ImportSTM.jsx'
+
 function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -8,13 +10,8 @@ function App() {
         <p className="text-sm text-slate-500">STM → Digital</p>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-          <p>
-            Le login et la navigation par rôle (Programmation / Digital)
-            arrivent en Phase 3.
-          </p>
-        </div>
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <ImportSTM />
       </main>
     </div>
   )

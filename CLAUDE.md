@@ -11,7 +11,9 @@ Le plan détaillé et phasé est dans **`PLAN.md`**. Suis-le **phase par phase**
 - Pas de dépendances superflues. Stack imposée : **Vite + React + Tailwind**, `xlsx` (SheetJS), `lucide-react`, `uuid`.
 
 ## Contraintes d'architecture
-- **Ne pas dupliquer le référentiel STM.** Une offre non linéaire se **rattache** à un `programme_id` existant (importé du xlsx). Option secondaire « hors programme » seulement.
+- **Non-linéaire** = contenu streaming (type Forja.ma) : pas d'antenne, pas d'heure_fin sur l'offre. Timing = date_mise_en_ligne (+ fenêtre optionnelle).
+- **But central** : notifier le marketing ≥ 2 mois avant la mise en ligne. `delai_avance` en mois/jours, minimum 2 mois, alerte si non respecté (mécanisme clé, Phase 8).
+- **Ne pas dupliquer le référentiel STM.** Toute offre est OBLIGATOIREMENT rattachée à un `programme_id` existant (importé de la grille). Pas de mode « hors programme ».
 - **Persistance derrière une seule interface** (`src/lib/storage.js`) pour être remplaçable plus tard par une vraie API STM. Le reste du code ne parle jamais au stockage directement.
 - **Import xlsx = mock STM** (lecture seule). Ne jamais « écrire » dans STM.
 - **Nettoyage obligatoire à l'import** (voir §6 du PLAN) : exclure/mettre de côté les lignes incohérentes (fin < début, « fin d'émission », doublons, champs vides). **Ne jamais notifier une donnée incohérente.**
