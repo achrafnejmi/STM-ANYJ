@@ -1,217 +1,119 @@
-# PLAN — PoC « Notification des offres non linéaires : STM → Digital »
+# PLAN — Snomark : STM nouvelle génération (linéaire + non-linéaire)
 
-> Plan de construction phasé, prêt à piloter avec **Claude Code**.
-> Règle d'or : **une phase = un lot de tâches + un test de validation**. On ne passe à la phase suivante que si le test passe.
-
----
-
-## 1. Contexte & objectif
-
-Une interface rattachée à STM permettant à la **Programmation (DMP)** de notifier le **service marketing (Département Portail / Digital)** qu'une **offre non linéaire** (VOD / replay / contenu exclusif) arrive, **après validation** du programme, afin que le Digital **planifie ses ressources** pour les posts réseaux sociaux. Le cycle de chaque notification est **tracké** : `envoyée → vue → publiée` (+ `annulée`).
-
-**Ce n'est PAS** : une refonte de STM, une duplication du référentiel, ni la fabrication du contenu digital.
-
-## 2. Décisions figées (validées)
-
-- **Non-linéaire** = contenu streaming (type Forja.ma) : pas d'antenne, pas d'heure_fin. Timing de l'offre = **date_mise_en_ligne** (+ fenêtre de dispo optionnelle).
-- **Rattachement OBLIGATOIRE** : toute offre est liée à un **programme existant de la grille via son `programme_id`**. Pas de mode « hors programme ».
-- **But central** : notifier le marketing **au minimum 2 mois avant la mise en ligne**. Une notification envoyée à moins de 2 mois = alerte « retard ».
-- **Accès données STM** = **import de fichiers xlsx** (mock STM) — les grilles réelles fournies.
-- **Notification** = déclenchée **après validation**, pas d'étape d'approbation dans l'outil.
-- **Canal** = **inbox intégrée** (vue marketing dans l'app).
-- **Rôles** = **login simple** à 2 rôles : `PROGRAMMATION`, `DIGITAL`.
-- **Champs** = FR pour l'instant (structure prête pour l'AR). Voir §4.
-- **Délai d'avance** = **paramétrable** par offre, en **mois/jours, minimum 2 mois** (alerte si non respecté).
-- **Annulation** = gérée, se répercute dans l'inbox.
-- **Langue UI** = FR.
-
-## 3. Stack & livrable
-
-- **App web autonome** : Vite + React + Tailwind. Aucun serveur à héberger.
-- **Persistance** : couche `storage` abstraite (clé-valeur) → survit aux rechargements. Isolée derrière une interface pour être remplaçable par une vraie API STM en phase 2.
-- **Import xlsx** : SheetJS (`xlsx`).
-- **Icônes** : `lucide-react`.
-- **Déployable** : `npm run build` → dossier statique déployable sur n'importe quel hébergeur (Netlify, Vercel, GitHub Pages, S3…).
-
-## 4. Modèle de données
-
-```ts
-// Programme importé depuis STM (lecture seule, via import xlsx)
-type Programme = {
-  programme_id: string;      // clé de rattachement
-  titre: string;             // FR
-  genre: string;             // FR
-  chaine: string;            // ex. "Al Aoula", "Tamazight"
-  date?: string;             // ISO, si issu de la grille
-  heure_debut?: string;
-  heure_fin?: string;
-  _anomalie?: string | null; // rempli par le nettoyage (voir §6)
-};
-
-// Offre non linéaire (la couche digitale ajoutée)
-type Offre = {
-  id: string;                    // uuid
-  programme_id: string;           // toujours rattaché à un programme de la grille (obligatoire)
-  titre: string;                 // repris de STM ou saisi
-  genre: string;
-  chaine: string;
-  description: string;
-  type_offre: "VOD" | "REPLAY" | "CONTENU_EXCLUSIF";
-  supports: string[];            // ["Facebook","Instagram","YouTube","Site"...]
-  date_mise_en_ligne: string;    // ISO datetime
-  fenetre_debut?: string;
-  fenetre_fin?: string;
-  visuel?: { kind: "url" | "upload"; value: string }; // value = URL ou base64
-  lien?: string;                 // deep-link VOD / page
-  delai_avance: { valeur: number; unite: "MOIS" | "JOURS" };   // paramétrable, minimum 2 mois, alerte si non respecté
-  cree_par: string;              // user PROGRAMMATION
-  cree_le: string;               // ISO
-};
-
-// Notification (le hand-off tracké)
-type Notification = {
-  id: string;                 // uuid
-  offre_id: string;
-  statut: "ENVOYEE" | "VUE" | "PUBLIEE" | "ANNULEE";
-  envoyee_le: string;
-  vue_le?: string;
-  publiee_le?: string;
-  annulee_le?: string;
-  historique: { statut: string; le: string; par: string }[];
-};
-```
-
-## 5. Écrans
-
-1. **Login** — choix du rôle (PROGRAMMATION / DIGITAL) + identifiant simple.
-2. **Émetteur (PROGRAMMATION)** — import xlsx STM · recherche/sélection programme · formulaire couche digitale · aperçu du payload · bouton **« Notifier le Digital »** · liste de ses notifications avec **Annuler**.
-3. **Inbox (DIGITAL)** — liste des notifications reçues · ouverture d'un détail (passe en **VUE**) · bouton **« Marquer publié »** · notifications **annulées** clairement signalées.
-4. **Dashboard (les deux rôles)** — tableau de toutes les notifications · compteurs par statut · filtres (statut, type, chaîne, date) · surbrillance **« à publier bientôt »** (dans la fenêtre `delai_avance`).
-
-## 6. Règles de nettoyage du mock STM (à appliquer à l'import)
-
-Marquer `_anomalie` et **exclure de la sélection** (mais lister à part) les lignes où :
-- `heure_fin < heure_debut` (fin avant début) ;
-- le titre est un marqueur de **fin d'émission** (ex. `TIGIRA N USSIFD`, « fin d'émission ») ;
-- **doublon** de titre unitaire consécutif sur la même case ;
-- champs clés vides (`titre` ou `date`/`heure` absents).
-
-But : **ne jamais notifier une donnée incohérente** au marketing.
+> Plan phasé, piloté avec Claude Code.
+> Règle d'or : **une phase = tâches + test ✅** ; on ne code la phase N+1 qu'après validation de N.
+> Avant de coder une phase : présenter le plan + **lister les ambiguïtés** et s'arrêter (règle d'approbation).
 
 ---
 
-## 7. Phases (chacune : tâches → test de validation)
+## 1. Produit
 
-### Phase 0 — Scaffold
-**Tâches**
-- Initialiser Vite + React, Tailwind, deps (`xlsx`, `lucide-react`, `uuid`).
-- Arborescence : `src/lib` (storage, stm-import, model), `src/screens`, `src/components`, `src/App.jsx`.
-- Shell + navigation vide selon rôle (placeholder).
+**Snomark = un STM « nouvelle génération » (PoC).** Il reproduit le cœur de l'actuel STM (d'après les captures de la présentation SNRT) et ajoute la gestion **non-linéaire par plateforme**. Backend **Supabase**. GUI **soigné, aux couleurs SNRT**, logo étoile conservé.
 
-**Test** ✅ `npm run dev` démarre, le shell s'affiche sans erreur console.
+**Principe métier central :** un seul **« Programme TV »** peut être diffusé **en linéaire** (créneau dans la grille hebdomadaire) **et/ou en non-linéaire** (contenus par plateforme : post Facebook, reel Instagram, vidéo TikTok, VOD/Forja). C'est **le même programme, deux modes de diffusion**, chacun dans sa grille.
 
-### Phase 1 — Mock STM (import xlsx + nettoyage)
-**Tâches**
-- `src/lib/stm-import.js` : parser `grille_*.xlsx` et `PM_*.xlsx` → `Programme[]` normalisé (gérer les dates série Excel, les heures en texte `"12.00"`).
-- Appliquer les règles §6 → `_anomalie`.
-- Écran d'import : uploader un xlsx, prévisualiser programmes **valides** vs **anomalies**.
+**Les deux grilles sont des calendriers hebdomadaires.** La grille non-linéaire est datée par **date de publication** et organisée par **plateforme**.
 
-**Test** ✅ Importer les 2 fichiers fournis → liste de programmes propres + section « anomalies » listant au moins la ligne `fin < début` et une ligne « fin d'émission ».
+**Notification = mise de côté** (à traiter après correction des problèmes de STM). Le modèle Offre/Notification est **conservé mais parqué**.
 
-### Phase 2 — Modèle + persistance
-**Tâches**
-- `src/lib/storage.js` : `get/set/list/remove` (clé-valeur), une seule interface (implémentation locale, remplaçable plus tard par API).
-- Types/helpers du §4 ; création d'`Offre` et `Notification`.
+## 2. Ce qui est réutilisé (NE PAS perdre)
 
-**Test** ✅ Créer une offre + une notification, recharger la page → elles persistent (round-trip OK).
+- **Scaffold** Vite + React + Tailwind (P0).
+- **Import + nettoyage xlsx** (`stm-import.js`, P1) → sert désormais à **peupler la grille linéaire** dans Supabase.
+- **Couche d'accès isolée** (`storage.js`, P2) → conservée pour la **session/login** ; l'accès aux **données métier** passe désormais par une nouvelle couche **Supabase** (`src/lib/db.js`).
+- **`model.js`** : typedef `Programme` réutilisé et étendu. Offre/Notification + helpers de clé = **parqués** (non supprimés).
+- **Login par rôle** (P3) → conservé, rendu plus soigné (P6).
 
-### Phase 3 — Login simple (2 rôles)
-**Tâches**
-- Écran login (rôle + identifiant), stockage de la session.
-- Garde de navigation : PROGRAMMATION ↔ Émetteur ; DIGITAL ↔ Inbox ; Dashboard partagé.
+## 3. Stack
 
-**Test** ✅ Se connecter en PROGRAMMATION → voit Émetteur ; en DIGITAL → voit Inbox ; pas de fuite d'écran entre rôles.
+- **Front** : Vite + React + Tailwind ; icônes `lucide-react`.
+- **Données : Supabase** (Postgres + `@supabase/supabase-js`). Clés via **variables d'environnement** (`.env` : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) — **jamais en dur**, `.env` dans `.gitignore`.
+- **Import xlsx** : SheetJS (conservé).
+- **Déploiement** : build statique + Supabase en ligne.
 
-### Phase 4 — Écran Émetteur (créer + notifier)
-**Tâches**
-- Recherche/sélection **obligatoire** d'un programme importé (par `programme_id` ou titre) — pas de bascule « hors programme ».
-- Formulaire couche digitale (tous les champs `Offre`), timing = **`date_mise_en_ligne`** (+ fenêtre de dispo optionnelle), pas d'heure_fin. **Upload image (base64) OU URL**.
-- Validation des champs requis + **aperçu du payload**.
-- Contrôle : si `date_mise_en_ligne` est à **moins de 2 mois**, afficher une alerte « notification tardive » (non bloquante mais visible).
-- « Notifier le Digital » → crée `Offre` + `Notification{statut:ENVOYEE}`.
+## 4. Modèle de données (Supabase)
 
-**Test** ✅ Créer une notification de bout en bout → elle apparaît dans le storage et dans « mes notifications » avec statut ENVOYEE. Une offre créée avec `date_mise_en_ligne` à moins de 2 mois déclenche l'alerte de retard.
+**Cœur (P5) :**
 
-### Phase 5 — Inbox Marketing (Digital)
-**Tâches**
-- Liste des notifications reçues (hors ANNULEE en tête, ANNULEE signalées).
-- Ouverture détail → passe **ENVOYEE → VUE** (horodaté).
-- Bouton **« Marquer publié »** → **VUE → PUBLIEE**.
+- `programme` : id (uuid), titre, titre_ar, genre, sous_genre, thematique, description, date_production, code, nombre_segments, auteur, exclusivite (bool), chaine, cree_par, cree_le.
+- `segment` : id, programme_id (fk), numero, titre, duree, date_production, code, description, pad (bool), derniere_diffusion, nombre_diffusions.
+- `diffusion_lineaire` (créneau grille linéaire) : id, programme_id (fk), chaine, date, heure_debut, heure_fin, genre, titre_cache.
+- `diffusion_non_lineaire` (contenu plateforme) : id, programme_id (fk), plateforme (`FACEBOOK|INSTAGRAM|TIKTOK|VOD|FORJA`), type_contenu (`POST|REEL|VIDEO|VOD`), date_publication, heure_publication, titre, description, lien, visuel, statut, cree_par, cree_le.
 
-**Test** ✅ En DIGITAL : ouvrir une notif (statut passe VUE), la marquer publiée (statut PUBLIEE), l'historique enregistre les deux transitions.
+**Extension :**
 
-### Phase 6 — Annulation (émetteur)
-**Tâches**
-- Bouton **Annuler** côté Émetteur → **statut ANNULEE** (horodaté), quel que soit l'état précédent (sauf déjà PUBLIEE : au choix, bloquer ou marquer « annulée après publication »).
-- Répercussion immédiate dans l'Inbox.
+- `pre_grille` (P10) : id, chaine, jour/case_horaire, heure_debut, heure_fin, genre (sans titre).
+- `contrat` (P12) : id, programme_id, numero, type, contractant, represente_par, approuve_par, date_livraison, lieu_livraison, delai_execution, fichier.
+- `conducteur` (P11) : **vue générée** d'une journée de `diffusion_lineaire` (pas forcément une table).
 
-**Test** ✅ Annuler une notification ENVOYEE → elle apparaît ANNULEE dans l'Inbox du Digital.
+## 5. Écrans (calqués sur STM, en plus soigné)
 
-### Phase 7 — Dashboard tracking
-**Tâches**
-- Tableau global : offre, chaîne, type, date mise en ligne, statut.
-- Compteurs par statut (ENVOYEE / VUE / PUBLIEE / ANNULEE).
-- Filtres : statut, type, chaîne, plage de dates.
+- **Coquille** : sidebar sombre (Accueil, Programmes, Pré-Grille, Grille, Grille non-linéaire, Conducteur, Contrats, Administration) + top bar avec **logo SNRT** et utilisateur ; **login soigné**.
+- **Programmes** : fiche programme (formulaire) + liste des segments (onglets Infos / Supports / Événements).
+- **Grille linéaire** : calendrier hebdomadaire, blocs **colorés par genre**, navigation Semaine/Jour.
+- **Grille non-linéaire** : calendrier hebdomadaire par **date de publication**, blocs par **plateforme** (couleur + filtre FB/IG/TikTok/VOD/Forja).
+- **Pré-grille / Conducteur / Contrats** (extension).
 
-**Test** ✅ Les compteurs correspondent aux données ; filtrer par statut « VUE » n'affiche que les VUE.
+## 6. Feuille de route
 
-### Phase 8 — Délai d'avance (≥ 2 mois) + suivi des retards
-**Tâches**
-- Prise en compte de `delai_avance` par offre, en **mois/jours, minimum 2 mois**.
-- Calcul du délai réel = `date_mise_en_ligne − envoyee_le` ; marquer la notification **« notifiée en retard »** si ce délai est **inférieur à 2 mois**.
-- Dashboard : surbrillance des offres à notifier bientôt + **compteur des notifications en retard**. Tri par urgence.
+**Acquis :** P0 scaffold · P1 import+nettoyage · P2 storage+model · P3 login · P4 (écran émetteur — partie **import réutilisée** ; formulaire offre/notify **parqué**).
 
-**Test** ✅ Une offre notifiée à moins de 2 mois de sa mise en ligne apparaît « en retard » ; une offre notifiée largement à l'avance n'est pas signalée.
+### P5 — Fondation Supabase
+- Client `@supabase/supabase-js` (clés via `.env`).
+- Schéma SQL des tables **cœur** (§4) + script de migration.
+- Couche `src/lib/db.js` : accès CRUD par entité (programme, segment, diffusion_lineaire, diffusion_non_lineaire).
+- **Rebrancher l'import** (`stm-import.js`) : les programmes valides + créneaux → insérés dans `programme` + `diffusion_lineaire`.
+- **Test ✅** : importer la grille → les lignes apparaissent dans Supabase et sont relues par `db.js`.
 
-### Phase 9 — Finition + déploiement
-**Tâches**
-- Libellés FR complets, états vides, responsive, messages d'erreur.
-- `npm run build` ; instructions de déploiement statique.
-- README court (comment lancer / importer / démo).
+### P6 — Coquille GUI SNRT (shell + nav + login)
+- Layout : sidebar sombre + top bar logo SNRT + utilisateur ; thème couleurs SNRT.
+- Login soigné (choix de rôle, branding), session via `storage.js`, garde de nav par rôle.
+- **Test ✅** : nav complète rendue, branding SNRT, login → accès selon rôle, reload garde la session.
 
-**Test** ✅ Le build de prod tourne ; le parcours complet (import → notifier → vue → publié / annuler → dashboard) est démontrable de bout en bout.
+### P7 — Programmes (fiche + segments)
+- CRUD `programme` (formulaire fiche) + `segment` (onglets), sur Supabase.
+- **Test ✅** : créer/éditer/lister un programme + ses segments (persistés en base).
 
----
+### P8 — Grille linéaire (calendrier hebdo)
+- Vue calendrier semaine ; blocs = `diffusion_lineaire`, **couleur par genre** ; peuplée par l'import.
+- Ajout/édition d'un créneau rattaché à un `programme`.
+- **Test ✅** : après import, la grille affiche les programmes aux bons créneaux ; ajouter un créneau l'affiche.
 
-## 8. Piloter avec Claude Code
+### P9 — Grille non-linéaire (par plateforme)
+- Vue calendrier semaine par **date de publication** ; blocs = `diffusion_non_lineaire`, **couleur/filtre par plateforme**.
+- Ajouter un contenu (FB post / IG reel / TikTok video / VOD-Forja) **rattaché à un programme existant**.
+- **Test ✅** : ajouter un post FB + un reel IG pour un programme à une date → apparaissent sur le calendrier non-linéaire ; le **même programme** peut figurer aussi dans la grille linéaire.
 
-1. Mettre `PLAN.md` + `CLAUDE.md` à la racine du repo.
-2. Lancer `claude` dans le dossier.
-3. Prompt de départ :
-   > « Lis `CLAUDE.md` et `PLAN.md`. Implémente **uniquement la Phase 0**, puis arrête-toi et indique comment lancer le test de validation de la phase. »
-4. Après chaque phase : vérifier le **Test ✅**, committer (`git commit -m "Phase N — <titre>"`), puis :
-   > « Test de la Phase N validé. Passe à la **Phase N+1**, même règle : t'arrêter au test. »
-5. En cas de bug : donner le message d'erreur, demander un correctif **ciblé** (pas de refactor large).
+### P10 — Pré-grille (extension)
+- Genres par case horaire, sans titres.
+- **Test ✅** : saisir une pré-grille, la visualiser.
 
-**Discipline** : une phase à la fois, un commit par phase, on ne code pas la phase suivante tant que le test n'est pas vert.
+### P11 — Conducteur (extension)
+- Vue tableau d'une journée générée depuis `diffusion_lineaire` (Table/Calendar).
+- **Test ✅** : sélectionner une date → conducteur listé.
 
-## 9. Definition of Done (PoC)
+### P12 — Contrats (extension)
+- Rattacher un contrat à un programme/segment (modal type STM).
+- **Test ✅** : créer un contrat, le voir rattaché.
 
-- [ ] Import des 2 xlsx réels avec nettoyage des anomalies.
-- [ ] Création d'une offre non linéaire rattachée à un `programme_id`.
-- [ ] Notification envoyée, **vue**, **publiée**, et **annulable** (répercutée).
-- [ ] Dashboard avec compteurs, filtres et fenêtre « à publier bientôt » (délai paramétrable).
-- [ ] 2 rôles avec login simple, UI FR.
-- [ ] Build statique déployable / partageable.
+### P13 — Finition UI/UX + déploiement
+- Polissage, responsive, thème SNRT complet, états vides, build + déploiement.
+- **Test ✅** : parcours cœur démontrable de bout en bout (import → programmes → grille linéaire → grille non-linéaire).
 
-## 10. Jeu de test
+### Parqué — Notification
+- À reprendre après correction des problèmes STM. Modèle Offre/Notification conservé.
 
-- `grille_du_20_au_26_juillet_2026.xlsx` → programmes chaîne Tamazight (contient des anomalies utiles à démontrer).
-- `PM_MERCREDI_05_AOUT_2026.xlsx` → plan média chaîne Al Aoula.
+## 7. Definition of Done (PoC)
 
-## 11. Après le PoC (hors périmètre, pour mémoire)
+- [ ] Supabase branché (clés en `.env`), tables cœur créées.
+- [ ] Import xlsx → peuple `programme` + `diffusion_lineaire`.
+- [ ] Programmes : CRUD fiche + segments.
+- [ ] Grille linéaire (calendrier, couleurs par genre).
+- [ ] Grille non-linéaire (calendrier par date de publication, par plateforme).
+- [ ] Un même Programme TV présent dans les deux grilles.
+- [ ] GUI soigné, couleurs + logo SNRT, login simple.
+- [ ] (Extension) pré-grille, conducteur, contrats.
 
-- Remplacer la persistance locale + import xlsx par l'**API / BD STM** réelle (quand l'accès sera tranché).
-- Bilingue **AR/FR** (les champs sont déjà prévus).
-- Branchement à la **plateforme réelle** du marketing (au lieu de l'inbox interne).
-- Idempotence + gestion fine des **mises à jour de grille** (RG8).
+## 8. Priorité
+
+**Cœur d'abord (P5–P9)** = la valeur démo. **Extension ensuite (P10–P12)**. **Finition (P13)**. Notification parquée.

@@ -1,38 +1,37 @@
 # CLAUDE.md — Contexte projet pour l'agent
 
-Tu construis un **PoC** : une interface rattachée à STM qui permet à la **Programmation** de notifier le **service marketing (Département Portail / Digital)** de l'arrivée d'une **offre non linéaire** (VOD / replay / contenu exclusif), afin qu'il **planifie ses ressources** pour les posts réseaux sociaux. Chaque notification est **trackée** : `ENVOYEE → VUE → PUBLIEE` (+ `ANNULEE`).
+Tu construis **Snomark**, un **PoC de STM « nouvelle génération »** pour la SNRT : reproduire le cœur de l'actuel STM (voir captures de la présentation) et ajouter la gestion **non-linéaire par plateforme**, sur **Supabase**, avec un **GUI soigné aux couleurs SNRT** (logo étoile conservé).
 
-Le plan détaillé et phasé est dans **`PLAN.md`**. Suis-le **phase par phase** et **arrête-toi au test de validation de chaque phase**.
+Le plan phasé est dans **`PLAN.md`**. Suis-le **phase par phase** et **arrête-toi au test ✅** de chaque phase.
+
+## Principe métier central
+- Un seul **« Programme TV »** peut être diffusé **en linéaire** (créneau dans la grille hebdo) **ET/OU en non-linéaire** (contenus par plateforme : post Facebook, reel Instagram, vidéo TikTok, VOD/Forja). Même programme, deux modes.
+- **Deux grilles = deux calendriers hebdomadaires.** La non-linéaire est datée par **date de publication** et organisée par **plateforme**.
+- **Notification = PARQUÉE** (après correction des problèmes STM). Ne pas la construire maintenant. Le modèle Offre/Notification reste dans le code, inutilisé.
 
 ## Règles de travail
 - **Une phase à la fois.** Ne code jamais la phase N+1 tant que le test de la phase N n'est pas validé.
-- À la fin d'une phase, **indique explicitement comment lancer le test ✅** correspondant, puis attends.
-- Corrections **ciblées** : pas de refactor large non demandé.
-- Pas de dépendances superflues. Stack imposée : **Vite + React + Tailwind**, `xlsx` (SheetJS), `lucide-react`, `uuid`.
+- **Règle d'approbation.** Avant de coder une phase : présente son plan (tâches + fichiers + test) et **liste toute ambiguïté**. S'il existe un point non tranché, **arrête-toi et demande** — ne comble jamais par une hypothèse. N'écris du code qu'après un « go » explicite. S'il n'y a aucune ambiguïté, dis-le.
+- À la fin d'une phase : indique la commande de test, committe `Phase N — <titre>`, et arrête-toi.
+- Corrections ciblées, pas de refactor large non demandé.
 
 ## Contraintes d'architecture
-- **Non-linéaire** = contenu streaming (type Forja.ma) : pas d'antenne, pas d'heure_fin sur l'offre. Timing = date_mise_en_ligne (+ fenêtre optionnelle).
-- **But central** : notifier le marketing ≥ 2 mois avant la mise en ligne. `delai_avance` en mois/jours, minimum 2 mois, alerte si non respecté (mécanisme clé, Phase 8).
-- **Ne pas dupliquer le référentiel STM.** Toute offre est OBLIGATOIREMENT rattachée à un `programme_id` existant (importé de la grille). Pas de mode « hors programme ».
-- **Persistance derrière une seule interface** (`src/lib/storage.js`) pour être remplaçable plus tard par une vraie API STM. Le reste du code ne parle jamais au stockage directement.
-- **Import xlsx = mock STM** (lecture seule). Ne jamais « écrire » dans STM.
-- **Nettoyage obligatoire à l'import** (voir §6 du PLAN) : exclure/mettre de côté les lignes incohérentes (fin < début, « fin d'émission », doublons, champs vides). **Ne jamais notifier une donnée incohérente.**
-- **Notification après validation** : pas d'étape d'approbation dans l'app.
+- **Données = Supabase** (`@supabase/supabase-js`). Clés via **`.env`** (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) — **jamais en dur**, `.env` dans `.gitignore`. L'utilisateur a déjà un projet Supabase (URL + clé).
+- **Couche d'accès aux données métier = `src/lib/db.js`** (CRUD par entité). Les écrans ne parlent jamais à Supabase en direct — tout passe par `db.js`.
+- **`storage.js` conservé** pour la **session/login** uniquement (localStorage + fallback mémoire). Aucun `localStorage` direct hors `storage.js`.
+- **Réutiliser l'existant** : `stm-import.js` (import+nettoyage xlsx) alimente désormais Supabase ; `model.js` (typedef `Programme`) étendu. Ne pas réécrire ce qui marche.
+- **Ne pas dupliquer les référentiels** : un contenu non-linéaire est **toujours rattaché** à un `programme` existant.
 
-## Périmètre (à respecter strictement)
-- **Un seul flux** de bout en bout. **FR** uniquement (mais garder la structure prête pour l'AR).
-- **Hors périmètre** : cœur de STM, fabrication du contenu digital (post-prod, coulisses), multi-plateformes réelles, bilingue.
+## GUI / UX
+- **Soigné et professionnel**, calqué sur l'actuel STM mais plus moderne : **sidebar sombre** (Accueil, Programmes, Pré-Grille, Grille, Grille non-linéaire, Conducteur, Contrats, Administration), top bar avec **logo SNRT** + utilisateur.
+- **Couleurs SNRT** ; blocs de grille **colorés** (par genre en linéaire, par plateforme en non-linéaire).
+- **Login simple** mais plus abouti que le sélecteur de rôle actuel.
+- FR pour l'instant (structure prête pour l'AR).
 
 ## Conventions
 - Code et commentaires en **français**.
-- Modèle de données : respecter les types définis dans `PLAN.md` §4.
-- Commits : un par phase, message `Phase N — <titre>`.
-- Nommage clair (`Offre`, `Notification`, `Programme`, `statut`, `date_mise_en_ligne`…).
-
-## Rôles
-- `PROGRAMMATION` : importe le référentiel, crée l'offre, notifie, annule.
-- `DIGITAL` : reçoit dans l'inbox, passe en VUE, marque PUBLIEE.
-- Les deux : accèdent au Dashboard de suivi.
+- Un commit par phase : `Phase N — <titre>`.
+- Nommage clair (`Programme`, `Segment`, `diffusion_lineaire`, `diffusion_non_lineaire`, `plateforme`…).
 
 ## Definition of Done
-Voir `PLAN.md` §9. Le PoC doit démontrer, de bout en bout : import → notifier → vue → publié / annuler → dashboard (avec délai paramétrable et fenêtre « à publier bientôt »).
+Voir `PLAN.md` §7. Cœur d'abord (P5–P9), extension ensuite (P10–P12), finition (P13). Notification parquée.
