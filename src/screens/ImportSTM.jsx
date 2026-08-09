@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, Radio } from 'lucide-react'
+import { Upload, CheckCircle2, AlertTriangle, Radio, Loader2 } from 'lucide-react'
 import { parseFichierSTM } from '../lib/stm-import.js'
+import { trouverProgrammeParTitreEtChaine, creerProgramme, creerDiffusionsLineaires } from '../lib/db.js'
 
 function lireFichier(file) {
   return new Promise((resolve, reject) => {
@@ -11,11 +12,53 @@ function lireFichier(file) {
   })
 }
 
+// Regroupe les lignes valides par (titre, chaine) — un seul `programme` Supabase
+// par couple, quel que soit le nombre de créneaux (§5.1 plan Phase 5).
+function cleProgrammeImport(titre, chaine) {
+  return JSON.stringify([titre, chaine])
+}
+
+async function synchroniserAvecSupabase(programmesValides) {
+  const groupes = new Map()
+  for (const p of programmesValides) {
+    const titre = p.titre.trim()
+    const chaine = p.chaine.trim()
+    const cle = cleProgrammeImport(titre, chaine)
+    if (!groupes.has(cle)) groupes.set(cle, { titre, chaine, genre: p.genre || null })
+  }
+
+  const idParCle = new Map()
+  for (const [cle, { titre, chaine, genre }] of groupes) {
+    const existant = await trouverProgrammeParTitreEtChaine(titre, chaine)
+    const programme = existant ?? (await creerProgramme({ titre, chaine, genre, cree_par: 'PROGRAMMATION' }))
+    idParCle.set(cle, programme.id)
+  }
+
+  const lignes = programmesValides.map((p) => {
+    const titre = p.titre.trim()
+    const chaine = p.chaine.trim()
+    return {
+      programme_id: idParCle.get(cleProgrammeImport(titre, chaine)),
+      chaine,
+      date: p.date,
+      heure_debut: p.heure_debut,
+      heure_fin: p.heure_fin,
+      genre: p.genre || null,
+      titre_cache: titre,
+    }
+  })
+  if (lignes.length > 0) await creerDiffusionsLineaires(lignes)
+
+  return { programmes: groupes.size, creneaux: lignes.length }
+}
+
 export default function ImportSTM() {
   const [chaine, setChaine] = useState('')
   const [programmes, setProgrammes] = useState(null)
   const [planMedia, setPlanMedia] = useState(null)
   const [erreur, setErreur] = useState(null)
+  const [importEnCours, setImportEnCours] = useState(false)
+  const [messageImport, setMessageImport] = useState(null)
 
   async function handleFichier(e) {
     const file = e.target.files?.[0]
@@ -23,6 +66,7 @@ export default function ImportSTM() {
     if (!file) return
 
     setErreur(null)
+    setMessageImport(null)
     try {
       const donnees = await lireFichier(file)
       const resultat = parseFichierSTM(donnees, { chaine })
@@ -33,6 +77,19 @@ export default function ImportSTM() {
           return
         }
         setProgrammes(resultat.programmes)
+
+        const valides = resultat.programmes.filter((p) => !p._anomalie)
+        if (valides.length > 0) {
+          setImportEnCours(true)
+          try {
+            const { programmes: nbProgrammes, creneaux } = await synchroniserAvecSupabase(valides)
+            setMessageImport(`${nbProgrammes} programme(s) et ${creneaux} créneau(x) synchronisés avec Supabase.`)
+          } catch (err) {
+            setErreur(`Erreur lors de l'enregistrement dans Supabase : ${err.message}`)
+          } finally {
+            setImportEnCours(false)
+          }
+        }
       } else {
         setPlanMedia(resultat.planMedia)
       }
@@ -61,13 +118,18 @@ export default function ImportSTM() {
               className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
-          <label className="flex cursor-pointer items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
-            <Upload size={16} />
-            Importer un xlsx
-            <input type="file" accept=".xlsx" className="hidden" onChange={handleFichier} />
+          <label
+            className={`flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white ${
+              importEnCours ? 'opacity-60' : 'cursor-pointer hover:bg-slate-700'
+            }`}
+          >
+            {importEnCours ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+            {importEnCours ? 'Import en cours…' : 'Importer un xlsx'}
+            <input type="file" accept=".xlsx" className="hidden" onChange={handleFichier} disabled={importEnCours} />
           </label>
         </div>
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
+        {messageImport && <p className="mt-3 text-sm text-emerald-600">{messageImport}</p>}
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white p-6">
