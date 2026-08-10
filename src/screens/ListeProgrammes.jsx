@@ -1,28 +1,25 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listerProgrammes, listerChaines, listerSousGenres, listerTousLesSegments } from '../lib/db.js'
+import { listerProgrammesParChaine, listerSousGenres, listerTousLesSegments } from '../lib/db.js'
 import ImportSTM from './ImportSTM.jsx'
 
 const TAILLE_PAGE = 30
 
-export default function ListeProgrammes({ onOuvrir, onNouveau }) {
+export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   const [programmes, setProgrammes] = useState([])
   const [segmentsParProgramme, setSegmentsParProgramme] = useState(new Map())
-  const [chaines, setChaines] = useState([])
   const [sousGenres, setSousGenres] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
-  const [filtreChaine, setFiltreChaine] = useState('')
   const [filtreSousGenre, setFiltreSousGenre] = useState('')
   const [page, setPage] = useState(0)
-  const idFiltreChaine = useId()
   const idFiltreSousGenre = useId()
   const requeteId = useRef(0)
 
   useEffect(() => {
     rafraichir()
-  }, [])
+  }, [chaineActive])
 
   // La liste principale (listerProgrammes) est appliquée dès qu'elle résout,
   // indépendamment des requêtes annexes (chaînes/sous-genres/segments) — un
@@ -33,7 +30,7 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
     setChargement(true)
     setErreur(null)
 
-    const principale = listerProgrammes()
+    const principale = listerProgrammesParChaine(chaineActive.nom)
       .then((lignes) => {
         if (idAppel !== requeteId.current) return
         setProgrammes(lignes)
@@ -47,10 +44,9 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
         if (idAppel === requeteId.current) setChargement(false)
       })
 
-    const annexes = Promise.all([listerChaines(), listerSousGenres(), listerTousLesSegments()])
-      .then(([lignesChaines, lignesSousGenres, lignesSegments]) => {
+    const annexes = Promise.all([listerSousGenres(), listerTousLesSegments()])
+      .then(([lignesSousGenres, lignesSegments]) => {
         if (idAppel !== requeteId.current) return
-        setChaines(lignesChaines)
         setSousGenres(lignesSousGenres)
 
         const parProgramme = new Map()
@@ -72,11 +68,8 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
   }
 
   const filtres = useMemo(
-    () =>
-      programmes.filter(
-        (p) => (!filtreChaine || p.chaine === filtreChaine) && (!filtreSousGenre || p.sous_genre === filtreSousGenre)
-      ),
-    [programmes, filtreChaine, filtreSousGenre]
+    () => programmes.filter((p) => !filtreSousGenre || p.sous_genre === filtreSousGenre),
+    [programmes, filtreSousGenre]
   )
 
   const nbPages = Math.max(1, Math.ceil(filtres.length / TAILLE_PAGE))
@@ -107,34 +100,13 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
       <details className="rounded-lg border border-slate-200 bg-white p-6">
         <summary className="cursor-pointer text-sm font-medium text-slate-700">Importer une grille (xlsx)</summary>
         <div className="mt-4">
-          <ImportSTM onImportTermine={rafraichir} />
+          <ImportSTM chaineActive={chaineActive} onImportTermine={rafraichir} />
         </div>
       </details>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor={idFiltreChaine} className="mb-1 block text-sm font-medium text-slate-700">
-                Chaîne
-              </label>
-              <select
-                id={idFiltreChaine}
-                value={filtreChaine}
-                onChange={(e) => {
-                  setFiltreChaine(e.target.value)
-                  setPage(0)
-                }}
-                className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">-- Toutes --</option>
-                {chaines.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div>
               <label htmlFor={idFiltreSousGenre} className="mb-1 block text-sm font-medium text-slate-700">
                 Sous-Genre

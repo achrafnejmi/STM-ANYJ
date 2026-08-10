@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
+import { lireChaineActive, definirChaineActive } from './lib/chaines.js'
 import { sectionVersHash, hashVersSection } from './lib/navigation.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -28,6 +29,7 @@ function App() {
   const [utilisateur, setUtilisateur] = useState(() => lireUtilisateur())
   const [section, setSection] = useState(() => hashVersSection(window.location.hash) ?? 'ACCUEIL')
   const [sidebarOuverte, setSidebarOuverte] = useState(false)
+  const [chaineActive, setChaineActive] = useState(() => lireChaineActive())
 
   useEffect(() => {
     function onHashChange() {
@@ -53,6 +55,11 @@ function App() {
     setUtilisateur(null)
   }
 
+  function changerChaine(code) {
+    definirChaineActive(code)
+    setChaineActive(lireChaineActive())
+  }
+
   const Ecran = ECRANS[section]
 
   return (
@@ -68,9 +75,11 @@ function App() {
           utilisateur={utilisateur}
           onDeconnexion={handleDeconnexion}
           onToggleSidebar={() => setSidebarOuverte((v) => !v)}
+          chaineActive={chaineActive}
+          onChangerChaine={changerChaine}
         />
         <main className="flex-1 overflow-y-auto p-6">
-          <Ecran />
+          <Ecran chaineActive={chaineActive} />
         </main>
       </div>
     </div>

@@ -1,9 +1,8 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import {
-  listerChainesDiffusion,
   listerDiffusionsLineairesParChaine,
-  listerProgrammes,
+  listerProgrammesParChaine,
   creerDiffusionLineaire,
   mettreAJourDiffusionLineaire,
   supprimerDiffusionLineaire,
@@ -59,9 +58,7 @@ function disposerEnPistes(diffusionsJour) {
   return resultat.map((r) => ({ ...r, nbPistes }))
 }
 
-export default function GrilleLineaire() {
-  const [chaines, setChaines] = useState([])
-  const [chaineSelectionnee, setChaineSelectionnee] = useState('')
+export default function GrilleLineaire({ chaineActive }) {
   const [vue, setVue] = useState('SEMAINE')
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
@@ -69,32 +66,17 @@ export default function GrilleLineaire() {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
-  const idChaine = useId()
 
   useEffect(() => {
-    listerChainesDiffusion()
-      .then((lignes) => {
-        setChaines(lignes)
-        if (lignes.length > 0) setChaineSelectionnee((c) => c || lignes[0])
+    setChargement(true)
+    Promise.all([listerProgrammesParChaine(chaineActive.nom), listerDiffusionsLineairesParChaine(chaineActive.nom)])
+      .then(([lignesProgrammes, lignesDiffusions]) => {
+        setProgrammes(lignesProgrammes)
+        setDiffusions(lignesDiffusions)
       })
       .catch((err) => setErreur(err.message))
-    listerProgrammes()
-      .then(setProgrammes)
-      .catch((err) => setErreur(err.message))
-  }, [])
-
-  useEffect(() => {
-    if (!chaineSelectionnee) {
-      setDiffusions([])
-      setChargement(false)
-      return
-    }
-    setChargement(true)
-    listerDiffusionsLineairesParChaine(chaineSelectionnee)
-      .then(setDiffusions)
-      .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
-  }, [chaineSelectionnee])
+  }, [chaineActive])
 
   const lundi = lundiDeLaSemaine(dateReference)
   const jours = useMemo(
@@ -104,8 +86,8 @@ export default function GrilleLineaire() {
 
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
   const programmesDeLaChaine = useMemo(
-    () => programmes.filter((p) => p.chaine === chaineSelectionnee).sort((a, b) => a.titre.localeCompare(b.titre)),
-    [programmes, chaineSelectionnee]
+    () => [...programmes].sort((a, b) => a.titre.localeCompare(b.titre)),
+    [programmes]
   )
 
   const diffusionsParJour = useMemo(() => {
@@ -160,24 +142,6 @@ export default function GrilleLineaire() {
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label htmlFor={idChaine} className="mb-1 block text-sm font-medium text-slate-700">
-                Chaîne
-              </label>
-              <select
-                id={idChaine}
-                value={chaineSelectionnee}
-                onChange={(e) => setChaineSelectionnee(e.target.value)}
-                className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                {chaines.length === 0 && <option value="">-- Aucune chaîne --</option>}
-                {chaines.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="flex rounded-md border border-slate-300 text-sm">
               <button
                 type="button"
@@ -240,7 +204,7 @@ export default function GrilleLineaire() {
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
 
-      {!chargement && chaineSelectionnee && (
+      {!chargement && (
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="max-h-[70vh] overflow-y-auto">
             <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(120px, 1fr))` }}>
@@ -321,17 +285,11 @@ export default function GrilleLineaire() {
         </div>
       )}
 
-      {!chaineSelectionnee && !chargement && (
-        <p className="text-sm text-slate-500">
-          Aucune chaîne avec des créneaux pour l'instant — importez une grille depuis l'écran Programmes.
-        </p>
-      )}
-
       {modale && (
         <Modal titre={modale.mode === 'CREATION' ? 'Ajouter un créneau' : 'Modifier le créneau'} onFermer={() => setModale(null)}>
           <FormulaireCreneau
             modale={modale}
-            chaine={chaineSelectionnee}
+            chaineActive={chaineActive}
             programmesDisponibles={programmesDeLaChaine}
             programmesParId={programmesParId}
             onCree={appliquerCreation}
@@ -344,7 +302,7 @@ export default function GrilleLineaire() {
   )
 }
 
-function FormulaireCreneau({ modale, chaine, programmesDisponibles, programmesParId, onCree, onModifie, onSupprime }) {
+function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, onCree, onModifie, onSupprime }) {
   const estEdition = modale.mode === 'EDITION'
   const diffusionInitiale = estEdition ? modale.diffusion : null
 
@@ -364,8 +322,8 @@ function FormulaireCreneau({ modale, chaine, programmesDisponibles, programmesPa
   if (programmesDisponibles.length === 0) {
     return (
       <p className="text-sm text-slate-500">
-        Aucun programme sur la chaîne « {chaine} ». Créez d'abord un programme sur cette chaîne dans l'écran
-        Programmes.
+        Aucun programme sur la chaîne « {chaineActive.nom} ». Créez d'abord un programme sur cette chaîne dans
+        l'écran Programmes.
       </p>
     )
   }
@@ -377,7 +335,8 @@ function FormulaireCreneau({ modale, chaine, programmesDisponibles, programmesPa
     const programme = programmesParId.get(programmeId)
     const champs = {
       programme_id: programmeId,
-      chaine,
+      chaine: chaineActive.nom,
+      chaine_id: chaineActive.id,
       date,
       heure_debut: heureDebut,
       heure_fin: heureFin,

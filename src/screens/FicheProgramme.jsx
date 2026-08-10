@@ -8,6 +8,8 @@ import {
   urlAttestation,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
+import { CHAINES, chaineParNom } from '../lib/chaines.js'
+import { GENRES } from '../lib/genres.js'
 import SegmentsPanel from './SegmentsPanel.jsx'
 
 const TAILLE_MAX_ATTESTATION = 5 * 1024 * 1024 // 5 Mo
@@ -42,9 +44,9 @@ function versFormulaire(programme) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, onRetour }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour }) {
   const [id, setId] = useState(idInitial)
-  const [form, setForm] = useState(FORM_VIDE)
+  const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : { ...FORM_VIDE, chaine: chaineActive.nom }))
   const [programme, setProgramme] = useState(null)
   const [chargement, setChargement] = useState(Boolean(idInitial))
   const [enregistrement, setEnregistrement] = useState(false)
@@ -74,6 +76,7 @@ export default function FicheProgramme({ programmeId: idInitial, onRetour }) {
       sous_genre: form.sous_genre.trim() || null,
       thematique: form.thematique.trim() || null,
       chaine: form.chaine.trim(),
+      chaine_id: chaineParNom(form.chaine.trim())?.id ?? null,
       date_production: form.date_production || null,
       code: form.code.trim() || null,
       description: form.description.trim() || null,
@@ -144,11 +147,23 @@ export default function FicheProgramme({ programmeId: idInitial, onRetour }) {
             <Champ label="Titre (arabe)" value={form.titre_ar} onChange={(v) => setForm({ ...form, titre_ar: v })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Champ label="Chaîne *" required value={form.chaine} onChange={(v) => setForm({ ...form, chaine: v })} />
+            <ChampSelect
+              label="Chaîne *"
+              required
+              value={form.chaine}
+              onChange={(v) => setForm({ ...form, chaine: v })}
+              options={CHAINES.map((c) => ({ valeur: c.nom, libelle: c.nom }))}
+            />
             <Champ label="Date de production" type="date" value={form.date_production} onChange={(v) => setForm({ ...form, date_production: v })} />
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <Champ label="Genre" value={form.genre} onChange={(v) => setForm({ ...form, genre: v })} />
+            <ChampSelect
+              label="Genre"
+              value={form.genre}
+              onChange={(v) => setForm({ ...form, genre: v })}
+              options={GENRES.map((g) => ({ valeur: g.fr, libelle: `${g.fr} — ${g.ar}` }))}
+              vide="— Choisir un genre —"
+            />
             <Champ label="Sous-genre" value={form.sous_genre} onChange={(v) => setForm({ ...form, sous_genre: v })} />
             <Champ label="Thématique" value={form.thematique} onChange={(v) => setForm({ ...form, thematique: v })} />
           </div>
@@ -250,6 +265,31 @@ function Champ({ label, type = 'text', value, onChange, required }) {
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
+    </div>
+  )
+}
+
+function ChampSelect({ label, value, onChange, required, options, vide }) {
+  const id = useId()
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        required={required}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      >
+        {!required && <option value="">{vide ?? '—'}</option>}
+        {options.map((o) => (
+          <option key={o.valeur} value={o.valeur}>
+            {o.libelle}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

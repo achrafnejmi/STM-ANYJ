@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ListeProgrammes from './ListeProgrammes.jsx'
 import FicheProgramme from './FicheProgramme.jsx'
 
-export default function Programmes() {
+export default function Programmes({ chaineActive }) {
   const [vue, setVue] = useState('LISTE')
   const [programmeId, setProgrammeId] = useState(null)
 
@@ -22,8 +22,8 @@ export default function Programmes() {
   }
 
   if (vue === 'FICHE') {
-    return <FicheProgramme programmeId={programmeId} onRetour={retourListe} />
+    return <FicheProgramme programmeId={programmeId} chaineActive={chaineActive} onRetour={retourListe} />
   }
 
-  return <ListeProgrammes onOuvrir={ouvrir} onNouveau={nouveau} />
+  return <ListeProgrammes chaineActive={chaineActive} onOuvrir={ouvrir} onNouveau={nouveau} />
 }

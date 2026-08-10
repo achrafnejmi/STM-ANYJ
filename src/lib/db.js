@@ -36,11 +36,11 @@ export async function supprimerProgramme(id) {
   verifie(await supabase.from('programme').delete().eq('id', id).select())
 }
 
-// Valeurs distinctes pour les filtres de la liste — pas de DISTINCT SQL via le
-// client Supabase, donc dédoublonnage côté client sur un jeu de données PoC.
-export async function listerChaines() {
-  const lignes = verifie(await supabase.from('programme').select('chaine'))
-  return [...new Set(lignes.map((l) => l.chaine).filter(Boolean))].sort()
+// Scoping par chaîne active (M1, P9) — .ilike plutôt que .eq : comparaison
+// insensible à la casse pour absorber les écarts de saisie des données
+// existantes (chaine reste un champ texte, non contraint).
+export async function listerProgrammesParChaine(chaine) {
+  return verifie(await supabase.from('programme').select('*').ilike('chaine', chaine).order('titre'))
 }
 
 export async function listerSousGenres() {
@@ -98,16 +98,9 @@ export async function listerDiffusionsLineaires() {
   return verifie(await supabase.from('diffusion_lineaire').select('*').order('date').order('heure_debut'))
 }
 
-// Chaînes distinctes ayant des créneaux (distinct de listerChaines(), qui lit
-// programme.chaine) — alimente le sélecteur de la grille linéaire.
-export async function listerChainesDiffusion() {
-  const lignes = verifie(await supabase.from('diffusion_lineaire').select('chaine'))
-  return [...new Set(lignes.map((l) => l.chaine).filter(Boolean))].sort()
-}
-
 export async function listerDiffusionsLineairesParChaine(chaine) {
   return verifie(
-    await supabase.from('diffusion_lineaire').select('*').eq('chaine', chaine).order('date').order('heure_debut')
+    await supabase.from('diffusion_lineaire').select('*').ilike('chaine', chaine).order('date').order('heure_debut')
   )
 }
 

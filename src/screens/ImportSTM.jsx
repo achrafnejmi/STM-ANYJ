@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Upload, CheckCircle2, AlertTriangle, Radio, Loader2 } from 'lucide-react'
 import { parseFichierSTM } from '../lib/stm-import.js'
 import { trouverProgrammeParTitreEtChaine, creerProgramme, creerDiffusionsLineaires } from '../lib/db.js'
+import { CHAINES, chaineParNom } from '../lib/chaines.js'
 
 function lireFichier(file) {
   return new Promise((resolve, reject) => {
@@ -29,8 +30,10 @@ async function synchroniserAvecSupabase(programmesValides) {
 
   const idParCle = new Map()
   for (const [cle, { titre, chaine, genre }] of groupes) {
+    const chaineId = chaineParNom(chaine)?.id ?? null
     const existant = await trouverProgrammeParTitreEtChaine(titre, chaine)
-    const programme = existant ?? (await creerProgramme({ titre, chaine, genre, cree_par: 'PROGRAMMATION' }))
+    const programme =
+      existant ?? (await creerProgramme({ titre, chaine, chaine_id: chaineId, genre, cree_par: 'PROGRAMMATION' }))
     idParCle.set(cle, programme.id)
   }
 
@@ -40,6 +43,7 @@ async function synchroniserAvecSupabase(programmesValides) {
     return {
       programme_id: idParCle.get(cleProgrammeImport(titre, chaine)),
       chaine,
+      chaine_id: chaineParNom(chaine)?.id ?? null,
       date: p.date,
       heure_debut: p.heure_debut,
       heure_fin: p.heure_fin,
@@ -52,8 +56,8 @@ async function synchroniserAvecSupabase(programmesValides) {
   return { programmes: groupes.size, creneaux: lignes.length }
 }
 
-export default function ImportSTM({ onImportTermine }) {
-  const [chaine, setChaine] = useState('')
+export default function ImportSTM({ chaineActive, onImportTermine }) {
+  const [chaine, setChaine] = useState(chaineActive.nom)
   const [programmes, setProgrammes] = useState(null)
   const [planMedia, setPlanMedia] = useState(null)
   const [erreur, setErreur] = useState(null)
@@ -110,14 +114,18 @@ export default function ImportSTM({ onImportTermine }) {
             <label htmlFor="chaine" className="mb-1 block text-sm font-medium text-slate-700">
               Chaîne (requise pour importer une grille)
             </label>
-            <input
+            <select
               id="chaine"
-              type="text"
               value={chaine}
               onChange={(e) => setChaine(e.target.value)}
-              placeholder="ex. Tamazight"
               className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+            >
+              {CHAINES.map((c) => (
+                <option key={c.code} value={c.nom}>
+                  {c.nom}
+                </option>
+              ))}
+            </select>
           </div>
           <label
             className={`flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white ${
