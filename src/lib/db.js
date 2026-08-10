@@ -98,6 +98,19 @@ export async function listerDiffusionsLineaires() {
   return verifie(await supabase.from('diffusion_lineaire').select('*').order('date').order('heure_debut'))
 }
 
+// Chaînes distinctes ayant des créneaux (distinct de listerChaines(), qui lit
+// programme.chaine) — alimente le sélecteur de la grille linéaire.
+export async function listerChainesDiffusion() {
+  const lignes = verifie(await supabase.from('diffusion_lineaire').select('chaine'))
+  return [...new Set(lignes.map((l) => l.chaine).filter(Boolean))].sort()
+}
+
+export async function listerDiffusionsLineairesParChaine(chaine) {
+  return verifie(
+    await supabase.from('diffusion_lineaire').select('*').eq('chaine', chaine).order('date').order('heure_debut')
+  )
+}
+
 export async function obtenirDiffusionLineaire(id) {
   return verifie(await supabase.from('diffusion_lineaire').select('*').eq('id', id).maybeSingle())
 }
