@@ -1,78 +1,78 @@
-import { useState } from 'react'
-import { LogOut } from 'lucide-react'
-import { lireRole, deconnecter } from './lib/session.js'
+import { useEffect, useState } from 'react'
+import { lireUtilisateur, deconnecter } from './lib/session.js'
+import { sectionVersHash, hashVersSection } from './lib/navigation.js'
 import Login from './screens/Login.jsx'
-import ImportSTM from './screens/ImportSTM.jsx'
-import Inbox from './screens/Inbox.jsx'
-import Dashboard from './screens/Dashboard.jsx'
+import Sidebar from './components/Sidebar.jsx'
+import TopBar from './components/TopBar.jsx'
+import Accueil from './screens/Accueil.jsx'
+import Programmes from './screens/Programmes.jsx'
+import Contrats from './screens/Contrats.jsx'
+import PreGrille from './screens/PreGrille.jsx'
+import GrilleLineaire from './screens/GrilleLineaire.jsx'
+import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
+import Conducteur from './screens/Conducteur.jsx'
+import Administration from './screens/Administration.jsx'
 
-const ONGLETS_PAR_ROLE = {
-  PROGRAMMATION: [
-    { id: 'PRINCIPAL', label: 'Émetteur' },
-    { id: 'DASHBOARD', label: 'Dashboard' },
-  ],
-  DIGITAL: [
-    { id: 'PRINCIPAL', label: 'Inbox' },
-    { id: 'DASHBOARD', label: 'Dashboard' },
-  ],
+const ECRANS = {
+  ACCUEIL: Accueil,
+  PROGRAMMES: Programmes,
+  CONTRATS: Contrats,
+  PRE_GRILLE: PreGrille,
+  GRILLE_LINEAIRE: GrilleLineaire,
+  GRILLE_NON_LINEAIRE: GrilleNonLineaire,
+  CONDUCTEUR: Conducteur,
+  ADMINISTRATION: Administration,
 }
 
 function App() {
-  const [role, setRole] = useState(() => lireRole())
-  const [onglet, setOnglet] = useState('PRINCIPAL')
+  const [utilisateur, setUtilisateur] = useState(() => lireUtilisateur())
+  const [section, setSection] = useState(() => hashVersSection(window.location.hash) ?? 'ACCUEIL')
+  const [sidebarOuverte, setSidebarOuverte] = useState(false)
 
-  if (!role) {
-    return <Login onChoix={setRole} />
+  useEffect(() => {
+    function onHashChange() {
+      const id = hashVersSection(window.location.hash)
+      if (id) setSection(id)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  if (!utilisateur) {
+    return <Login onConnexion={setUtilisateur} />
+  }
+
+  function naviguer(id) {
+    setSection(id)
+    window.location.hash = sectionVersHash(id)
+    setSidebarOuverte(false)
   }
 
   function handleDeconnexion() {
     deconnecter()
-    setRole(null)
-    setOnglet('PRINCIPAL')
+    setUtilisateur(null)
   }
 
-  const onglets = ONGLETS_PAR_ROLE[role]
+  const Ecran = ECRANS[section]
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">
-              Notification des offres non linéaires — PoC
-            </h1>
-            <p className="text-sm text-slate-500">STM → Digital</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleDeconnexion}
-            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100"
-          >
-            <LogOut size={16} />
-            Changer de rôle
-          </button>
-        </div>
-        <nav className="mx-auto mt-4 flex max-w-4xl gap-1">
-          {onglets.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => setOnglet(o.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                onglet === o.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        {onglet === 'DASHBOARD' && <Dashboard />}
-        {onglet === 'PRINCIPAL' && role === 'PROGRAMMATION' && <ImportSTM />}
-        {onglet === 'PRINCIPAL' && role === 'DIGITAL' && <Inbox />}
-      </main>
+    <div className="flex min-h-screen bg-slate-50">
+      <Sidebar
+        section={section}
+        onNaviguer={naviguer}
+        ouverte={sidebarOuverte}
+        onFermer={() => setSidebarOuverte(false)}
+      />
+      <div className="flex flex-1 flex-col">
+        <TopBar
+          utilisateur={utilisateur}
+          onDeconnexion={handleDeconnexion}
+          onToggleSidebar={() => setSidebarOuverte((v) => !v)}
+        />
+        <main className="flex-1 overflow-y-auto p-6">
+          <Ecran />
+        </main>
+      </div>
     </div>
   )
 }

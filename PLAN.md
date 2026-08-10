@@ -22,7 +22,7 @@
 - **Import + nettoyage xlsx** (`stm-import.js`, P1) → sert désormais à **peupler la grille linéaire** dans Supabase.
 - **Couche d'accès isolée** (`storage.js`, P2) → conservée pour la **session/login** ; l'accès aux **données métier** passe désormais par une nouvelle couche **Supabase** (`src/lib/db.js`).
 - **`model.js`** : typedef `Programme` réutilisé et étendu. Offre/Notification + helpers de clé = **parqués** (non supprimés).
-- **Login par rôle** (P3) → conservé, rendu plus soigné (P6).
+- **Login** (P3) → remplacé par un login simple par nom (sans rôle), rendu plus soigné (P6). Notion de rôle abandonnée pour ce PoC.
 
 ## 3. Stack
 
@@ -67,8 +67,8 @@
 
 ### P6 — Coquille GUI SNRT (shell + nav + login)
 - Layout : sidebar sombre + top bar logo SNRT + utilisateur ; thème couleurs SNRT.
-- Login soigné (choix de rôle, branding), session via `storage.js`, garde de nav par rôle.
-- **Test ✅** : nav complète rendue, branding SNRT, login → accès selon rôle, reload garde la session.
+- Login soigné par nom (sans rôle — abandonné pour ce PoC, branding), session via `storage.js`.
+- **Test ✅** : nav complète rendue, branding SNRT, login → accès à la coquille, reload garde la session.
 
 ### P7 — Programmes (fiche + segments)
 - CRUD `programme` (formulaire fiche) + `segment` (onglets), sur Supabase.

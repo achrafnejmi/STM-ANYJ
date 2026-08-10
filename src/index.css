@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+/* Palette SNRT (approchée depuis design-reference/stm-existant/), centralisée
+   ici pour que les phases suivantes (P7+) s'y raccrochent. */
+@theme {
+  --color-snrt-navy: #243c54;
+  --color-snrt-navy-hover: #304854;
+  --color-snrt-cyan: #249ccc;
+  --color-snrt-blue: #00549c;
+  --color-snrt-red: #cc2430;
+  --color-snrt-green: #007824;
+  --color-snrt-orange: #d86000;
+  --color-snrt-genre-turquoise: #45d6b8; /* adouci depuis #60fccc */
+  --color-snrt-genre-rose: #e478b4;
+}

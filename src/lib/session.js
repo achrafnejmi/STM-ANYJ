@@ -1,20 +1,19 @@
-// Session (choix de rôle uniquement, pas d'identifiant/mot de passe).
+// Session : accès simple (nom d'utilisateur libre, pas de mot de passe).
 // Passe uniquement par storage.js — aucun accès localStorage direct ici.
 
 import { get, set, remove } from './storage.js'
 
-const CLE_SESSION = 'session:role'
-export const ROLES = ['PROGRAMMATION', 'DIGITAL']
+const CLE_SESSION = 'session:utilisateur'
 
-export function lireRole() {
+export function lireUtilisateur() {
   return get(CLE_SESSION) ?? null
 }
 
-export function definirRole(role) {
-  if (!ROLES.includes(role)) {
-    throw new Error(`role invalide : ${role}`)
+export function connecter(nom) {
+  if (!nom || !nom.trim()) {
+    throw new Error("Le nom d'utilisateur est requis.")
   }
-  set(CLE_SESSION, role)
+  set(CLE_SESSION, nom.trim())
 }
 
 export function deconnecter() {
