@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listerProgrammes, listerChaines, listerSousGenres, listerTousLesSegments } from '../lib/db.js'
@@ -18,40 +18,57 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
   const [page, setPage] = useState(0)
   const idFiltreChaine = useId()
   const idFiltreSousGenre = useId()
+  const requeteId = useRef(0)
 
   useEffect(() => {
     rafraichir()
   }, [])
 
+  // La liste principale (listerProgrammes) est appliquée dès qu'elle résout,
+  // indépendamment des requêtes annexes (chaînes/sous-genres/segments) — un
+  // échec annexe ne doit jamais vider la liste. `requeteId` ignore les
+  // réponses d'un appel dépassé par un rafraîchissement plus récent.
   async function rafraichir() {
+    const idAppel = ++requeteId.current
     setChargement(true)
-    try {
-      const [lignesProgrammes, lignesChaines, lignesSousGenres, lignesSegments] = await Promise.all([
-        listerProgrammes(),
-        listerChaines(),
-        listerSousGenres(),
-        listerTousLesSegments(),
-      ])
-      setProgrammes(lignesProgrammes)
-      setChaines(lignesChaines)
-      setSousGenres(lignesSousGenres)
+    setErreur(null)
 
-      const parProgramme = new Map()
-      for (const s of lignesSegments) {
-        const entree = parProgramme.get(s.programme_id) ?? { nb: 0, derniereDiffusion: null }
-        entree.nb += 1
-        if (s.derniere_diffusion && (!entree.derniereDiffusion || s.derniere_diffusion > entree.derniereDiffusion)) {
-          entree.derniereDiffusion = s.derniere_diffusion
+    const principale = listerProgrammes()
+      .then((lignes) => {
+        if (idAppel !== requeteId.current) return
+        setProgrammes(lignes)
+        setPage(0)
+      })
+      .catch((err) => {
+        if (idAppel !== requeteId.current) return
+        setErreur(err.message)
+      })
+      .finally(() => {
+        if (idAppel === requeteId.current) setChargement(false)
+      })
+
+    const annexes = Promise.all([listerChaines(), listerSousGenres(), listerTousLesSegments()])
+      .then(([lignesChaines, lignesSousGenres, lignesSegments]) => {
+        if (idAppel !== requeteId.current) return
+        setChaines(lignesChaines)
+        setSousGenres(lignesSousGenres)
+
+        const parProgramme = new Map()
+        for (const s of lignesSegments) {
+          const entree = parProgramme.get(s.programme_id) ?? { nb: 0, derniereDiffusion: null }
+          entree.nb += 1
+          if (s.derniere_diffusion && (!entree.derniereDiffusion || s.derniere_diffusion > entree.derniereDiffusion)) {
+            entree.derniereDiffusion = s.derniere_diffusion
+          }
+          parProgramme.set(s.programme_id, entree)
         }
-        parProgramme.set(s.programme_id, entree)
-      }
-      setSegmentsParProgramme(parProgramme)
-      setPage(0)
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setChargement(false)
-    }
+        setSegmentsParProgramme(parProgramme)
+      })
+      .catch((err) => {
+        console.error('Filtres/agrégats indisponibles, la liste principale reste affichée :', err)
+      })
+
+    await Promise.all([principale, annexes])
   }
 
   const filtres = useMemo(
@@ -67,18 +84,22 @@ export default function ListeProgrammes({ onOuvrir, onNouveau }) {
   const lignesPage = filtres.slice(pageAffichee * TAILLE_PAGE, (pageAffichee + 1) * TAILLE_PAGE)
 
   function exporterExcel() {
-    const lignes = filtres.map((p) => ({
-      Titre: p.titre,
-      Chaîne: p.chaine,
-      Genre: p.genre ?? '',
-      'Sous-genre': p.sous_genre ?? '',
-      'Nb segments': segmentsParProgramme.get(p.id)?.nb ?? 0,
-      'Dernière diffusion': segmentsParProgramme.get(p.id)?.derniereDiffusion ?? '',
-    }))
-    const feuille = XLSX.utils.json_to_sheet(lignes)
-    const classeur = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(classeur, feuille, 'Programmes')
-    XLSX.writeFile(classeur, 'programmes.xlsx')
+    try {
+      const lignes = filtres.map((p) => ({
+        Titre: p.titre,
+        Chaîne: p.chaine,
+        Genre: p.genre ?? '',
+        'Sous-genre': p.sous_genre ?? '',
+        'Nb segments': segmentsParProgramme.get(p.id)?.nb ?? 0,
+        'Dernière diffusion': segmentsParProgramme.get(p.id)?.derniereDiffusion ?? '',
+      }))
+      const feuille = XLSX.utils.json_to_sheet(lignes)
+      const classeur = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(classeur, feuille, 'Programmes')
+      XLSX.writeFile(classeur, 'programmes.xlsx')
+    } catch (err) {
+      setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
   }
 
   return (
