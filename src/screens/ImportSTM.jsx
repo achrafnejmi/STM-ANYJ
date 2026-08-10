@@ -52,7 +52,7 @@ async function synchroniserAvecSupabase(programmesValides) {
   return { programmes: groupes.size, creneaux: lignes.length }
 }
 
-export default function ImportSTM() {
+export default function ImportSTM({ onImportTermine }) {
   const [chaine, setChaine] = useState('')
   const [programmes, setProgrammes] = useState(null)
   const [planMedia, setPlanMedia] = useState(null)
@@ -84,6 +84,7 @@ export default function ImportSTM() {
           try {
             const { programmes: nbProgrammes, creneaux } = await synchroniserAvecSupabase(valides)
             setMessageImport(`${nbProgrammes} programme(s) et ${creneaux} créneau(x) synchronisés avec Supabase.`)
+            onImportTermine?.()
           } catch (err) {
             setErreur(`Erreur lors de l'enregistrement dans Supabase : ${err.message}`)
           } finally {

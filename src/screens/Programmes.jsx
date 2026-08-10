@@ -1,14 +1,29 @@
-import ImportSTM from './ImportSTM.jsx'
+import { useState } from 'react'
+import ListeProgrammes from './ListeProgrammes.jsx'
+import FicheProgramme from './FicheProgramme.jsx'
 
 export default function Programmes() {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        La fiche programme et les segments arrivent en Phase 7 — en attendant,
-        l'import de grille ci-dessous alimente déjà Programmes et la Grille
-        linéaire.
-      </div>
-      <ImportSTM />
-    </div>
-  )
+  const [vue, setVue] = useState('LISTE')
+  const [programmeId, setProgrammeId] = useState(null)
+
+  function ouvrir(id) {
+    setProgrammeId(id)
+    setVue('FICHE')
+  }
+
+  function nouveau() {
+    setProgrammeId(null)
+    setVue('FICHE')
+  }
+
+  function retourListe() {
+    setVue('LISTE')
+    setProgrammeId(null)
+  }
+
+  if (vue === 'FICHE') {
+    return <FicheProgramme programmeId={programmeId} onRetour={retourListe} />
+  }
+
+  return <ListeProgrammes onOuvrir={ouvrir} onNouveau={nouveau} />
 }

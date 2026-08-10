@@ -36,7 +36,35 @@ export async function supprimerProgramme(id) {
   verifie(await supabase.from('programme').delete().eq('id', id).select())
 }
 
-// --- segment --- (CRUD prêt pour P7, rien ne l'appelle encore)
+// Valeurs distinctes pour les filtres de la liste — pas de DISTINCT SQL via le
+// client Supabase, donc dédoublonnage côté client sur un jeu de données PoC.
+export async function listerChaines() {
+  const lignes = verifie(await supabase.from('programme').select('chaine'))
+  return [...new Set(lignes.map((l) => l.chaine).filter(Boolean))].sort()
+}
+
+export async function listerSousGenres() {
+  const lignes = verifie(await supabase.from('programme').select('sous_genre'))
+  return [...new Set(lignes.map((l) => l.sous_genre).filter(Boolean))].sort()
+}
+
+// --- attestation (Supabase Storage, bucket "attestations" — migration-p7.sql) ---
+
+export async function televerserAttestation(programmeId, fichier) {
+  const chemin = `${programmeId}/${fichier.name}`
+  verifie(await supabase.storage.from('attestations').upload(chemin, fichier, { upsert: true }))
+  return chemin
+}
+
+export async function supprimerAttestation(chemin) {
+  verifie(await supabase.storage.from('attestations').remove([chemin]))
+}
+
+export function urlAttestation(chemin) {
+  return supabase.storage.from('attestations').getPublicUrl(chemin).data.publicUrl
+}
+
+// --- segment ---
 
 export async function listerSegments(programmeId) {
   return verifie(await supabase.from('segment').select('*').eq('programme_id', programmeId).order('numero'))
@@ -56,6 +84,12 @@ export async function mettreAJourSegment(id, champs) {
 
 export async function supprimerSegment(id) {
   verifie(await supabase.from('segment').delete().eq('id', id).select())
+}
+
+// Pour agréger nb segments / dernière diffusion par programme dans la liste
+// (ListeProgrammes) sans une requête par ligne.
+export async function listerTousLesSegments() {
+  return verifie(await supabase.from('segment').select('programme_id, derniere_diffusion'))
 }
 
 // --- diffusion_lineaire ---
