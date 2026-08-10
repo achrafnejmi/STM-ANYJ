@@ -7,7 +7,7 @@ export default function TopBar({ utilisateur, onDeconnexion, onToggleSidebar }) 
         <button type="button" onClick={onToggleSidebar} className="text-slate-500 hover:text-slate-700 lg:hidden">
           <Menu size={22} />
         </button>
-        <img src="/stm-logo-couleur.png" alt="STM" className="h-9 w-9" />
+        <img src="/snrt-favicon.png" alt="SNRT" className="h-9 w-auto" />
         <span className="hidden text-sm font-semibold text-slate-700 sm:inline">
           Snomark — STM nouvelle génération
         </span>

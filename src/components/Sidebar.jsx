@@ -11,7 +11,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer }) {
         }`}
       >
         <div className="flex items-center justify-between px-4 py-5">
-          <img src="/snrt-etoile-blanc.png" alt="SNRT" className="h-10 w-10" />
+          <img src="/snrt-favicon.png" alt="SNRT" className="h-10 w-auto" />
           <button type="button" onClick={onFermer} className="text-white/70 hover:text-white lg:hidden">
             <X size={20} />
           </button>
