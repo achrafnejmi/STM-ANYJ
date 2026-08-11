@@ -10,7 +10,7 @@ import {
 import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES, chaineParNom } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
-import SegmentsPanel from './SegmentsPanel.jsx'
+import EpisodesPanel from './EpisodesPanel.jsx'
 
 const TAILLE_MAX_ATTESTATION = 5 * 1024 * 1024 // 5 Mo
 
@@ -51,7 +51,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   const [chargement, setChargement] = useState(Boolean(idInitial))
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
-  const [nombreSegments, setNombreSegments] = useState(0)
+  const [nombreEpisodes, setNombreEpisodes] = useState(0)
   const [televersementEnCours, setTeleversementEnCours] = useState(false)
   const idDescription = useId()
   const idExclusivite = useId()
@@ -231,7 +231,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
             <div>Créé par : {programme?.cree_par || '—'}</div>
             <div>Créé le : {programme?.cree_le ? new Date(programme.cree_le).toLocaleString('fr-FR') : '—'}</div>
-            <div>Nombre de segments : {nombreSegments}</div>
+            <div>Nombre d'épisodes : {nombreEpisodes}</div>
           </div>
 
           {erreur && <p className="text-sm text-red-600">{erreur}</p>}
@@ -245,7 +245,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         </form>
       </div>
 
-      {id && <SegmentsPanel programmeId={id} onSegmentsChange={(segments) => setNombreSegments(segments.length)} />}
+      {id && <EpisodesPanel programmeId={id} onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)} />}
     </div>
   )
 }

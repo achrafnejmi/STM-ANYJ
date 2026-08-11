@@ -52,32 +52,32 @@ export function urlAttestation(chemin) {
   return supabase.storage.from('attestations').getPublicUrl(chemin).data.publicUrl
 }
 
-// --- segment ---
+// --- episode ---
 
-export async function listerSegments(programmeId) {
-  return verifie(await supabase.from('segment').select('*').eq('programme_id', programmeId).order('numero'))
+export async function listerEpisodes(programmeId) {
+  return verifie(await supabase.from('episode').select('*').eq('programme_id', programmeId).order('numero'))
 }
 
-export async function obtenirSegment(id) {
-  return verifie(await supabase.from('segment').select('*').eq('id', id).maybeSingle())
+export async function obtenirEpisode(id) {
+  return verifie(await supabase.from('episode').select('*').eq('id', id).maybeSingle())
 }
 
-export async function creerSegment(champs) {
-  return verifie(await supabase.from('segment').insert(champs).select().single())
+export async function creerEpisode(champs) {
+  return verifie(await supabase.from('episode').insert(champs).select().single())
 }
 
-export async function mettreAJourSegment(id, champs) {
-  return verifie(await supabase.from('segment').update(champs).eq('id', id).select().single())
+export async function mettreAJourEpisode(id, champs) {
+  return verifie(await supabase.from('episode').update(champs).eq('id', id).select().single())
 }
 
-export async function supprimerSegment(id) {
-  verifie(await supabase.from('segment').delete().eq('id', id).select())
+export async function supprimerEpisode(id) {
+  verifie(await supabase.from('episode').delete().eq('id', id).select())
 }
 
-// Pour agréger nb segments / dernière diffusion par programme dans la liste
+// Pour agréger nb épisodes / dernière diffusion par programme dans la liste
 // (ListeProgrammes) sans une requête par ligne.
-export async function listerTousLesSegments() {
-  return verifie(await supabase.from('segment').select('programme_id, derniere_diffusion'))
+export async function listerTousLesEpisodes() {
+  return verifie(await supabase.from('episode').select('programme_id, derniere_diffusion'))
 }
 
 // --- diffusion_lineaire ---
@@ -89,6 +89,21 @@ export async function listerDiffusionsLineaires() {
 export async function listerDiffusionsLineairesParChaine(chaineId) {
   return verifie(
     await supabase.from('diffusion_lineaire').select('*').eq('chaine_id', chaineId).order('date').order('heure_debut')
+  )
+}
+
+// Historique (approximation, P10) : diffusion_lineaire passées d'un programme,
+// pas un constat d'antenne réel (aucune table "Diffusion constatée" n'existe
+// encore — voir migration-p10.sql). Utilisée par PopoverHistorique et par le
+// calcul de "dernière diffusion" par épisode dans CataloguePanel.
+export async function listerDiffusionsLineairesParProgramme(programmeId) {
+  return verifie(
+    await supabase
+      .from('diffusion_lineaire')
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('date', { ascending: false })
+      .order('heure_debut', { ascending: false })
   )
 }
 

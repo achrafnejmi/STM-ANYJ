@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
+  listerEpisodes,
   creerDiffusionLineaire,
   mettreAJourDiffusionLineaire,
   supprimerDiffusionLineaire,
@@ -18,41 +19,52 @@ import {
   formaterDateLongue,
   heureEnMinutes,
   minutesEnHeure,
+  DEBUT_JOURNEE_ANTENNE,
+  FIN_JOURNEE_ANTENNE,
+  minutesDepuisDebutAntenne,
 } from '../lib/semaine.js'
 import Modal from '../components/Modal.jsx'
+import CataloguePanel from '../components/CataloguePanel.jsx'
+import PopoverHistorique from '../components/PopoverHistorique.jsx'
 
-const RANGEE_MIN = 30 // minutes par rangée de la grille
-const NB_RANGEES = (24 * 60) / RANGEE_MIN // 48
-const HAUTEUR_RANGEE = 28 // px
+const PX_PAR_MINUTE = 1 // axe continu (EXG-M2-01) — 1440px pour la journée d'antenne complète
+const HAUTEUR_TOTALE = (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
+const PAS_ARRONDI_MIN = 5
+const DUREE_PAR_DEFAUT_MIN = 30
 
-// Toujours au moins 1 rangée, jamais un span ≤ 0 (créneaux à durée nulle/négative,
-// ex. artefacts d'import autour de minuit).
-function calculerRangees(heureDebut, heureFin) {
-  const debut = heureEnMinutes(heureDebut)
-  let fin = heureEnMinutes(heureFin)
-  if (fin <= debut) fin = debut + RANGEE_MIN
-  fin = Math.min(fin, NB_RANGEES * RANGEE_MIN)
-  const rangeeDebut = Math.floor(debut / RANGEE_MIN)
-  const rangeeFin = Math.max(rangeeDebut + 1, Math.ceil(fin / RANGEE_MIN))
-  return { rangeeDebut, rangeeFin }
+const MARQUES_HEURES = []
+for (let m = DEBUT_JOURNEE_ANTENNE; m <= FIN_JOURNEE_ANTENNE; m += 60) MARQUES_HEURES.push(m)
+
+// Position Y (px, relative au haut de la colonne du jour) → minute de la
+// journée d'antenne, arrondie au pas de 5 min (dépôt ou clic sur la grille).
+function positionVersMinute(offsetY) {
+  const brut = DEBUT_JOURNEE_ANTENNE + offsetY / PX_PAR_MINUTE
+  const arrondi = Math.round(brut / PAS_ARRONDI_MIN) * PAS_ARRONDI_MIN
+  return Math.max(DEBUT_JOURNEE_ANTENNE, Math.min(FIN_JOURNEE_ANTENNE - PAS_ARRONDI_MIN, arrondi))
 }
 
 // Répartit les créneaux qui se chevauchent (pas de contrainte d'unicité en
-// base) en pistes côte à côte plutôt que superposés.
+// base, chevauchements autorisés — détection formelle = P12) en pistes côte à
+// côte plutôt que superposés. Opère en minutes depuis le début de la journée
+// d'antenne (pas en rangées) pour l'axe continu.
 function disposerEnPistes(diffusionsJour) {
-  const triees = [...diffusionsJour].sort((a, b) => heureEnMinutes(a.heure_debut) - heureEnMinutes(b.heure_debut))
+  const avecMinutes = diffusionsJour.map((d) => {
+    const debut = minutesDepuisDebutAntenne(d.heure_debut)
+    let fin = minutesDepuisDebutAntenne(d.heure_fin)
+    if (fin <= debut) fin = debut + PAS_ARRONDI_MIN
+    return { diffusion: d, debut, fin }
+  })
+  const triees = [...avecMinutes].sort((a, b) => a.debut - b.debut)
   const finPiste = [] // dernière minute de fin occupée par piste
   const resultat = []
-  for (const d of triees) {
-    const debut = heureEnMinutes(d.heure_debut)
-    let piste = finPiste.findIndex((fin) => fin <= debut)
+  for (const item of triees) {
+    let piste = finPiste.findIndex((fin) => fin <= item.debut)
     if (piste === -1) {
       piste = finPiste.length
       finPiste.push(0)
     }
-    const { rangeeFin } = calculerRangees(d.heure_debut, d.heure_fin)
-    finPiste[piste] = rangeeFin * RANGEE_MIN
-    resultat.push({ diffusion: d, piste })
+    finPiste[piste] = item.fin
+    resultat.push({ ...item, piste })
   }
   const nbPistes = finPiste.length || 1
   return resultat.map((r) => ({ ...r, nbPistes }))
@@ -66,6 +78,8 @@ export default function GrilleLineaire({ chaineActive }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
+  const dragRef = useRef(null)
 
   useEffect(() => {
     setChargement(true)
@@ -137,6 +151,31 @@ export default function GrilleLineaire({ chaineActive }) {
     setModale(null)
   }
 
+  // La `date` d'une transmission = le jour d'antenne de la colonne où l'on
+  // dépose/clique (RG-19/20) — jamais recalculée depuis heureDebut, même pour
+  // un dépôt entre 00:00 et 05:59 qui reste rattaché à ce même jour d'antenne.
+  function deposerEpisode(jourAntenne, minuteDebut) {
+    const payload = dragRef.current
+    dragRef.current = null
+    if (!payload) return
+    const heureDebut = minutesEnHeure(minuteDebut)
+    const heureFin = minutesEnHeure(minuteDebut + (payload.duree ?? DUREE_PAR_DEFAUT_MIN))
+    const programme = programmesParId.get(payload.programmeId)
+    const champs = {
+      programme_id: payload.programmeId,
+      episode_id: payload.episodeId,
+      episode_numero: payload.numero ?? null,
+      chaine: chaineActive.nom,
+      chaine_id: chaineActive.id,
+      date: jourAntenne,
+      heure_debut: heureDebut,
+      heure_fin: heureFin,
+      genre: programme?.genre || null,
+      titre_cache: programme?.titre ?? null,
+    }
+    creerDiffusionLineaire(champs).then(appliquerCreation).catch((err) => setErreur(err.message))
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
@@ -204,86 +243,104 @@ export default function GrilleLineaire({ chaineActive }) {
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
 
-      {!chargement && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="max-h-[70vh] overflow-y-auto">
-            <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(120px, 1fr))` }}>
-              <div className="sticky top-0 z-10 bg-white" style={{ gridRow: 1, gridColumn: 1 }} />
-              {jours.map((j, i) => (
-                <div
-                  key={j}
-                  style={{ gridRow: 1, gridColumn: i + 2 }}
-                  className="sticky top-0 z-10 border-b border-slate-200 bg-white px-2 py-2 text-center text-xs font-medium text-slate-600"
-                >
-                  {formaterJourCourt(j)}
-                </div>
-              ))}
+      <div className="flex items-start gap-4">
+        <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
 
-              <div className="relative" style={{ gridRow: 2, gridColumn: 1 }}>
-                <div style={{ display: 'grid', gridTemplateRows: `repeat(${NB_RANGEES}, ${HAUTEUR_RANGEE}px)` }}>
-                  {Array.from({ length: NB_RANGEES }).map(
-                    (_, i) =>
-                      i % 2 === 0 && (
-                        <div
-                          key={i}
-                          style={{ gridRow: `${i + 1} / span 2` }}
-                          className="pr-2 text-right text-[11px] text-slate-400"
-                        >
-                          {minutesEnHeure(i * RANGEE_MIN)}
-                        </div>
-                      )
-                  )}
-                </div>
-              </div>
+        {!chargement && (
+          <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="max-h-[70vh] overflow-y-auto">
+              <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(140px, 1fr))` }}>
+                <div className="sticky top-0 z-10 bg-white" style={{ gridRow: 1, gridColumn: 1 }} />
+                {jours.map((j, i) => (
+                  <div
+                    key={j}
+                    style={{ gridRow: 1, gridColumn: i + 2 }}
+                    className="sticky top-0 z-10 border-b border-slate-200 bg-white px-2 py-2 text-center text-xs font-medium text-slate-600"
+                  >
+                    {formaterJourCourt(j)}
+                  </div>
+                ))}
 
-              {jours.map((j, i) => {
-                const pistees = disposerEnPistes(diffusionsParJour.get(j) ?? [])
-                return (
-                  <div key={j} className="relative border-l border-slate-100" style={{ gridRow: 2, gridColumn: i + 2 }}>
-                    <div style={{ display: 'grid', gridTemplateRows: `repeat(${NB_RANGEES}, ${HAUTEUR_RANGEE}px)` }}>
-                      {Array.from({ length: NB_RANGEES }).map((_, i) => (
+                <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: HAUTEUR_TOTALE }}>
+                  {MARQUES_HEURES.map((m) => (
+                    <div
+                      key={m}
+                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE - 6, right: 8 }}
+                      className="text-[11px] text-slate-400"
+                    >
+                      {minutesEnHeure(m)}
+                    </div>
+                  ))}
+                </div>
+
+                {jours.map((j, i) => {
+                  const pistees = disposerEnPistes(diffusionsParJour.get(j) ?? [])
+                  return (
+                    <div
+                      key={j}
+                      className="relative cursor-pointer border-l border-slate-100 hover:bg-slate-50/50"
+                      style={{ gridRow: 2, gridColumn: i + 2, height: HAUTEUR_TOTALE }}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const minute = positionVersMinute(e.clientY - rect.top)
+                        ouvrirCreation(j, minutesEnHeure(minute))
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const minute = positionVersMinute(e.clientY - rect.top)
+                        deposerEpisode(j, minute)
+                      }}
+                    >
+                      {MARQUES_HEURES.map((m) => (
                         <div
-                          key={i}
-                          style={{ gridRow: i + 1 }}
-                          className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
-                          onClick={() => ouvrirCreation(j, minutesEnHeure(i * RANGEE_MIN))}
+                          key={m}
+                          className="absolute left-0 right-0 border-t border-slate-100"
+                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE }}
                         />
                       ))}
+                      {pistees.map(({ diffusion, debut, fin, piste, nbPistes }) => {
+                        const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
+                        const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
+                        const genre = programmesParId.get(diffusion.programme_id)?.genre
+                        const { fond, texte } = couleurGenre(genre)
+                        const etiquetteEpisode =
+                          diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
+                        return (
+                          <button
+                            type="button"
+                            key={diffusion.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              ouvrirEdition(diffusion)
+                            }}
+                            className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte}`}
+                            style={{
+                              top: `${top}px`,
+                              height: `${hauteur}px`,
+                              left: `${(piste / nbPistes) * 100}%`,
+                              width: `${100 / nbPistes}%`,
+                            }}
+                          >
+                            <div className="font-medium">
+                              {diffusion.heure_debut}–{diffusion.heure_fin}
+                            </div>
+                            <div className="truncate">
+                              {etiquetteEpisode}
+                              {diffusion.titre_cache}
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
-                    {pistees.map(({ diffusion, piste, nbPistes }) => {
-                      const { rangeeDebut, rangeeFin } = calculerRangees(diffusion.heure_debut, diffusion.heure_fin)
-                      const genre = programmesParId.get(diffusion.programme_id)?.genre
-                      const { fond, texte } = couleurGenre(genre)
-                      return (
-                        <button
-                          type="button"
-                          key={diffusion.id}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            ouvrirEdition(diffusion)
-                          }}
-                          className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte}`}
-                          style={{
-                            top: `${rangeeDebut * HAUTEUR_RANGEE}px`,
-                            height: `${(rangeeFin - rangeeDebut) * HAUTEUR_RANGEE - 2}px`,
-                            left: `${(piste / nbPistes) * 100}%`,
-                            width: `${100 / nbPistes}%`,
-                          }}
-                        >
-                          <div className="font-medium">
-                            {diffusion.heure_debut}–{diffusion.heure_fin}
-                          </div>
-                          <div className="truncate">{diffusion.titre_cache}</div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {modale && (
         <Modal titre={modale.mode === 'CREATION' ? 'Ajouter un créneau' : 'Modifier le créneau'} onFermer={() => setModale(null)}>
@@ -298,6 +355,10 @@ export default function GrilleLineaire({ chaineActive }) {
           />
         </Modal>
       )}
+
+      {historiqueOuvert && (
+        <PopoverHistorique programme={historiqueOuvert} onFermer={() => setHistoriqueOuvert(null)} />
+      )}
     </div>
   )
 }
@@ -307,17 +368,63 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
   const diffusionInitiale = estEdition ? modale.diffusion : null
 
   const [programmeId, setProgrammeId] = useState(diffusionInitiale?.programme_id ?? programmesDisponibles[0]?.id ?? '')
+  const [episodes, setEpisodes] = useState([])
+  const [chargementEpisodes, setChargementEpisodes] = useState(false)
+  const [episodeId, setEpisodeId] = useState(diffusionInitiale?.episode_id ?? '')
   const [date, setDate] = useState(diffusionInitiale?.date ?? modale.date)
   const [heureDebut, setHeureDebut] = useState(diffusionInitiale?.heure_debut ?? modale.heureDebut)
   const [heureFin, setHeureFin] = useState(
-    diffusionInitiale?.heure_fin ?? minutesEnHeure(heureEnMinutes(modale.heureDebut ?? '00:00') + RANGEE_MIN)
+    diffusionInitiale?.heure_fin ?? minutesEnHeure(heureEnMinutes(modale.heureDebut ?? '06:00') + DUREE_PAR_DEFAUT_MIN)
   )
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const idProgramme = useId()
+  const idEpisode = useId()
   const idDate = useId()
   const idDebut = useId()
   const idFin = useId()
+  const requeteEpisodesId = useRef(0)
+
+  // `requeteEpisodesId` ignore la réponse d'un fetch dépassé par un
+  // changement de programme plus récent (même pattern que `requeteId` dans
+  // ListeProgrammes.jsx) — sans ça, une réponse arrivée en retard peut écraser
+  // episodes/episodeId avec ceux d'un AUTRE programme que celui affiché.
+  useEffect(() => {
+    const idAppel = ++requeteEpisodesId.current
+    if (!programmeId) {
+      setEpisodes([])
+      return
+    }
+    setChargementEpisodes(true)
+    listerEpisodes(programmeId)
+      .then((lignes) => {
+        if (idAppel !== requeteEpisodesId.current) return
+        setEpisodes(lignes)
+        setEpisodeId((actuel) => (lignes.some((ep) => ep.id === actuel) ? actuel : (lignes[0]?.id ?? '')))
+      })
+      .catch((err) => {
+        if (idAppel !== requeteEpisodesId.current) return
+        setErreur(err.message)
+      })
+      .finally(() => {
+        if (idAppel === requeteEpisodesId.current) setChargementEpisodes(false)
+      })
+  }, [programmeId])
+
+  // Recalcule heure_fin sur la durée de l'épisode sélectionné — réagit à la
+  // valeur (episodeId), pas seulement à l'événement onChange du <select>, pour
+  // couvrir aussi la présélection automatique (programme à un seul épisode).
+  // heureDebut est lu par closure (valeur du rendu courant, jamais périmée
+  // puisque cet effet se redéclenche sur la sélection elle-même) sans figurer
+  // dans les dépendances : un changement ultérieur de heureDebut seul ne doit
+  // pas re-écraser une heure de fin déjà ajustée manuellement par l'utilisateur.
+  useEffect(() => {
+    if (estEdition) return
+    const ep = episodes.find((e) => e.id === episodeId)
+    if (!ep) return
+    setHeureFin(minutesEnHeure(heureEnMinutes(heureDebut) + (ep.duree ?? DUREE_PAR_DEFAUT_MIN)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- volontaire, voir commentaire ci-dessus
+  }, [episodeId, episodes])
 
   if (programmesDisponibles.length === 0) {
     return (
@@ -330,11 +437,18 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
 
   async function enregistrer(e) {
     e.preventDefault()
+    if (!episodeId) {
+      setErreur('Choisissez un épisode.')
+      return
+    }
     setEnregistrement(true)
     setErreur(null)
     const programme = programmesParId.get(programmeId)
+    const episode = episodes.find((ep) => ep.id === episodeId)
     const champs = {
       programme_id: programmeId,
+      episode_id: episodeId,
+      episode_numero: episode?.numero ?? null,
       chaine: chaineActive.nom,
       chaine_id: chaineActive.id,
       date,
@@ -391,8 +505,33 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
         </select>
       </div>
       <div>
+        <label htmlFor={idEpisode} className="mb-1 block text-sm font-medium text-slate-700">
+          Épisode *
+        </label>
+        <select
+          id={idEpisode}
+          value={episodeId}
+          required
+          disabled={chargementEpisodes || episodes.length === 0}
+          onChange={(e) => setEpisodeId(e.target.value)}
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
+        >
+          {episodes.length === 0 && <option value="">{chargementEpisodes ? 'Chargement…' : 'Aucun épisode'}</option>}
+          {episodes.map((ep) => (
+            <option key={ep.id} value={ep.id}>
+              ÉP.{String(ep.numero ?? '?').padStart(2, '0')} — {ep.titre || 'Sans titre'} ({ep.duree ?? '?'} min)
+            </option>
+          ))}
+        </select>
+        {!chargementEpisodes && episodes.length === 0 && (
+          <p className="mt-1 text-xs text-amber-600">
+            Ce programme n'a aucun épisode — ajoutez-en un dans sa fiche avant de créer une transmission.
+          </p>
+        )}
+      </div>
+      <div>
         <label htmlFor={idDate} className="mb-1 block text-sm font-medium text-slate-700">
-          Date *
+          Date (jour d'antenne) *
         </label>
         <input
           id={idDate}

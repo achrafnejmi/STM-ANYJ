@@ -1,14 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listerProgrammesParChaine, listerTousLesSegments } from '../lib/db.js'
+import { listerProgrammesParChaine, listerTousLesEpisodes } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
 
 const TAILLE_PAGE = 30
 
 export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   const [programmes, setProgrammes] = useState([])
-  const [segmentsParProgramme, setSegmentsParProgramme] = useState(new Map())
+  const [episodesParProgramme, setEpisodesParProgramme] = useState(new Map())
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtreGenre, setFiltreGenre] = useState('')
@@ -21,9 +21,9 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   }, [chaineActive])
 
   // La liste principale (listerProgrammes) est appliquée dès qu'elle résout,
-  // indépendamment des requêtes annexes (chaînes/sous-genres/segments) — un
-  // échec annexe ne doit jamais vider la liste. `requeteId` ignore les
-  // réponses d'un appel dépassé par un rafraîchissement plus récent.
+  // indépendamment de la requête annexe (épisodes) — un échec annexe ne doit
+  // jamais vider la liste. `requeteId` ignore les réponses d'un appel dépassé
+  // par un rafraîchissement plus récent.
   async function rafraichir() {
     const idAppel = ++requeteId.current
     setChargement(true)
@@ -43,20 +43,27 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         if (idAppel === requeteId.current) setChargement(false)
       })
 
-    const annexes = listerTousLesSegments()
-      .then((lignesSegments) => {
+    // DETTE CONNUE (P10) : "Dernière diffusion" ici vient de episode.derniere_diffusion,
+    // une colonne statique jamais recalculée par le code applicatif (seul l'import
+    // xlsx, supprimé, l'écrivait). C'est donc une valeur figée, potentiellement
+    // périmée — contrairement au calcul dynamique introduit en P10 pour le
+    // catalogue de la grille (basé sur diffusion_lineaire réellement créées).
+    // Les deux sources ne sont volontairement pas unifiées dans cette phase
+    // (hors périmètre) — à reprendre en P14 (Catalogue/fiche titre) ou P21.
+    const annexes = listerTousLesEpisodes()
+      .then((lignesEpisodes) => {
         if (idAppel !== requeteId.current) return
 
         const parProgramme = new Map()
-        for (const s of lignesSegments) {
-          const entree = parProgramme.get(s.programme_id) ?? { nb: 0, derniereDiffusion: null }
+        for (const ep of lignesEpisodes) {
+          const entree = parProgramme.get(ep.programme_id) ?? { nb: 0, derniereDiffusion: null }
           entree.nb += 1
-          if (s.derniere_diffusion && (!entree.derniereDiffusion || s.derniere_diffusion > entree.derniereDiffusion)) {
-            entree.derniereDiffusion = s.derniere_diffusion
+          if (ep.derniere_diffusion && (!entree.derniereDiffusion || ep.derniere_diffusion > entree.derniereDiffusion)) {
+            entree.derniereDiffusion = ep.derniere_diffusion
           }
-          parProgramme.set(s.programme_id, entree)
+          parProgramme.set(ep.programme_id, entree)
         }
-        setSegmentsParProgramme(parProgramme)
+        setEpisodesParProgramme(parProgramme)
       })
       .catch((err) => {
         console.error('Filtres/agrégats indisponibles, la liste principale reste affichée :', err)
@@ -81,8 +88,8 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         Chaîne: p.chaine,
         Genre: p.genre ?? '',
         'Sous-genre': p.sous_genre ?? '',
-        'Nb segments': segmentsParProgramme.get(p.id)?.nb ?? 0,
-        'Dernière diffusion': segmentsParProgramme.get(p.id)?.derniereDiffusion ?? '',
+        'Nb épisodes': episodesParProgramme.get(p.id)?.nb ?? 0,
+        'Dernière diffusion': episodesParProgramme.get(p.id)?.derniereDiffusion ?? '',
       }))
       const feuille = XLSX.utils.json_to_sheet(lignes)
       const classeur = XLSX.utils.book_new()
@@ -159,7 +166,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                 <th className="py-2 pr-4 font-medium">Chaîne</th>
                 <th className="py-2 pr-4 font-medium">Genre</th>
                 <th className="py-2 pr-4 font-medium">Sous-genre</th>
-                <th className="py-2 pr-4 font-medium">Nb segments</th>
+                <th className="py-2 pr-4 font-medium">Nb épisodes</th>
                 <th className="py-2 pr-4 font-medium">Dernière diffusion</th>
               </tr>
             </thead>
@@ -174,8 +181,8 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                   <td className="py-2 pr-4 text-slate-700">{p.chaine}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.genre || '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.sous_genre || '—'}</td>
-                  <td className="py-2 pr-4 text-slate-700">{segmentsParProgramme.get(p.id)?.nb ?? 0}</td>
-                  <td className="py-2 pr-4 text-slate-700">{segmentsParProgramme.get(p.id)?.derniereDiffusion || '—'}</td>
+                  <td className="py-2 pr-4 text-slate-700">{episodesParProgramme.get(p.id)?.nb ?? 0}</td>
+                  <td className="py-2 pr-4 text-slate-700">{episodesParProgramme.get(p.id)?.derniereDiffusion || '—'}</td>
                 </tr>
               ))}
               {!chargement && lignesPage.length === 0 && (

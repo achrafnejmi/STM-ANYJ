@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { Plus, Trash2, CheckCircle2 } from 'lucide-react'
-import { listerSegments, creerSegment, mettreAJourSegment, supprimerSegment } from '../lib/db.js'
+import { listerEpisodes, creerEpisode, mettreAJourEpisode, supprimerEpisode } from '../lib/db.js'
 import Placeholder from '../components/Placeholder.jsx'
 
 const ONGLETS = [
@@ -9,7 +9,7 @@ const ONGLETS = [
   { id: 'EVENEMENTS', label: 'Événements secondaires' },
 ]
 
-const SEGMENT_VIDE = {
+const EPISODE_VIDE = {
   numero: '',
   titre: '',
   duree: '',
@@ -19,23 +19,23 @@ const SEGMENT_VIDE = {
   pad: false,
 }
 
-function versFormulaire(segment) {
+function versFormulaire(episode) {
   return {
-    numero: segment.numero ?? '',
-    titre: segment.titre ?? '',
-    duree: segment.duree ?? '',
-    date_production: segment.date_production ?? '',
-    code: segment.code ?? '',
-    description: segment.description ?? '',
-    pad: segment.pad ?? false,
+    numero: episode.numero ?? '',
+    titre: episode.titre ?? '',
+    duree: episode.duree ?? '',
+    date_production: episode.date_production ?? '',
+    code: episode.code ?? '',
+    description: episode.description ?? '',
+    pad: episode.pad ?? false,
   }
 }
 
-export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
-  const [segments, setSegments] = useState([])
+export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
+  const [episodes, setEpisodes] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
-  const [segmentId, setSegmentId] = useState(null)
+  const [episodeId, setEpisodeId] = useState(null)
   const [onglet, setOnglet] = useState('INFOS')
   const [form, setForm] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -44,15 +44,15 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
 
   useEffect(() => {
     rafraichir()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de programme, pas à onSegmentsChange (identité instable côté parent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de programme, pas à onEpisodesChange (identité instable côté parent)
   }, [programmeId])
 
   async function rafraichir() {
     setChargement(true)
     try {
-      const lignes = await listerSegments(programmeId)
-      setSegments(lignes)
-      onSegmentsChange?.(lignes)
+      const lignes = await listerEpisodes(programmeId)
+      setEpisodes(lignes)
+      onEpisodesChange?.(lignes)
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -60,25 +60,25 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
     }
   }
 
-  function selectionner(segment) {
-    setSegmentId(segment.id)
-    setForm(versFormulaire(segment))
+  function selectionner(episode) {
+    setEpisodeId(episode.id)
+    setForm(versFormulaire(episode))
     setOnglet('INFOS')
     setErreur(null)
   }
 
-  function nouveauSegment() {
-    setSegmentId('NOUVEAU')
-    setForm({ ...SEGMENT_VIDE, numero: segments.length + 1 })
+  function nouvelEpisode() {
+    setEpisodeId('NOUVEAU')
+    setForm({ ...EPISODE_VIDE, numero: episodes.length + 1 })
     setOnglet('INFOS')
     setErreur(null)
   }
 
   async function supprimer(id) {
     try {
-      await supprimerSegment(id)
-      if (segmentId === id) {
-        setSegmentId(null)
+      await supprimerEpisode(id)
+      if (episodeId === id) {
+        setEpisodeId(null)
         setForm(null)
       }
       await rafraichir()
@@ -102,11 +102,11 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
         pad: form.pad,
         programme_id: programmeId,
       }
-      if (segmentId === 'NOUVEAU') {
-        const cree = await creerSegment(champs)
-        setSegmentId(cree.id)
+      if (episodeId === 'NOUVEAU') {
+        const cree = await creerEpisode(champs)
+        setEpisodeId(cree.id)
       } else {
-        await mettreAJourSegment(segmentId, champs)
+        await mettreAJourEpisode(episodeId, champs)
       }
       await rafraichir()
     } catch (err) {
@@ -119,12 +119,12 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900">Segments</h2>
+        <h2 className="text-base font-semibold text-slate-900">Épisodes</h2>
         <button
           type="button"
-          onClick={nouveauSegment}
+          onClick={nouvelEpisode}
           className="flex items-center gap-1.5 rounded-full bg-emerald-600 p-2 text-white hover:bg-emerald-700"
-          title="Ajouter un segment"
+          title="Ajouter un épisode"
         >
           <Plus size={16} />
         </button>
@@ -142,23 +142,23 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
               </tr>
             </thead>
             <tbody>
-              {segments.map((s) => (
+              {episodes.map((ep) => (
                 <tr
-                  key={s.id}
-                  onClick={() => selectionner(s)}
+                  key={ep.id}
+                  onClick={() => selectionner(ep)}
                   className={`cursor-pointer border-b border-slate-100 ${
-                    segmentId === s.id ? 'bg-snrt-navy/5' : 'hover:bg-slate-50'
+                    episodeId === ep.id ? 'bg-snrt-navy/5' : 'hover:bg-slate-50'
                   }`}
                 >
-                  <td className="py-2 pr-4 text-slate-700">{s.numero ?? '—'}</td>
-                  <td className="py-2 pr-4 text-slate-700">{s.titre || '—'}</td>
-                  <td className="py-2 pr-4">{s.pad && <CheckCircle2 size={16} className="text-emerald-600" />}</td>
+                  <td className="py-2 pr-4 text-slate-700">{ep.numero ?? '—'}</td>
+                  <td className="py-2 pr-4 text-slate-700">{ep.titre || '—'}</td>
+                  <td className="py-2 pr-4">{ep.pad && <CheckCircle2 size={16} className="text-emerald-600" />}</td>
                   <td className="py-2 pr-4">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        supprimer(s.id)
+                        supprimer(ep.id)
                       }}
                       className="text-red-500 hover:text-red-700"
                       title="Supprimer"
@@ -168,10 +168,10 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
                   </td>
                 </tr>
               ))}
-              {!chargement && segments.length === 0 && (
+              {!chargement && episodes.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-3 text-sm text-slate-500">
-                    Aucun segment pour ce programme.
+                    Aucun épisode pour ce programme.
                   </td>
                 </tr>
               )}
@@ -181,7 +181,7 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
 
         <div>
           {!form ? (
-            <p className="text-sm text-slate-500">Sélectionnez un segment ou ajoutez-en un.</p>
+            <p className="text-sm text-slate-500">Sélectionnez un épisode ou ajoutez-en un.</p>
           ) : (
             <>
               <div className="mb-4 flex gap-4 border-b border-slate-200">
@@ -246,14 +246,14 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
                     />
                     PAD (prêt à diffuser)
                   </label>
-                  {segmentId !== 'NOUVEAU' && (
+                  {episodeId !== 'NOUVEAU' && (
                     <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
                       <div>
                         Dernière diffusion :{' '}
-                        {segments.find((s) => s.id === segmentId)?.derniere_diffusion || '—'}
+                        {episodes.find((ep) => ep.id === episodeId)?.derniere_diffusion || '—'}
                       </div>
                       <div>
-                        Nombre de diffusions : {segments.find((s) => s.id === segmentId)?.nombre_diffusions ?? 0}
+                        Nombre de diffusions : {episodes.find((ep) => ep.id === episodeId)?.nombre_diffusions ?? 0}
                       </div>
                     </div>
                   )}
@@ -263,7 +263,7 @@ export default function SegmentsPanel({ programmeId, onSegmentsChange }) {
                     disabled={enregistrement}
                     className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
                   >
-                    {enregistrement ? 'Enregistrement…' : 'Enregistrer le segment'}
+                    {enregistrement ? 'Enregistrement…' : 'Enregistrer l\'épisode'}
                   </button>
                 </form>
               )}

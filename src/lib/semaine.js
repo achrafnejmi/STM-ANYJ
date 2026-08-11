@@ -58,3 +58,19 @@ export function minutesEnHeure(minutes) {
   const m = minutes % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
+
+// Journée d'antenne (RG-19/20 du cahier) : 06:00 → 06:00 le lendemain. La
+// `date` stockée d'une transmission est celle du jour d'antenne, pas du jour
+// calendaire de l'heure d'horloge — un programme entre 00:00 et 05:59
+// appartient à la journée d'antenne de la veille.
+export const DEBUT_JOURNEE_ANTENNE = 6 * 60 // 360 = 06:00
+export const FIN_JOURNEE_ANTENNE = DEBUT_JOURNEE_ANTENNE + 24 * 60 // 1800 = 06:00 le lendemain
+
+// Position d'une heure HH:MM sur l'axe de LA journée d'antenne à laquelle elle
+// appartient (pas celle de son jour calendaire) : une heure avant 06:00 est
+// comprise comme la fin de la journée d'antenne précédente (ex. "01:00" → 1500,
+// pas 60). `minutesEnHeure` fait déjà l'inverse (modulo 24h) pour l'affichage.
+export function minutesDepuisDebutAntenne(hhmm) {
+  const m = heureEnMinutes(hhmm)
+  return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
+}
