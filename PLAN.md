@@ -1,119 +1,88 @@
-# PLAN — Snomark : STM nouvelle génération (linéaire + non-linéaire)
+# PLAN — Snomark / STM Next
 
-> Plan phasé, piloté avec Claude Code.
-> Règle d'or : **une phase = tâches + test ✅** ; on ne code la phase N+1 qu'après validation de N.
-> Avant de coder une phase : présenter le plan + **lister les ambiguïtés** et s'arrêter (règle d'approbation).
+> PoC d'une refonte complète de STM, alignée sur le **cahier des charges STM Next**.
+> Piloté avec Claude Code. Règle d'or : **une phase = tâches + test ✅**, on ne code la
+> phase N+1 qu'après validation de N. Avant de coder : présenter le plan + **lister les
+> ambiguïtés** et s'arrêter (règle d'approbation).
 
 ---
 
-## 1. Produit
+## 1. Références (sources de vérité, par ordre d'autorité)
 
-**Snomark = un STM « nouvelle génération » (PoC).** Il reproduit le cœur de l'actuel STM (d'après les captures de la présentation SNRT) et ajoute la gestion **non-linéaire par plateforme**. Backend **Supabase**. GUI **soigné, aux couleurs SNRT**, logo étoile conservé.
+1. **`design-reference/Cahier_des_charges_STM_Next.docx`** — LE contrat. 10 modules (M0–M9) + recherche globale (M10), exigences numérotées **EXG-Mx-nn** avec priorité (Essentiel / Important / Souhaitable), règles de gestion **RG**, modèle de données, interfaces tierces. En cas de doute, il fait foi.
+2. **`design-reference/stm-next-mockup.html`** — le **résultat visuel voulu** (prototype fonctionnel). Cible de GUI/UX.
+3. **`design-reference/stm-existant/`** — captures de l'ancien STM + logos SNRT (référence historique).
 
-**Principe métier central :** un seul **« Programme TV »** peut être diffusé **en linéaire** (créneau dans la grille hebdomadaire) **et/ou en non-linéaire** (contenus par plateforme : post Facebook, reel Instagram, vidéo TikTok, VOD/Forja). C'est **le même programme, deux modes de diffusion**, chacun dans sa grille.
+## 2. Ambition
 
-**Les deux grilles sont des calendriers hebdomadaires.** La grille non-linéaire est datée par **date de publication** et organisée par **plateforme**.
+Viser **l'ensemble des modules M0–M9 (+ M10)**, construits **brique par brique**, en priorisant les exigences **Essentiel** de chaque module. GUI très soignée, aux couleurs et logo SNRT.
 
-**Notification = mise de côté** (à traiter après correction des problèmes de STM). Le modèle Offre/Notification est **conservé mais parqué**.
+## 3. Principes directeurs (chap. 2 du cahier — font foi en cas d'ambiguïté)
 
-## 2. Ce qui est réutilisé (NE PAS perdre)
+1. **La grille est le produit** : tout converge vers le Plan de diffusion, sans changement de contexte.
+2. **Le contrôle intervient au moment du geste** : un titre hors droits n'est pas proposé et son dépôt est refusé, motif énoncé. Vaut aussi pour les moteurs auto.
+3. **Le système propose, l'utilisateur décide** : les moteurs n'écrivent jamais sans action explicite ; chaque exécution produit un rapport ; tout est annulable.
+4. **Une saisie unique, des exceptions déclarées** : grille unique TNT/Satellite, différences = exceptions ; répétition d'un titre sur plusieurs jours.
+5. **Le pilotage se fait par exception** : un centre d'anomalies recense les écarts ; on travaille la liste, pas la relecture créneau par créneau.
 
-- **Scaffold** Vite + React + Tailwind (P0).
-- **Import + nettoyage xlsx** (`stm-import.js`, P1) → sert désormais à **peupler la grille linéaire** dans Supabase.
-- **Couche d'accès isolée** (`storage.js`, P2) → conservée pour la **session/login** ; l'accès aux **données métier** passe désormais par une nouvelle couche **Supabase** (`src/lib/db.js`).
-- **`model.js`** : typedef `Programme` réutilisé et étendu. Offre/Notification + helpers de clé = **parqués** (non supprimés).
-- **Login** (P3) → remplacé par un login simple par nom (sans rôle), rendu plus soigné (P6). Notion de rôle abandonnée pour ce PoC.
+## 4. Conventions communes (chap. 3.3)
 
-## 3. Stack
+- **Journée d'antenne 06:00 → 06:00** le lendemain (un programme à 00:30 appartient à la veille).
+- **Couleur = genre**, jamais autre chose ; habillage app neutre.
+- **Signalisation** : rouge = bloquant (refusé), ambre = alerte (arbitrage), vert = conforme.
+- **Horaires/durées** en police à chasse fixe, `HH:MM`.
+- **Annulation/rétablissement** sur toute écriture (une génération auto = 1 opération).
+- **Langues** : interface FR ; métadonnées titres saisissables FR/AR/EN (AR en RTL).
 
-- **Front** : Vite + React + Tailwind ; icônes `lucide-react`.
-- **Données : Supabase** (Postgres + `@supabase/supabase-js`). Clés via **variables d'environnement** (`.env` : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) — **jamais en dur**, `.env` dans `.gitignore`.
-- **Import xlsx** : SheetJS (conservé).
-- **Déploiement** : build statique + Supabase en ligne.
+## 5. Acquis réutilisé (P0–P8 = fondation, ne rien jeter)
 
-## 4. Modèle de données (Supabase)
+- P0 scaffold · P1 import+nettoyage xlsx (peuple le catalogue/plan) · P2 storage (session) · P5 Supabase + `db.js` · P6 coquille GUI SNRT · P7 fiche + segments · P8 grille calendrier.
+- **Mapping conceptuel** (on garde les noms de tables physiques pour ne rien casser) :
+  `programme` = **Titre** · `segment` = **Épisode** · `diffusion_lineaire` = **Transmission**.
+- P8 (grille) = **embryon du M2 Plan de diffusion** ; P7 (fiche) = **embryon du M6 Catalogue/fiche**.
+- **Notification (Offre/Notification)** : parquée. **Grille non-linéaire par plateforme** : conservée comme **extension hors cahier** (voir §9).
 
-**Cœur (P5) :**
+## 6. Modules cibles (détail des EXG dans le cahier)
 
-- `programme` : id (uuid), titre, titre_ar, genre, sous_genre, thematique, description, date_production, code, nombre_segments, auteur, exclusivite (bool), chaine, cree_par, cree_le.
-- `segment` : id, programme_id (fk), numero, titre, duree, date_production, code, description, pad (bool), derniere_diffusion, nombre_diffusions.
-- `diffusion_lineaire` (créneau grille linéaire) : id, programme_id (fk), chaine, date, heure_debut, heure_fin, genre, titre_cache.
-- `diffusion_non_lineaire` (contenu plateforme) : id, programme_id (fk), plateforme (`FACEBOOK|INSTAGRAM|TIKTOK|VOD|FORJA`), type_contenu (`POST|REEL|VIDEO|VOD`), date_publication, heure_publication, titre, description, lien, visuel, statut, cree_par, cree_le.
+- **M0** Coquille : nav permanente, sélecteur chaîne + vecteur, navigation temporelle, annuler/rétablir, notifications, recherche globale.
+- **M1** Espace de travail par chaîne : contexte propre par chaîne (Al Aoula AW, Arryadia AR, Athaqafia AT, Assadissa AS, Tamazight TM) ; catalogue commun, éligibilité par chaîne.
+- **M2** Plan de diffusion : grille **proportionnelle au temps**, catalogue glissable, drag-drop, inspecteur (Bloc/Répéter/Vecteur), trous + chevauchements, grille type en fond, anomalies.
+- **M3** Grille type : blocs nommés (plage, fréquence, jours, genre attendu) — remplace la pré-grille.
+- **M4** Auto-programmation : moteur déterministe (grille type + réservoir + règles), rapport, annulable.
+- **M5** Plan média : campagnes de bandes-annonces, habillage, écrans pub ; couverture.
+- **M6** Catalogue et fiche titre : **historique complet**, frise des droits, épisodes, métadonnées trilingues, PAD.
+- **M7** Conducteur d'antenne : déroulé minuté dérivé du plan + plan média, insertion en place.
+- **M8** Centre d'anomalies : écarts recensés en permanence, sélection → bloc concerné.
+- **M9** Stock et bilans : volume dispo, fins de droits, répartition par genre.
+- **M10** Recherche globale : par raccourci, part de l'épisode, remonte au titre.
 
-**Extension :**
+## 7. Modèle de données cible (chap. 6)
 
-- `pre_grille` (P10) : id, chaine, jour/case_horaire, heure_debut, heure_fin, genre (sans titre).
-- `contrat` (P12) : id, programme_id, numero, type, contractant, represente_par, approuve_par, date_livraison, lieu_livraison, delai_execution, fichier.
-- `conducteur` (P11) : **vue générée** d'une journée de `diffusion_lineaire` (pas forcément une table).
+Entités : **Chaîne, Titre, Épisode, Fenêtre de droits, Bloc de grille type, Transmission, Élément secondaire, Campagne, Diffusion (historique)**. Nomenclatures administrables : genres (FR/AR + couleur), types d'éléments secondaires, tranches d'antenne, vecteurs, types de production.
+Chaque phase apporte sa **migration SQL** (fichier `supabase/migration-*.sql`, jamais rejouer `schema.sql`).
 
-## 5. Écrans (calqués sur STM, en plus soigné)
+## 8. Feuille de route (brique par brique, Essentiel d'abord)
 
-- **Coquille** : sidebar sombre (Accueil, Programmes, Pré-Grille, Grille, Grille non-linéaire, Conducteur, Contrats, Administration) + top bar avec **logo SNRT** et utilisateur ; **login soigné**.
-- **Programmes** : fiche programme (formulaire) + liste des segments (onglets Infos / Supports / Événements).
-- **Grille linéaire** : calendrier hebdomadaire, blocs **colorés par genre**, navigation Semaine/Jour.
-- **Grille non-linéaire** : calendrier hebdomadaire par **date de publication**, blocs par **plateforme** (couleur + filtre FB/IG/TikTok/VOD/Forja).
-- **Pré-grille / Conducteur / Contrats** (extension).
+Acquis : **P0–P8**. Nouvelles briques :
 
-## 6. Feuille de route
+- **P9 — M1 Espace de travail par chaîne** : sélecteur de chaîne dans la coquille (5 chaînes, code, couleur, ligne éditoriale) ; scoping des données par chaîne ; bande de couleur chaîne. *Test : changer de chaîne recharge le contexte, sans perte.*
+- **P10 — M2 (1/3) Plan de diffusion : catalogue glissable + drag-drop + aperçu historique** ⭐ (demande en cours). Panneau Catalogue à gauche (recherche, genre, vignette, durée, épisodes) ; **drag-drop d'un titre sur la grille** (heure calculée depuis la position, arrondi 5 min) ; **aperçu historique de diffusion au clic** sur un titre. *Drag autorisé pour tout programme pour l'instant (le garde-fou PAD/droits arrive avec M6).* *Test : glisser un titre → bloc créé au bon horaire ; clic titre → aperçu historique.*
+- **P11 — M2 (2/3) Inspecteur de bloc** : onglets Bloc (heure début/fin, durée, déprogrammation) / Répéter (jours, incrément épisodes) / Vecteur (TNT/Sat, exception). *Test : éditer/répéter/déprogrammer un bloc.*
+- **P12 — M2 (3/3) + M8 Anomalies** : trous d'antenne, chevauchements, contrôle des droits au geste (quand dispo), centre d'anomalies + compteur sur le rail. *Test : chevauchement/trou détectés et listés.*
+- **P13 — M3 Grille type** : blocs nommés par chaîne, affichage en fond du plan. *Test : définir un bloc, le voir en fond.*
+- **P14 — M6 Catalogue et fiche titre (complet)** : historique complet, frise des droits, épisodes, métadonnées FR/AR/EN, statut PAD → **active le garde-fou PAD/droits** du drag (M2). *Test : fiche complète, historique intégral, droits.*
+- **P15 — M4 Auto-programmation** : moteur déterministe + réservoir + règles + rapport, annulable. *Test : générer une journée, rapport des blocs vides motivés.*
+- **P16 — M5 Plan média** : campagnes + remplissage inter-programmes + couverture. *Test : campagne → bandes-annonces placées.*
+- **P17 — M7 Conducteur d'antenne** : déroulé minuté, timecodes cumulés, insertion en place. *Test : conducteur d'un jour, écarts affichés.*
+- **P18 — M9 Stock et bilans** : indicateurs, répartition par genre, fins de droits. *Test : bilan cohérent, export.*
+- **P19 — M0 finitions + M10 recherche globale** : annuler/rétablir global, notifications motivées, sélecteur de vecteur, recherche par raccourci. *Test : undo/redo, recherche épisode → titre.*
+- **P20 — Extension : Grille non-linéaire (par plateforme)** — hors cahier, conservée (voir §9).
+- **P21 — Finition UI/UX + exports (PDF/Excel/Word) + déploiement.**
 
-**Acquis :** P0 scaffold · P1 import+nettoyage · P2 storage+model · P3 login · P4 (écran émetteur — partie **import réutilisée** ; formulaire offre/notify **parqué**).
+## 9. Extension hors cahier — Grille non-linéaire
 
-### P5 — Fondation Supabase
-- Client `@supabase/supabase-js` (clés via `.env`).
-- Schéma SQL des tables **cœur** (§4) + script de migration.
-- Couche `src/lib/db.js` : accès CRUD par entité (programme, segment, diffusion_lineaire, diffusion_non_lineaire).
-- **Rebrancher l'import** (`stm-import.js`) : les programmes valides + créneaux → insérés dans `programme` + `diffusion_lineaire`.
-- **Test ✅** : importer la grille → les lignes apparaissent dans Supabase et sont relues par `db.js`.
+Le cahier STM Next est centré **linéaire**. La **grille non-linéaire par plateforme** (FB/IG/TikTok/VOD-Forja) voulue lors du 2ᵉ comité directeur est **conservée** comme module d'extension Snomark (P20), un même Titre pouvant être diffusé en linéaire (plan) et en non-linéaire (plateformes).
 
-### P6 — Coquille GUI SNRT (shell + nav + login)
-- Layout : sidebar sombre + top bar logo SNRT + utilisateur ; thème couleurs SNRT.
-- Login soigné par nom (sans rôle — abandonné pour ce PoC, branding), session via `storage.js`.
-- **Test ✅** : nav complète rendue, branding SNRT, login → accès à la coquille, reload garde la session.
+## 10. Discipline & priorités
 
-### P7 — Programmes (fiche + segments)
-- CRUD `programme` (formulaire fiche) + `segment` (onglets), sur Supabase.
-- **Test ✅** : créer/éditer/lister un programme + ses segments (persistés en base).
-
-### P8 — Grille linéaire (calendrier hebdo)
-- Vue calendrier semaine ; blocs = `diffusion_lineaire`, **couleur par genre** ; peuplée par l'import.
-- Ajout/édition d'un créneau rattaché à un `programme`.
-- **Test ✅** : après import, la grille affiche les programmes aux bons créneaux ; ajouter un créneau l'affiche.
-
-### P9 — Grille non-linéaire (par plateforme)
-- Vue calendrier semaine par **date de publication** ; blocs = `diffusion_non_lineaire`, **couleur/filtre par plateforme**.
-- Ajouter un contenu (FB post / IG reel / TikTok video / VOD-Forja) **rattaché à un programme existant**.
-- **Test ✅** : ajouter un post FB + un reel IG pour un programme à une date → apparaissent sur le calendrier non-linéaire ; le **même programme** peut figurer aussi dans la grille linéaire.
-
-### P10 — Pré-grille (extension)
-- Genres par case horaire, sans titres.
-- **Test ✅** : saisir une pré-grille, la visualiser.
-
-### P11 — Conducteur (extension)
-- Vue tableau d'une journée générée depuis `diffusion_lineaire` (Table/Calendar).
-- **Test ✅** : sélectionner une date → conducteur listé.
-
-### P12 — Contrats (extension)
-- Rattacher un contrat à un programme/segment (modal type STM).
-- **Test ✅** : créer un contrat, le voir rattaché.
-
-### P13 — Finition UI/UX + déploiement
-- Polissage, responsive, thème SNRT complet, états vides, build + déploiement.
-- **Test ✅** : parcours cœur démontrable de bout en bout (import → programmes → grille linéaire → grille non-linéaire).
-
-### Parqué — Notification
-- À reprendre après correction des problèmes STM. Modèle Offre/Notification conservé.
-
-## 7. Definition of Done (PoC)
-
-- [ ] Supabase branché (clés en `.env`), tables cœur créées.
-- [ ] Import xlsx → peuple `programme` + `diffusion_lineaire`.
-- [ ] Programmes : CRUD fiche + segments.
-- [ ] Grille linéaire (calendrier, couleurs par genre).
-- [ ] Grille non-linéaire (calendrier par date de publication, par plateforme).
-- [ ] Un même Programme TV présent dans les deux grilles.
-- [ ] GUI soigné, couleurs + logo SNRT, login simple.
-- [ ] (Extension) pré-grille, conducteur, contrats.
-
-## 8. Priorité
-
-**Cœur d'abord (P5–P9)** = la valeur démo. **Extension ensuite (P10–P12)**. **Finition (P13)**. Notification parquée.
+Une phase à la fois ; **Essentiel d'abord** dans chaque module ; le cahier fait foi pour le détail des EXG ; règle d'approbation (ambiguïté → stop) ; un commit par phase.
