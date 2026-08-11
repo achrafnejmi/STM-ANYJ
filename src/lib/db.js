@@ -36,11 +36,6 @@ export async function listerProgrammesParChaine(chaineId) {
   return verifie(await supabase.from('programme').select('*').eq('chaine_id', chaineId).order('titre'))
 }
 
-export async function listerSousGenres() {
-  const lignes = verifie(await supabase.from('programme').select('sous_genre'))
-  return [...new Set(lignes.map((l) => l.sous_genre).filter(Boolean))].sort()
-}
-
 // --- attestation (Supabase Storage, bucket "attestations" — migration-p7.sql) ---
 
 export async function televerserAttestation(programmeId, fichier) {

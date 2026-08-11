@@ -1,19 +1,19 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listerProgrammesParChaine, listerSousGenres, listerTousLesSegments } from '../lib/db.js'
+import { listerProgrammesParChaine, listerTousLesSegments } from '../lib/db.js'
+import { GENRES } from '../lib/genres.js'
 
 const TAILLE_PAGE = 30
 
 export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   const [programmes, setProgrammes] = useState([])
   const [segmentsParProgramme, setSegmentsParProgramme] = useState(new Map())
-  const [sousGenres, setSousGenres] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
-  const [filtreSousGenre, setFiltreSousGenre] = useState('')
+  const [filtreGenre, setFiltreGenre] = useState('')
   const [page, setPage] = useState(0)
-  const idFiltreSousGenre = useId()
+  const idFiltreGenre = useId()
   const requeteId = useRef(0)
 
   useEffect(() => {
@@ -43,10 +43,9 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         if (idAppel === requeteId.current) setChargement(false)
       })
 
-    const annexes = Promise.all([listerSousGenres(), listerTousLesSegments()])
-      .then(([lignesSousGenres, lignesSegments]) => {
+    const annexes = listerTousLesSegments()
+      .then((lignesSegments) => {
         if (idAppel !== requeteId.current) return
-        setSousGenres(lignesSousGenres)
 
         const parProgramme = new Map()
         for (const s of lignesSegments) {
@@ -67,8 +66,8 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   }
 
   const filtres = useMemo(
-    () => programmes.filter((p) => !filtreSousGenre || p.sous_genre === filtreSousGenre),
-    [programmes, filtreSousGenre]
+    () => programmes.filter((p) => !filtreGenre || p.genre === filtreGenre),
+    [programmes, filtreGenre]
   )
 
   const nbPages = Math.max(1, Math.ceil(filtres.length / TAILLE_PAGE))
@@ -100,22 +99,22 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label htmlFor={idFiltreSousGenre} className="mb-1 block text-sm font-medium text-slate-700">
-                Sous-Genre
+              <label htmlFor={idFiltreGenre} className="mb-1 block text-sm font-medium text-slate-700">
+                Genre
               </label>
               <select
-                id={idFiltreSousGenre}
-                value={filtreSousGenre}
+                id={idFiltreGenre}
+                value={filtreGenre}
                 onChange={(e) => {
-                  setFiltreSousGenre(e.target.value)
+                  setFiltreGenre(e.target.value)
                   setPage(0)
                 }}
                 className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">-- Tous --</option>
-                {sousGenres.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
+                {GENRES.map((g) => (
+                  <option key={g.fr} value={g.fr}>
+                    {g.fr}
                   </option>
                 ))}
               </select>
