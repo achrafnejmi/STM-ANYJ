@@ -69,7 +69,7 @@ export default function GrilleLineaire({ chaineActive }) {
 
   useEffect(() => {
     setChargement(true)
-    Promise.all([listerProgrammesParChaine(chaineActive.nom), listerDiffusionsLineairesParChaine(chaineActive.nom)])
+    Promise.all([listerProgrammesParChaine(chaineActive.id), listerDiffusionsLineairesParChaine(chaineActive.id)])
       .then(([lignesProgrammes, lignesDiffusions]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)

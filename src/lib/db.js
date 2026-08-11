@@ -18,12 +18,6 @@ export async function obtenirProgramme(id) {
   return verifie(await supabase.from('programme').select('*').eq('id', id).maybeSingle())
 }
 
-export async function trouverProgrammeParTitreEtChaine(titre, chaine) {
-  return verifie(
-    await supabase.from('programme').select('*').eq('titre', titre).eq('chaine', chaine).maybeSingle()
-  )
-}
-
 export async function creerProgramme(champs) {
   return verifie(await supabase.from('programme').insert(champs).select().single())
 }
@@ -36,11 +30,10 @@ export async function supprimerProgramme(id) {
   verifie(await supabase.from('programme').delete().eq('id', id).select())
 }
 
-// Scoping par chaîne active (M1, P9) — .ilike plutôt que .eq : comparaison
-// insensible à la casse pour absorber les écarts de saisie des données
-// existantes (chaine reste un champ texte, non contraint).
-export async function listerProgrammesParChaine(chaine) {
-  return verifie(await supabase.from('programme').select('*').ilike('chaine', chaine).order('titre'))
+// Scoping par chaîne active (M1, P9) — filtre par chaine_id (FK, migration-p9),
+// pas par le texte libre chaine.
+export async function listerProgrammesParChaine(chaineId) {
+  return verifie(await supabase.from('programme').select('*').eq('chaine_id', chaineId).order('titre'))
 }
 
 export async function listerSousGenres() {
@@ -98,9 +91,9 @@ export async function listerDiffusionsLineaires() {
   return verifie(await supabase.from('diffusion_lineaire').select('*').order('date').order('heure_debut'))
 }
 
-export async function listerDiffusionsLineairesParChaine(chaine) {
+export async function listerDiffusionsLineairesParChaine(chaineId) {
   return verifie(
-    await supabase.from('diffusion_lineaire').select('*').ilike('chaine', chaine).order('date').order('heure_debut')
+    await supabase.from('diffusion_lineaire').select('*').eq('chaine_id', chaineId).order('date').order('heure_debut')
   )
 }
 
@@ -110,10 +103,6 @@ export async function obtenirDiffusionLineaire(id) {
 
 export async function creerDiffusionLineaire(champs) {
   return verifie(await supabase.from('diffusion_lineaire').insert(champs).select().single())
-}
-
-export async function creerDiffusionsLineaires(lignes) {
-  return verifie(await supabase.from('diffusion_lineaire').insert(lignes).select())
 }
 
 export async function mettreAJourDiffusionLineaire(id, champs) {

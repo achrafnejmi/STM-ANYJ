@@ -2,7 +2,6 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listerProgrammesParChaine, listerSousGenres, listerTousLesSegments } from '../lib/db.js'
-import ImportSTM from './ImportSTM.jsx'
 
 const TAILLE_PAGE = 30
 
@@ -30,7 +29,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
     setChargement(true)
     setErreur(null)
 
-    const principale = listerProgrammesParChaine(chaineActive.nom)
+    const principale = listerProgrammesParChaine(chaineActive.id)
       .then((lignes) => {
         if (idAppel !== requeteId.current) return
         setProgrammes(lignes)
@@ -97,13 +96,6 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
 
   return (
     <div className="space-y-6">
-      <details className="rounded-lg border border-slate-200 bg-white p-6">
-        <summary className="cursor-pointer text-sm font-medium text-slate-700">Importer une grille (xlsx)</summary>
-        <div className="mt-4">
-          <ImportSTM chaineActive={chaineActive} onImportTermine={rafraichir} />
-        </div>
-      </details>
-
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
