@@ -1,6 +1,6 @@
 // Génère les icônes de marque (favicons + touch icon + manifest icons) depuis
-// la source unique design-reference (étoile SNRT multicolore, fond
-// transparent). À relancer si la source change : `npm run brand:icons`.
+// la source vectorielle unique public/brand/favicon.svg. À relancer si la
+// source change : `npm run brand:icons`.
 //
 // Après régénération, penser à incrémenter le `?v=N` sur les href/src qui
 // référencent ces fichiers (index.html, public/brand/manifest.webmanifest) —
@@ -9,7 +9,7 @@
 import { mkdirSync } from 'node:fs'
 import sharp from 'sharp'
 
-const SOURCE = 'design-reference/stm-existant/logo_favicon-removebg-preview.png'
+const SOURCE = 'public/brand/favicon.svg'
 const DOSSIER_SORTIE = 'public/brand'
 
 const CIBLES = [
