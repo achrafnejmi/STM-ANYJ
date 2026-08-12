@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { SECTIONS } from '../lib/navigation.js'
 import Marque from './Marque.jsx'
 
-export default function Sidebar({ section, onNaviguer, ouverte, onFermer }) {
+export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges = {} }) {
   return (
     <>
       {ouverte && <div className="fixed inset-0 z-20 bg-black/30 lg:hidden" onClick={onFermer} />}
@@ -28,7 +28,12 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer }) {
               }`}
             >
               <Icone size={18} />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {badges[id] > 0 && (
+                <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                  {badges[id]}
+                </span>
+              )}
             </button>
           ))}
         </nav>

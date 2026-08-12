@@ -1,13 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
+  listerTousLesEpisodes,
   listerEpisodes,
   creerDiffusionLineaire,
   supprimerDiffusionLineaire,
 } from '../lib/db.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
+import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -26,6 +28,7 @@ import Modal from '../components/Modal.jsx'
 import CataloguePanel from '../components/CataloguePanel.jsx'
 import PopoverHistorique from '../components/PopoverHistorique.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
+import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
 
 const PX_PAR_MINUTE = 1 // axe continu (EXG-M2-01) — 1440px pour la journée d'antenne complète
 const HAUTEUR_TOTALE = (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
@@ -70,24 +73,31 @@ function disposerEnPistes(diffusionsJour) {
   return resultat.map((r) => ({ ...r, nbPistes }))
 }
 
-export default function GrilleLineaire({ chaineActive }) {
+export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) {
   const [vue, setVue] = useState('SEMAINE')
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
   const [programmes, setProgrammes] = useState([])
+  const [episodes, setEpisodes] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
+  const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const dragRef = useRef(null)
 
   useEffect(() => {
     setChargement(true)
-    Promise.all([listerProgrammesParChaine(chaineActive.id), listerDiffusionsLineairesParChaine(chaineActive.id)])
-      .then(([lignesProgrammes, lignesDiffusions]) => {
+    Promise.all([
+      listerProgrammesParChaine(chaineActive.id),
+      listerDiffusionsLineairesParChaine(chaineActive.id),
+      listerTousLesEpisodes(),
+    ])
+      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)
+        setEpisodes(lignesEpisodes)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -114,6 +124,29 @@ export default function GrilleLineaire({ chaineActive }) {
     return map
   }, [diffusions, jours])
 
+  const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
+
+  // Anomalies calculées sur la période affichée (cahier §4.9.1), pas sur tout
+  // l'historique de la chaîne — se recalcule à chaque écriture sans action
+  // dédiée (EXG-M8-01), puisque `diffusions`/`jours` en dépendent déjà.
+  const diffusionsAffichees = useMemo(
+    () => jours.flatMap((j) => diffusionsParJour.get(j) ?? []),
+    [jours, diffusionsParJour]
+  )
+  const anomalies = useMemo(
+    () => calculerAnomalies(diffusionsAffichees, episodesParId),
+    [diffusionsAffichees, episodesParId]
+  )
+  const idsBloquants = useMemo(
+    () => new Set(anomalies.filter((a) => a.niveau === 'bloquant').map((a) => a.id)),
+    [anomalies]
+  )
+  const nbBloquantes = compterBloquantes(anomalies)
+
+  useEffect(() => {
+    onAnomaliesBloquantes?.(nbBloquantes)
+  }, [nbBloquantes, onAnomaliesBloquantes])
+
   const genresPresents = useMemo(() => {
     const set = new Set()
     for (const j of jours) {
@@ -131,7 +164,23 @@ export default function GrilleLineaire({ chaineActive }) {
 
   function ouvrirCreation(date, heureDebut) {
     setBlocSelectionne(null)
+    setAnomaliesOuvertes(false)
     setModale({ mode: 'CREATION', date, heureDebut })
+  }
+
+  // Panneau Anomalies et Inspecteur partagent le même emplacement flottant
+  // (P11 : panneau flottant plutôt que 3e colonne) — mutuellement exclusifs,
+  // comme le prescrit le cahier pour les 2 onglets du panneau droit (§4.3.2).
+  function ouvrirAnomalies() {
+    setBlocSelectionne(null)
+    setAnomaliesOuvertes(true)
+  }
+
+  function allerVersAnomalie(id) {
+    const diffusion = diffusions.find((d) => d.id === id)
+    if (!diffusion) return
+    setAnomaliesOuvertes(false)
+    setBlocSelectionne(diffusion)
   }
 
   function appliquerCreation(nouvelle) {
@@ -241,6 +290,21 @@ export default function GrilleLineaire({ chaineActive }) {
             >
               Aujourd'hui
             </button>
+            <button
+              type="button"
+              onClick={ouvrirAnomalies}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                nbBloquantes > 0
+                  ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <CircleAlert size={15} />
+              Anomalies
+              {nbBloquantes > 0 && (
+                <span className="rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{nbBloquantes}</span>
+              )}
+            </button>
           </div>
         </div>
 
@@ -326,6 +390,7 @@ export default function GrilleLineaire({ chaineActive }) {
                         const etiquetteEpisode =
                           diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
                         const estSelectionne = blocSelectionne?.id === diffusion.id
+                        const enAnomalieBloquante = idsBloquants.has(diffusion.id)
                         return (
                           <button
                             type="button"
@@ -333,10 +398,15 @@ export default function GrilleLineaire({ chaineActive }) {
                             onClick={(e) => {
                               e.stopPropagation()
                               setModale(null)
+                              setAnomaliesOuvertes(false)
                               setBlocSelectionne(diffusion)
                             }}
                             className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
-                              estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
+                              estSelectionne
+                                ? 'ring-2 ring-offset-1 ring-snrt-navy'
+                                : enAnomalieBloquante
+                                  ? 'ring-2 ring-offset-1 ring-red-600'
+                                  : ''
                             }`}
                             style={{
                               top: `${top}px`,
@@ -391,6 +461,14 @@ export default function GrilleLineaire({ chaineActive }) {
           onSupprime={appliquerSuppression}
           onCreerPlusieurs={appliquerCreationMultiple}
           onAnnulerPlusieurs={annulerCreationMultiple}
+        />
+      )}
+
+      {anomaliesOuvertes && (
+        <PanneauAnomalies
+          anomalies={anomalies}
+          onFermer={() => setAnomaliesOuvertes(false)}
+          onAller={allerVersAnomalie}
         />
       )}
     </div>

@@ -30,6 +30,10 @@ function App() {
   const [section, setSection] = useState(() => hashVersSection(window.location.hash) ?? 'ACCUEIL')
   const [sidebarOuverte, setSidebarOuverte] = useState(false)
   const [chaineActive, setChaineActive] = useState(() => lireChaineActive())
+  // Pastille rail (EXG-M0-08/EXG-M8-02) : remontée depuis GrilleLineaire, seul
+  // écran qui écrit sur diffusion_lineaire — reste affichée (dernière valeur
+  // connue) en naviguant ailleurs, puisque rien d'autre ne peut la faire varier.
+  const [nbAnomaliesBloquantes, setNbAnomaliesBloquantes] = useState(0)
 
   useEffect(() => {
     function onHashChange() {
@@ -69,6 +73,7 @@ function App() {
         onNaviguer={naviguer}
         ouverte={sidebarOuverte}
         onFermer={() => setSidebarOuverte(false)}
+        badges={{ GRILLE_LINEAIRE: nbAnomaliesBloquantes }}
       />
       <div className="flex flex-1 flex-col">
         <TopBar
@@ -79,7 +84,7 @@ function App() {
           onChangerChaine={changerChaine}
         />
         <main className="flex-1 overflow-y-auto p-6">
-          <Ecran chaineActive={chaineActive} />
+          <Ecran chaineActive={chaineActive} onAnomaliesBloquantes={setNbAnomaliesBloquantes} />
         </main>
       </div>
     </div>
