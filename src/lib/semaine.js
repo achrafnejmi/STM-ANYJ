@@ -28,6 +28,12 @@ export function joursDeLaSemaine(lundiISO) {
   return Array.from({ length: 7 }, (_, i) => ajouterJours(lundiISO, i))
 }
 
+// Jour de semaine d'une date ISO, 0=lundi..6=dimanche (convention utilisée
+// pour `jours` sur bloc_grille_type comme sur la répétition P11).
+export function jourAntenneLundi0(dateISO) {
+  return (new Date(`${dateISO}T00:00:00Z`).getUTCDay() + 6) % 7
+}
+
 export function formaterJourCourt(dateISO) {
   const d = new Date(`${dateISO}T00:00:00Z`)
   return `${JOURS_COURTS[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`

@@ -1,20 +1,23 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleAlert } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert, Layers3 } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
   listerTousLesEpisodes,
+  listerBlocsGrilleTypeParChaine,
   listerEpisodes,
   creerDiffusionLineaire,
   supprimerDiffusionLineaire,
 } from '../lib/db.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
+import { blocsActifsCeJour } from '../lib/grilleType.js'
 import {
   aujourdHuiISO,
   ajouterJours,
   lundiDeLaSemaine,
   joursDeLaSemaine,
+  jourAntenneLundi0,
   formaterJourCourt,
   formaterPlageSemaine,
   formaterDateLongue,
@@ -79,6 +82,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [diffusions, setDiffusions] = useState([])
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
+  const [blocsGrilleType, setBlocsGrilleType] = useState([])
+  const [afficherGrilleType, setAfficherGrilleType] = useState(true)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
@@ -93,11 +98,13 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       listerProgrammesParChaine(chaineActive.id),
       listerDiffusionsLineairesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
+      listerBlocsGrilleTypeParChaine(chaineActive.id),
     ])
-      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes]) => {
+      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)
         setEpisodes(lignesEpisodes)
+        setBlocsGrilleType(lignesBlocs)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -134,8 +141,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     [jours, diffusionsParJour]
   )
   const anomalies = useMemo(
-    () => calculerAnomalies(diffusionsAffichees, episodesParId),
-    [diffusionsAffichees, episodesParId]
+    () => calculerAnomalies(diffusionsAffichees, episodesParId, blocsGrilleType),
+    [diffusionsAffichees, episodesParId, blocsGrilleType]
   )
   const idsBloquants = useMemo(
     () => new Set(anomalies.filter((a) => a.niveau === 'bloquant').map((a) => a.id)),
@@ -292,6 +299,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             </button>
             <button
               type="button"
+              onClick={() => setAfficherGrilleType((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                afficherGrilleType
+                  ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Afficher les blocs de la grille type en fond"
+            >
+              <Layers3 size={15} />
+              Grille type
+            </button>
+            <button
+              type="button"
               onClick={ouvrirAnomalies}
               className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
                 nbBloquantes > 0
@@ -357,6 +377,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
 
                 {jours.map((j, i) => {
                   const pistees = disposerEnPistes(diffusionsParJour.get(j) ?? [])
+                  const bandes = afficherGrilleType ? blocsActifsCeJour(blocsGrilleType, jourAntenneLundi0(j)) : []
                   return (
                     <div
                       key={j}
@@ -382,6 +403,30 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE }}
                         />
                       ))}
+                      {/* Bandes de grille type (EXG-M3-04) : purement visuelles,
+                          pointer-events-none garantit qu'aucun geste (clic,
+                          drag) n'est intercepté — le clic traverse jusqu'à la
+                          cellule ou au bloc de transmission en dessous/dessus.
+                          Rendues avant les blocs de transmission dans le JSX
+                          pour rester visuellement en arrière-plan. */}
+                      {bandes.map((bloc) => {
+                        const { fondClair, bordure } = couleurGenre(bloc.genre_attendu)
+                        const topBande = (minutesDepuisDebutAntenne(bloc.heure_debut) - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
+                        const hauteurBande =
+                          (minutesDepuisDebutAntenne(bloc.heure_fin) - minutesDepuisDebutAntenne(bloc.heure_debut)) *
+                          PX_PAR_MINUTE
+                        return (
+                          <div
+                            key={bloc.id}
+                            className={`pointer-events-none absolute left-0 right-0 overflow-hidden border-t ${fondClair} ${bordure}`}
+                            style={{ top: `${topBande}px`, height: `${hauteurBande}px` }}
+                          >
+                            <span className="absolute left-1 top-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                              {bloc.nom}
+                            </span>
+                          </div>
+                        )
+                      })}
                       {pistees.map(({ diffusion, debut, fin, piste, nbPistes }) => {
                         const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
                         const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)

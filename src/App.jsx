@@ -8,7 +8,7 @@ import TopBar from './components/TopBar.jsx'
 import Accueil from './screens/Accueil.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
-import PreGrille from './screens/PreGrille.jsx'
+import GrilleType from './screens/GrilleType.jsx'
 import GrilleLineaire from './screens/GrilleLineaire.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
@@ -18,7 +18,7 @@ const ECRANS = {
   ACCUEIL: Accueil,
   PROGRAMMES: Programmes,
   CONTRATS: Contrats,
-  PRE_GRILLE: PreGrille,
+  GRILLE_TYPE: GrilleType,
   GRILLE_LINEAIRE: GrilleLineaire,
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,

@@ -1,16 +1,24 @@
 // Centre d'anomalies (M8, cahier §4.9). Calcul pur recalculé à chaque rendu —
 // satisfait EXG-M8-01 (« recalculées à chaque écriture, sans action de
-// l'utilisateur ») sans mécanisme dédié : React redérive dès que `diffusions`
-// change. Portée P12 : seuls les types dont les données existent déjà en
-// base sont couverts —
+// l'utilisateur ») sans mécanisme dédié : React redérive dès que
+// `diffusions`/`blocsGrilleType` changent. Types couverts —
 //   - Chevauchement (EXG-M2-06, Bloquant)
 //   - Matériel (RG-08, Bloquant) : un épisode déjà programmé dont le support
 //     n'est plus prêt à diffuser (episode.pad = false).
-// Droits (aucun modèle de droits en base, différé M6/P14) et Trou d'antenne /
-// Grille type (nécessitent la grille type, différés M3/P13) restent hors
-// périmètre — la forme du résultat (type/niveau/message) permet de les
-// ajouter plus tard sans reprise.
-import { minutesDepuisDebutAntenne } from './semaine.js'
+//   - Trou d'antenne (EXG-M2-07, Alerte, P13) : intervalle ≥5 min non
+//     programmé dans un bloc de grille type actif. Non rattaché à une
+//     transmission précise (id: null) — non cliquable dans le panneau.
+//   - Grille type (EXG-M3-05, Alerte, P13) : genre du programme ≠ genre
+//     attendu du bloc actif à son horaire. Ne se déclenche QUE si le
+//     programme a un genre renseigné (les anciens imports sans genre ne sont
+//     pas de faux écarts — décision explicite, on ne signale pas un genre
+//     inconnu comme un désaccord).
+// Droits (aucun modèle de droits en base, différé M6/P14) et Hors grille type
+// (EXG-M3-06, Souhaitable, explicitement hors périmètre P13) restent hors
+// portée — la forme du résultat (type/niveau/message) permet de les ajouter
+// plus tard sans reprise.
+import { minutesDepuisDebutAntenne, minutesEnHeure, jourAntenneLundi0 } from './semaine.js'
+import { blocsActifsCeJour, calculerTrous, trouverBlocPourMinute } from './grilleType.js'
 
 // RG-10..14 (P11, onglet Vecteur) : une scission crée 2 lignes indépendantes
 // (TNT/SATELLITE) qui représentent le MÊME créneau sur 2 voies de diffusion
@@ -29,7 +37,9 @@ function seChevauchent(a, b) {
 }
 
 // `episodesParId` : Map(episode_id -> {pad, ...}) — voir listerTousLesEpisodes.
-export function calculerAnomalies(diffusions, episodesParId) {
+// `blocsGrilleType` : blocs de la chaîne active (non filtrés par jour, le
+// filtrage par jour se fait ici, par date affichée).
+export function calculerAnomalies(diffusions, episodesParId, blocsGrilleType = []) {
   const idsEnChevauchement = new Set()
 
   const parJour = new Map()
@@ -52,6 +62,22 @@ export function calculerAnomalies(diffusions, episodesParId) {
   }
 
   const anomalies = []
+
+  // Trou d'antenne : par jour affiché, sur les seuls blocs actifs ce jour-là.
+  for (const [date, lignes] of parJour) {
+    const actifs = blocsActifsCeJour(blocsGrilleType, jourAntenneLundi0(date))
+    for (const trou of calculerTrous(actifs, lignes)) {
+      anomalies.push({
+        id: null,
+        date,
+        heure: minutesEnHeure(trou.debut),
+        type: 'Trou d’antenne',
+        niveau: 'alerte',
+        message: `${trou.fin - trou.debut} min sans programme à ${minutesEnHeure(trou.debut)} (bloc « ${trou.bloc.nom} »)`,
+      })
+    }
+  }
+
   for (const d of diffusions) {
     if (idsEnChevauchement.has(d.id)) {
       anomalies.push({
@@ -73,6 +99,23 @@ export function calculerAnomalies(diffusions, episodesParId) {
         niveau: 'bloquant',
         message: `${d.titre_cache} — support non prêt à diffuser (PAD)`,
       })
+    }
+
+    // Écart de genre (EXG-M3-05) : uniquement si le programme a un genre
+    // renseigné — un genre vide (anciens imports) n'est pas un écart.
+    if (d.genre) {
+      const actifsCeJour = blocsActifsCeJour(blocsGrilleType, jourAntenneLundi0(d.date))
+      const bloc = trouverBlocPourMinute(actifsCeJour, minutesDepuisDebutAntenne(d.heure_debut))
+      if (bloc && bloc.genre_attendu !== d.genre) {
+        anomalies.push({
+          id: d.id,
+          date: d.date,
+          heure: d.heure_debut,
+          type: 'Grille type',
+          niveau: 'alerte',
+          message: `${d.titre_cache} dans « ${bloc.nom} » (genre attendu : ${bloc.genre_attendu})`,
+        })
+      }
     }
   }
 

@@ -163,3 +163,23 @@ export async function mettreAJourDiffusionNonLineaire(id, champs) {
 export async function supprimerDiffusionNonLineaire(id) {
   verifie(await supabase.from('diffusion_non_lineaire').delete().eq('id', id).select())
 }
+
+// --- bloc_grille_type (M3, P13) ---
+
+export async function listerBlocsGrilleTypeParChaine(chaineId) {
+  return verifie(
+    await supabase.from('bloc_grille_type').select('*').eq('chaine_id', chaineId).order('heure_debut')
+  )
+}
+
+export async function creerBlocGrilleType(champs) {
+  return verifiePremiere(await supabase.from('bloc_grille_type').insert(champs).select())
+}
+
+export async function mettreAJourBlocGrilleType(id, champs) {
+  return verifiePremiere(await supabase.from('bloc_grille_type').update(champs).eq('id', id).select())
+}
+
+export async function supprimerBlocGrilleType(id) {
+  verifie(await supabase.from('bloc_grille_type').delete().eq('id', id).select())
+}

@@ -56,12 +56,18 @@ export default function PanneauAnomalies({ anomalies, onFermer, onAller }) {
       <div className="flex-1 space-y-2">
         {visibles.map((a, i) => {
           const style = STYLE_NIVEAU[a.niveau]
+          // Un trou d'antenne n'est rattaché à aucune transmission précise
+          // (id: null) — non sélectionnable, comme dans le mockup de référence.
+          const cliquable = a.id != null
           return (
             <button
               key={i}
               type="button"
-              onClick={() => onAller(a.id)}
-              className={`w-full rounded-md border p-2 text-left text-xs ${style.bordure} ${style.fond}`}
+              disabled={!cliquable}
+              onClick={cliquable ? () => onAller(a.id) : undefined}
+              className={`w-full rounded-md border p-2 text-left text-xs ${style.bordure} ${style.fond} ${
+                cliquable ? 'cursor-pointer' : 'cursor-default'
+              }`}
             >
               <div className="mb-1 flex items-center justify-between">
                 <span className="font-mono text-slate-500">
@@ -77,7 +83,7 @@ export default function PanneauAnomalies({ anomalies, onFermer, onAller }) {
           <div className="flex flex-col items-center gap-2 py-10 text-center">
             <ShieldCheck size={24} className="text-emerald-500" />
             <p className="text-sm font-semibold text-slate-700">Rien à signaler</p>
-            <p className="text-xs text-slate-500">Chevauchements et matériel : la période est conforme.</p>
+            <p className="text-xs text-slate-500">Chevauchements, matériel, trous et écarts de grille type : la période est conforme.</p>
           </div>
         )}
       </div>
