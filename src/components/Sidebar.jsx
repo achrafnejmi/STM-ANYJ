@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { SECTIONS } from '../lib/navigation.js'
+import Marque from './Marque.jsx'
 
 export default function Sidebar({ section, onNaviguer, ouverte, onFermer }) {
   return (
@@ -11,7 +12,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer }) {
         }`}
       >
         <div className="flex items-center justify-between px-4 py-5">
-          <img src="/snrt-favicon.png" alt="SNRT" className="h-10 w-auto" />
+          <Marque variante="sidebar" />
           <button type="button" onClick={onFermer} className="text-white/70 hover:text-white lg:hidden">
             <X size={20} />
           </button>

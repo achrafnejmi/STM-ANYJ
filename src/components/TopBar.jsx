@@ -1,5 +1,6 @@
 import { Menu, LogOut, UserRound } from 'lucide-react'
 import { CHAINES } from '../lib/chaines.js'
+import Marque from './Marque.jsx'
 
 export default function TopBar({
   utilisateur,
@@ -16,8 +17,7 @@ export default function TopBar({
           <button type="button" onClick={onToggleSidebar} className="text-slate-500 hover:text-slate-700 lg:hidden">
             <Menu size={22} />
           </button>
-          <img src="/snrt-favicon.png" alt="SNRT" className="h-9 w-auto" />
-          <span className="hidden text-sm font-semibold text-slate-700 sm:inline">STM Next</span>
+          <Marque variante="topbar" />
         </div>
 
         <div className="flex items-center gap-2">

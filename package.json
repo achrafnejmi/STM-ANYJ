@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "brand:icons": "node scripts/generate-brand-icons.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
@@ -25,6 +26,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "playwright": "^1.62.1",
+    "sharp": "^0.35.3",
     "vite": "^8.2.0"
   }
 }

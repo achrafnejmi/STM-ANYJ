@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { connecter } from '../lib/session.js'
+import Marque from '../components/Marque.jsx'
 
 export default function Login({ onConnexion }) {
   const [nom, setNom] = useState('')
@@ -18,9 +19,9 @@ export default function Login({ onConnexion }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-snrt-navy px-6">
       <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-xl">
-        <img src="/snrt-logo-complet.png" alt="SNRT" className="mx-auto mb-6 h-28 w-auto" />
-        <h1 className="mb-1 text-center text-lg font-semibold text-slate-900">STM Next</h1>
-        <p className="mb-6 text-center text-sm text-slate-500">STM nouvelle génération</p>
+        <div className="mb-6">
+          <Marque variante="login" />
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
