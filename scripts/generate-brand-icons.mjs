@@ -1,6 +1,11 @@
 // Génère les icônes de marque (favicons + touch icon + manifest icons) depuis
 // la source unique design-reference (étoile SNRT multicolore, fond
 // transparent). À relancer si la source change : `npm run brand:icons`.
+//
+// Après régénération, penser à incrémenter le `?v=N` sur les href/src qui
+// référencent ces fichiers (index.html, public/brand/manifest.webmanifest) —
+// le cache de favicon du navigateur est indexé par URL exacte, pas par
+// contenu, donc un fichier changé sans URL changée reste caché à l'ancien.
 import { mkdirSync } from 'node:fs'
 import sharp from 'sharp'
 
