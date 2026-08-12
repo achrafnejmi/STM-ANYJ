@@ -74,3 +74,17 @@ export function minutesDepuisDebutAntenne(hhmm) {
   const m = heureEnMinutes(hhmm)
   return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
 }
+
+// Dates ISO entre deux bornes (incluses) dont le jour de semaine figure dans
+// `joursCoches` (0=lundi..6=dimanche) — pour l'onglet Répéter de l'Inspecteur.
+export function joursSelonJoursSemaine(debutISO, finISO, joursCoches) {
+  const coches = new Set(joursCoches)
+  const resultat = []
+  let d = debutISO
+  while (d <= finISO) {
+    const jourLundi0 = (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7 // 0=lundi..6=dimanche
+    if (coches.has(jourLundi0)) resultat.push(d)
+    d = ajouterJours(d, 1)
+  }
+  return resultat
+}

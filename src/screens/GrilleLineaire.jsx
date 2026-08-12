@@ -1,11 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
   listerEpisodes,
   creerDiffusionLineaire,
-  mettreAJourDiffusionLineaire,
   supprimerDiffusionLineaire,
 } from '../lib/db.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
@@ -26,6 +25,7 @@ import {
 import Modal from '../components/Modal.jsx'
 import CataloguePanel from '../components/CataloguePanel.jsx'
 import PopoverHistorique from '../components/PopoverHistorique.jsx'
+import InspecteurBloc from '../components/InspecteurBloc.jsx'
 
 const PX_PAR_MINUTE = 1 // axe continu (EXG-M2-01) — 1440px pour la journée d'antenne complète
 const HAUTEUR_TOTALE = (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
@@ -78,6 +78,7 @@ export default function GrilleLineaire({ chaineActive }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
+  const [blocSelectionne, setBlocSelectionne] = useState(null)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const dragRef = useRef(null)
 
@@ -129,11 +130,8 @@ export default function GrilleLineaire({ chaineActive }) {
   }
 
   function ouvrirCreation(date, heureDebut) {
+    setBlocSelectionne(null)
     setModale({ mode: 'CREATION', date, heureDebut })
-  }
-
-  function ouvrirEdition(diffusion) {
-    setModale({ mode: 'EDITION', diffusion })
   }
 
   function appliquerCreation(nouvelle) {
@@ -141,14 +139,34 @@ export default function GrilleLineaire({ chaineActive }) {
     setModale(null)
   }
 
+  // Réutilisée par l'onglet Bloc (édition horaire) et l'onglet Vecteur (mise à
+  // jour de l'original après scission) de l'Inspecteur — si le bloc modifié
+  // est celui actuellement inspecté, son affichage est resynchronisé sans que
+  // l'utilisateur ait besoin de rouvrir le panneau.
   function appliquerEdition(maj) {
     setDiffusions((prev) => prev.map((d) => (d.id === maj.id ? maj : d)))
-    setModale(null)
+    setBlocSelectionne((actuel) => (actuel && actuel.id === maj.id ? maj : actuel))
   }
 
   function appliquerSuppression(id) {
     setDiffusions((prev) => prev.filter((d) => d.id !== id))
-    setModale(null)
+    setBlocSelectionne((actuel) => (actuel && actuel.id === id ? null : actuel))
+  }
+
+  // Onglet Répéter de l'Inspecteur : ajout en bloc après un insert en 1 seule
+  // requête (creerDiffusionsLineaires), et onglet Vecteur : ajout de la ligne
+  // SATELLITE créée par la scission (tableau à 1 élément).
+  function appliquerCreationMultiple(nouvelles) {
+    setDiffusions((prev) => [...prev, ...nouvelles])
+  }
+
+  // Annulation locale (non générique, P11 uniquement) : supprime en base les
+  // lignes que l'onglet Répéter vient tout juste de créer, par id.
+  function annulerCreationMultiple(ids) {
+    const idsASupprimer = new Set(ids)
+    Promise.all(ids.map((id) => supprimerDiffusionLineaire(id)))
+      .then(() => setDiffusions((prev) => prev.filter((d) => !idsASupprimer.has(d.id))))
+      .catch((err) => setErreur(err.message))
   }
 
   // La `date` d'une transmission = le jour d'antenne de la colonne où l'on
@@ -307,15 +325,19 @@ export default function GrilleLineaire({ chaineActive }) {
                         const { fond, texte } = couleurGenre(genre)
                         const etiquetteEpisode =
                           diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
+                        const estSelectionne = blocSelectionne?.id === diffusion.id
                         return (
                           <button
                             type="button"
                             key={diffusion.id}
                             onClick={(e) => {
                               e.stopPropagation()
-                              ouvrirEdition(diffusion)
+                              setModale(null)
+                              setBlocSelectionne(diffusion)
                             }}
-                            className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte}`}
+                            className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
+                              estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
+                            }`}
                             style={{
                               top: `${top}px`,
                               height: `${hauteur}px`,
@@ -328,6 +350,7 @@ export default function GrilleLineaire({ chaineActive }) {
                             </div>
                             <div className="truncate">
                               {etiquetteEpisode}
+                              {diffusion.vecteur ? `[${diffusion.vecteur === 'SATELLITE' ? 'SAT' : 'TNT'}] ` : ''}
                               {diffusion.titre_cache}
                             </div>
                           </button>
@@ -343,15 +366,13 @@ export default function GrilleLineaire({ chaineActive }) {
       </div>
 
       {modale && (
-        <Modal titre={modale.mode === 'CREATION' ? 'Ajouter un créneau' : 'Modifier le créneau'} onFermer={() => setModale(null)}>
+        <Modal titre="Ajouter un créneau" onFermer={() => setModale(null)}>
           <FormulaireCreneau
             modale={modale}
             chaineActive={chaineActive}
             programmesDisponibles={programmesDeLaChaine}
             programmesParId={programmesParId}
             onCree={appliquerCreation}
-            onModifie={appliquerEdition}
-            onSupprime={appliquerSuppression}
           />
         </Modal>
       )}
@@ -359,22 +380,32 @@ export default function GrilleLineaire({ chaineActive }) {
       {historiqueOuvert && (
         <PopoverHistorique programme={historiqueOuvert} onFermer={() => setHistoriqueOuvert(null)} />
       )}
+
+      {blocSelectionne && (
+        <InspecteurBloc
+          diffusion={blocSelectionne}
+          programme={programmesParId.get(blocSelectionne.programme_id)}
+          chaineActive={chaineActive}
+          onFermer={() => setBlocSelectionne(null)}
+          onModifie={appliquerEdition}
+          onSupprime={appliquerSuppression}
+          onCreerPlusieurs={appliquerCreationMultiple}
+          onAnnulerPlusieurs={annulerCreationMultiple}
+        />
+      )}
     </div>
   )
 }
 
-function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, onCree, onModifie, onSupprime }) {
-  const estEdition = modale.mode === 'EDITION'
-  const diffusionInitiale = estEdition ? modale.diffusion : null
-
-  const [programmeId, setProgrammeId] = useState(diffusionInitiale?.programme_id ?? programmesDisponibles[0]?.id ?? '')
+function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, onCree }) {
+  const [programmeId, setProgrammeId] = useState(programmesDisponibles[0]?.id ?? '')
   const [episodes, setEpisodes] = useState([])
   const [chargementEpisodes, setChargementEpisodes] = useState(false)
-  const [episodeId, setEpisodeId] = useState(diffusionInitiale?.episode_id ?? '')
-  const [date, setDate] = useState(diffusionInitiale?.date ?? modale.date)
-  const [heureDebut, setHeureDebut] = useState(diffusionInitiale?.heure_debut ?? modale.heureDebut)
+  const [episodeId, setEpisodeId] = useState('')
+  const [date, setDate] = useState(modale.date)
+  const [heureDebut, setHeureDebut] = useState(modale.heureDebut)
   const [heureFin, setHeureFin] = useState(
-    diffusionInitiale?.heure_fin ?? minutesEnHeure(heureEnMinutes(modale.heureDebut ?? '06:00') + DUREE_PAR_DEFAUT_MIN)
+    minutesEnHeure(heureEnMinutes(modale.heureDebut ?? '06:00') + DUREE_PAR_DEFAUT_MIN)
   )
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -419,7 +450,6 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
   // dans les dépendances : un changement ultérieur de heureDebut seul ne doit
   // pas re-écraser une heure de fin déjà ajustée manuellement par l'utilisateur.
   useEffect(() => {
-    if (estEdition) return
     const ep = episodes.find((e) => e.id === episodeId)
     if (!ep) return
     setHeureFin(minutesEnHeure(heureEnMinutes(heureDebut) + (ep.duree ?? DUREE_PAR_DEFAUT_MIN)))
@@ -458,28 +488,11 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
       titre_cache: programme?.titre ?? null,
     }
     try {
-      if (estEdition) {
-        const maj = await mettreAJourDiffusionLineaire(diffusionInitiale.id, champs)
-        onModifie(maj)
-      } else {
-        const cree = await creerDiffusionLineaire(champs)
-        onCree(cree)
-      }
+      const cree = await creerDiffusionLineaire(champs)
+      onCree(cree)
     } catch (err) {
       setErreur(err.message)
     } finally {
-      setEnregistrement(false)
-    }
-  }
-
-  async function supprimer() {
-    setEnregistrement(true)
-    setErreur(null)
-    try {
-      await supprimerDiffusionLineaire(diffusionInitiale.id)
-      onSupprime(diffusionInitiale.id)
-    } catch (err) {
-      setErreur(err.message)
       setEnregistrement(false)
     }
   }
@@ -571,20 +584,7 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
         </div>
       </div>
       {erreur && <p className="text-sm text-red-600">{erreur}</p>}
-      <div className="flex items-center justify-between pt-2">
-        {estEdition ? (
-          <button
-            type="button"
-            onClick={supprimer}
-            disabled={enregistrement}
-            className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-60"
-          >
-            <Trash2 size={16} />
-            Supprimer
-          </button>
-        ) : (
-          <span />
-        )}
+      <div className="flex items-center justify-end pt-2">
         <button
           type="submit"
           disabled={enregistrement}

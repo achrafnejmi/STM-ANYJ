@@ -125,6 +125,13 @@ export async function creerDiffusionLineaire(champs) {
   return verifiePremiere(await supabase.from('diffusion_lineaire').insert(champs).select())
 }
 
+// Insert en lot (P11, onglet Répéter) : une seule requête réseau pour créer
+// plusieurs transmissions d'un coup — renvoie le tableau complet des lignes
+// créées (nécessaire pour l'annulation locale par id juste après application).
+export async function creerDiffusionsLineaires(lignes) {
+  return verifie(await supabase.from('diffusion_lineaire').insert(lignes).select())
+}
+
 export async function mettreAJourDiffusionLineaire(id, champs) {
   return verifiePremiere(await supabase.from('diffusion_lineaire').update(champs).eq('id', id).select())
 }
