@@ -54,8 +54,14 @@ export function chaineParCode(code) {
   return CHAINES.find((c) => c.code === code) ?? null
 }
 
+// Insensible à la casse : le texte libre programme.chaine (donnée historique,
+// avant le <select> fermé) peut diverger en casse de l'officiel (ex. "Al aoula"
+// vs "Al Aoula") — une comparaison stricte renvoyait alors null, donc un
+// chaine_id null, rejeté par la contrainte NOT NULL en base. Même tolérance
+// que le scoping .ilike déjà utilisé côté lecture (db.js).
 export function chaineParNom(nom) {
-  return CHAINES.find((c) => c.nom === nom) ?? null
+  const normalise = nom?.trim().toLowerCase()
+  return CHAINES.find((c) => c.nom.toLowerCase() === normalise) ?? null
 }
 
 const CLE_CHAINE_ACTIVE = 'session:chaine'

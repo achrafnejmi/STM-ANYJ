@@ -39,6 +39,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   const [onglet, setOnglet] = useState('INFOS')
   const [form, setForm] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
+  const [messageSucces, setMessageSucces] = useState(null)
   const idDescription = useId()
   const idPad = useId()
 
@@ -60,11 +61,17 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
     }
   }
 
+  function afficherSucces(texte) {
+    setMessageSucces(texte)
+    setTimeout(() => setMessageSucces(null), 4000)
+  }
+
   function selectionner(episode) {
     setEpisodeId(episode.id)
     setForm(versFormulaire(episode))
     setOnglet('INFOS')
     setErreur(null)
+    setMessageSucces(null)
   }
 
   function nouvelEpisode() {
@@ -72,6 +79,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
     setForm({ ...EPISODE_VIDE, numero: episodes.length + 1 })
     setOnglet('INFOS')
     setErreur(null)
+    setMessageSucces(null)
   }
 
   async function supprimer(id) {
@@ -104,9 +112,15 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       }
       if (episodeId === 'NOUVEAU') {
         const cree = await creerEpisode(champs)
-        setEpisodeId(cree.id)
+        afficherSucces(`Épisode « ${cree.titre || 'sans titre'} » enregistré.`)
+        // Referme le formulaire : sans ça, episodeId reste sur la ligne qu'on
+        // vient de créer et la saisie suivante la modifie au lieu d'en créer
+        // une nouvelle (c'était la cause de la perte de données).
+        setEpisodeId(null)
+        setForm(null)
       } else {
         await mettreAJourEpisode(episodeId, champs)
+        afficherSucces('Épisode modifié.')
       }
       await rafraichir()
     } catch (err) {
@@ -129,6 +143,8 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
           <Plus size={16} />
         </button>
       </div>
+
+      {messageSucces && <p className="mb-4 text-sm text-emerald-600">{messageSucces}</p>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_2fr]">
         <div className="overflow-x-auto">

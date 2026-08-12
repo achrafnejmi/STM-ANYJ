@@ -51,6 +51,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   const [chargement, setChargement] = useState(Boolean(idInitial))
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
+  const [messageSucces, setMessageSucces] = useState(null)
   const [nombreEpisodes, setNombreEpisodes] = useState(0)
   const [televersementEnCours, setTeleversementEnCours] = useState(false)
   const idDescription = useId()
@@ -65,10 +66,16 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     })
   }, [idInitial])
 
+  function afficherSucces(texte) {
+    setMessageSucces(texte)
+    setTimeout(() => setMessageSucces(null), 4000)
+  }
+
   async function enregistrer(e) {
     e.preventDefault()
     setEnregistrement(true)
     setErreur(null)
+    setMessageSucces(null)
     const champs = {
       titre: form.titre.trim(),
       titre_ar: form.titre_ar.trim() || null,
@@ -87,10 +94,12 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       if (id) {
         const maj = await mettreAJourProgramme(id, champs)
         setProgramme(maj)
+        afficherSucces('Programme modifié.')
       } else {
         const cree = await creerProgramme({ ...champs, cree_par: lireUtilisateur() })
         setProgramme(cree)
         setId(cree.id)
+        afficherSucces('Programme créé.')
       }
     } catch (err) {
       if (err.code === '23505') {
@@ -234,6 +243,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             <div>Nombre d'épisodes : {nombreEpisodes}</div>
           </div>
 
+          {messageSucces && <p className="text-sm text-emerald-600">{messageSucces}</p>}
           {erreur && <p className="text-sm text-red-600">{erreur}</p>}
           <button
             type="submit"

@@ -8,6 +8,16 @@ function verifie({ data, error }) {
   return data
 }
 
+// Pour insert/update : .single() exige exactement 1 ligne en relecture et lève
+// si 0 ou plusieurs reviennent (ex. "Cannot coerce the result to a single JSON
+// object") — une écriture qui a réussi ne doit jamais échouer à cause de sa
+// seule relecture. .select() (sans .single()) renvoie un tableau, jamais
+// d'exception sur le nombre de lignes ; on prend la première.
+function verifiePremiere({ data, error }) {
+  if (error) throw error
+  return data[0]
+}
+
 // --- programme ---
 
 export async function listerProgrammes() {
@@ -19,11 +29,11 @@ export async function obtenirProgramme(id) {
 }
 
 export async function creerProgramme(champs) {
-  return verifie(await supabase.from('programme').insert(champs).select().single())
+  return verifiePremiere(await supabase.from('programme').insert(champs).select())
 }
 
 export async function mettreAJourProgramme(id, champs) {
-  return verifie(await supabase.from('programme').update(champs).eq('id', id).select().single())
+  return verifiePremiere(await supabase.from('programme').update(champs).eq('id', id).select())
 }
 
 export async function supprimerProgramme(id) {
@@ -63,11 +73,11 @@ export async function obtenirEpisode(id) {
 }
 
 export async function creerEpisode(champs) {
-  return verifie(await supabase.from('episode').insert(champs).select().single())
+  return verifiePremiere(await supabase.from('episode').insert(champs).select())
 }
 
 export async function mettreAJourEpisode(id, champs) {
-  return verifie(await supabase.from('episode').update(champs).eq('id', id).select().single())
+  return verifiePremiere(await supabase.from('episode').update(champs).eq('id', id).select())
 }
 
 export async function supprimerEpisode(id) {
@@ -112,11 +122,11 @@ export async function obtenirDiffusionLineaire(id) {
 }
 
 export async function creerDiffusionLineaire(champs) {
-  return verifie(await supabase.from('diffusion_lineaire').insert(champs).select().single())
+  return verifiePremiere(await supabase.from('diffusion_lineaire').insert(champs).select())
 }
 
 export async function mettreAJourDiffusionLineaire(id, champs) {
-  return verifie(await supabase.from('diffusion_lineaire').update(champs).eq('id', id).select().single())
+  return verifiePremiere(await supabase.from('diffusion_lineaire').update(champs).eq('id', id).select())
 }
 
 export async function supprimerDiffusionLineaire(id) {
@@ -134,11 +144,11 @@ export async function obtenirDiffusionNonLineaire(id) {
 }
 
 export async function creerDiffusionNonLineaire(champs) {
-  return verifie(await supabase.from('diffusion_non_lineaire').insert(champs).select().single())
+  return verifiePremiere(await supabase.from('diffusion_non_lineaire').insert(champs).select())
 }
 
 export async function mettreAJourDiffusionNonLineaire(id, champs) {
-  return verifie(await supabase.from('diffusion_non_lineaire').update(champs).eq('id', id).select().single())
+  return verifiePremiere(await supabase.from('diffusion_non_lineaire').update(champs).eq('id', id).select())
 }
 
 export async function supprimerDiffusionNonLineaire(id) {
