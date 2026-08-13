@@ -400,7 +400,6 @@ export default function GrilleType({ chaineActive }) {
                               onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'droite')}
                             />
                             <div className="font-medium truncate">{bloc.nom || bloc.type_bloc}</div>
-                            <div className="truncate opacity-80">{bloc.genre_attendu}</div>
                           </button>
                         )
                       })}

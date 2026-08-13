@@ -22,9 +22,6 @@ export default function PaletteTypes({ dragRef }) {
               className={`cursor-grab rounded-md px-3 py-2 shadow-sm active:cursor-grabbing ${fond} ${texte}`}
             >
               <div className="text-sm font-medium">{t.nom}</div>
-              <div className="text-[11px] opacity-80">
-                {t.heure_debut}–{t.heure_fin}
-              </div>
             </div>
           )
         })}
