@@ -12,6 +12,7 @@ import {
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
+import { PX_PAR_MINUTE, HAUTEUR_TOTALE, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -24,7 +25,6 @@ import {
   heureEnMinutes,
   minutesEnHeure,
   DEBUT_JOURNEE_ANTENNE,
-  FIN_JOURNEE_ANTENNE,
   minutesDepuisDebutAntenne,
 } from '../lib/semaine.js'
 import Modal from '../components/Modal.jsx'
@@ -33,48 +33,8 @@ import PopoverHistorique from '../components/PopoverHistorique.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
 
-const PX_PAR_MINUTE = 1 // axe continu (EXG-M2-01) — 1440px pour la journée d'antenne complète
-const HAUTEUR_TOTALE = (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
-const PAS_ARRONDI_MIN = 5
 const DUREE_PAR_DEFAUT_MIN = 30
-
-const MARQUES_HEURES = []
-for (let m = DEBUT_JOURNEE_ANTENNE; m <= FIN_JOURNEE_ANTENNE; m += 60) MARQUES_HEURES.push(m)
-
-// Position Y (px, relative au haut de la colonne du jour) → minute de la
-// journée d'antenne, arrondie au pas de 5 min (dépôt ou clic sur la grille).
-function positionVersMinute(offsetY) {
-  const brut = DEBUT_JOURNEE_ANTENNE + offsetY / PX_PAR_MINUTE
-  const arrondi = Math.round(brut / PAS_ARRONDI_MIN) * PAS_ARRONDI_MIN
-  return Math.max(DEBUT_JOURNEE_ANTENNE, Math.min(FIN_JOURNEE_ANTENNE - PAS_ARRONDI_MIN, arrondi))
-}
-
-// Répartit les créneaux qui se chevauchent (pas de contrainte d'unicité en
-// base, chevauchements autorisés — détection formelle = P12) en pistes côte à
-// côte plutôt que superposés. Opère en minutes depuis le début de la journée
-// d'antenne (pas en rangées) pour l'axe continu.
-function disposerEnPistes(diffusionsJour) {
-  const avecMinutes = diffusionsJour.map((d) => {
-    const debut = minutesDepuisDebutAntenne(d.heure_debut)
-    let fin = minutesDepuisDebutAntenne(d.heure_fin)
-    if (fin <= debut) fin = debut + PAS_ARRONDI_MIN
-    return { diffusion: d, debut, fin }
-  })
-  const triees = [...avecMinutes].sort((a, b) => a.debut - b.debut)
-  const finPiste = [] // dernière minute de fin occupée par piste
-  const resultat = []
-  for (const item of triees) {
-    let piste = finPiste.findIndex((fin) => fin <= item.debut)
-    if (piste === -1) {
-      piste = finPiste.length
-      finPiste.push(0)
-    }
-    finPiste[piste] = item.fin
-    resultat.push({ ...item, piste })
-  }
-  const nbPistes = finPiste.length || 1
-  return resultat.map((r) => ({ ...r, nbPistes }))
-}
+const MARQUES_HEURES = genererMarquesHeures()
 
 export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) {
   const [vue, setVue] = useState('SEMAINE')
@@ -427,7 +387,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           </div>
                         )
                       })}
-                      {pistees.map(({ diffusion, debut, fin, piste, nbPistes }) => {
+                      {pistees.map(({ item: diffusion, debut, fin, piste, nbPistes }) => {
                         const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
                         const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
                         const genre = programmesParId.get(diffusion.programme_id)?.genre
