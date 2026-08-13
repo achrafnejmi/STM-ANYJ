@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { mettreAJourBlocGrilleType, supprimerBlocGrilleType } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
+import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { minutesDepuisDebutAntenne } from '../lib/semaine.js'
 
 const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
@@ -29,6 +30,7 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
   useEffect(() => {
     setForm({
       nom: bloc.nom,
+      type_bloc: bloc.type_bloc ?? '',
       heure_debut: bloc.heure_debut.slice(0, 5),
       heure_fin: bloc.heure_fin.slice(0, 5),
       jours: bloc.jours,
@@ -56,7 +58,10 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
     setEnregistrement(true)
     setErreur(null)
     try {
-      const maj = await mettreAJourBlocGrilleType(bloc.id, form)
+      // type_bloc vide -> null (pas '') : le check en base n'autorise que les
+      // 9 noms de type ou NULL, jamais une chaîne vide.
+      const champs = { ...form, nom: form.nom.trim(), type_bloc: form.type_bloc || null }
+      const maj = await mettreAJourBlocGrilleType(bloc.id, champs)
       onModifie(maj)
     } catch (err) {
       setErreur(err.message)
@@ -86,16 +91,32 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
       <form onSubmit={enregistrer} className="space-y-4">
         <div>
           <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
-            Nom *
+            Nom
           </label>
           <input
             id={idNom}
             type="text"
-            required
+            placeholder={form.type_bloc || 'Optionnel — nom du type par défaut si vide'}
             value={form.nom}
             onChange={(e) => setForm({ ...form, nom: e.target.value })}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
+        </div>
+
+        <div>
+          <span className="mb-1 block text-sm font-medium text-slate-700">Type de bloc</span>
+          <select
+            value={form.type_bloc}
+            onChange={(e) => setForm({ ...form, type_bloc: e.target.value })}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">— Aucun —</option>
+            {TYPES_BLOC.map((t) => (
+              <option key={t.nom} value={t.nom}>
+                {t.nom}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -181,6 +202,9 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Sert au contrôle de cohérence (écart de genre), pas à la couleur.
+          </p>
         </div>
 
         {erreur && <p className="text-sm text-red-600">{erreur}</p>}

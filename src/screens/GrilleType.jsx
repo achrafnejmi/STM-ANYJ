@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { listerBlocsGrilleTypeParChaine, creerBlocGrilleType } from '../lib/db.js'
-import { GENRES } from '../lib/genres.js'
-import { couleurGenre } from '../lib/couleursGenre.js'
-import { minutesEnHeure, DEBUT_JOURNEE_ANTENNE } from '../lib/semaine.js'
-import { PX_PAR_MINUTE, HAUTEUR_TOTALE, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
-import PaletteGenres from '../components/PaletteGenres.jsx'
+import { listerBlocsGrilleTypeParChaine, creerBlocGrilleType, mettreAJourBlocGrilleType } from '../lib/db.js'
+import { TYPES_BLOC } from '../lib/typesBloc.js'
+import { couleurType } from '../lib/couleursType.js'
+import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE } from '../lib/semaine.js'
+import {
+  PX_PAR_MINUTE,
+  HAUTEUR_TOTALE,
+  PAS_ARRONDI_MIN,
+  genererMarquesHeures,
+  positionVersMinute,
+  disposerEnPistes,
+} from '../lib/grilleAxe.js'
+import PaletteTypes from '../components/PaletteTypes.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
-const DUREE_PAR_DEFAUT_BLOC_MIN = 120 // 2h
 
 // Calendrier hebdomadaire FIXE (pas de date ni de navigation semaine
 // précédente/suivante) : un bloc_grille_type n'est pas daté, seulement
@@ -25,12 +31,76 @@ const JOURS_SEMAINE = [
   { index: 6, label: 'Dimanche' },
 ]
 
+// Message de confirmation partagé (création par dépôt ET étirement) — jamais
+// de fusion/écrasement automatique, juste une coexistence côte à côte comme
+// n'importe quel autre chevauchement (EXG-M3-07) si l'utilisateur confirme.
+function confirmerChevauchement(autre) {
+  return window.confirm(
+    `Ce créneau chevauche « ${autre.nom || autre.type_bloc || 'un bloc existant'} ». Continuer ? Les deux blocs resteront côte à côte.`
+  )
+}
+
+// Premier bloc (hors celui qu'on exclut par id) dont les jours et l'horaire
+// intersectent la plage candidate — même définition que seChevauchent dans
+// anomalies.js.
+function trouverChevauchement(idAExclure, candidat, tousLesBlocs) {
+  const debut = minutesDepuisDebutAntenne(candidat.heure_debut)
+  const fin = minutesDepuisDebutAntenne(candidat.heure_fin)
+  return (
+    tousLesBlocs.find((autre) => {
+      if (autre.id === idAExclure) return false
+      if (!candidat.jours.some((j) => autre.jours.includes(j))) return false
+      const autreDebut = minutesDepuisDebutAntenne(autre.heure_debut)
+      const autreFin = minutesDepuisDebutAntenne(autre.heure_fin)
+      return fin > autreDebut && autreFin > debut
+    }) ?? null
+  )
+}
+
+// Étirement horizontal (poignées latérales) : ne touche que la plage
+// CONTIGUË de `jours` du côté de la poignée saisie, jamais les jours détachés
+// de l'autre côté ou non contigus. `jourOccurrence` = jour de la case saisie.
+function plageContigueDroite(jours, depart) {
+  let r = depart
+  while (jours.includes(r + 1)) r++
+  return r
+}
+function plageContigueGauche(jours, depart) {
+  let l = depart
+  while (jours.includes(l - 1)) l--
+  return l
+}
+function calculerNouveauxJours(joursOriginaux, jourOccurrence, mode, jourPointeur) {
+  const jours = new Set(joursOriginaux)
+  if (mode === 'droite') {
+    const r = plageContigueDroite(joursOriginaux, jourOccurrence)
+    if (jourPointeur > r) {
+      for (let j = r + 1; j <= jourPointeur; j++) jours.add(j)
+    } else if (jourPointeur >= jourOccurrence && jourPointeur < r) {
+      for (let j = jourPointeur + 1; j <= r; j++) jours.delete(j)
+    }
+  } else {
+    const l = plageContigueGauche(joursOriginaux, jourOccurrence)
+    if (jourPointeur < l) {
+      for (let j = jourPointeur; j < l; j++) jours.add(j)
+    } else if (jourPointeur <= jourOccurrence && jourPointeur > l) {
+      for (let j = l; j < jourPointeur; j++) jours.delete(j)
+    }
+  }
+  return [...jours].sort((a, b) => a - b)
+}
+
 export default function GrilleType({ chaineActive }) {
   const [blocs, setBlocs] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
+  const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
   const dragRef = useRef(null)
+  const colonneRefs = useRef([])
+  const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
+  const previsualisationRef = useRef(null)
+  const dernierRedimTermineRef = useRef(0)
 
   useEffect(() => {
     setChargement(true)
@@ -41,11 +111,11 @@ export default function GrilleType({ chaineActive }) {
       .finally(() => setChargement(false))
   }, [chaineActive])
 
-  const genresPresents = [...new Set(blocs.map((b) => b.genre_attendu))]
+  const typesPresents = [...new Set(blocs.map((b) => b.type_bloc).filter(Boolean))]
 
   // Création directe en base (pas d'étape de formulaire intermédiaire), le
-  // panneau s'ouvre ensuite sur le bloc fraîchement créé pour le renommer —
-  // même logique que deposerEpisode dans GrilleLineaire.jsx (P10/P11).
+  // panneau s'ouvre ensuite sur le bloc fraîchement créé — même logique que
+  // deposerEpisode dans GrilleLineaire.jsx (P10/P11).
   function creerEtSelectionner(champs) {
     setErreur(null)
     creerBlocGrilleType({ ...champs, chaine_id: chaineActive.id })
@@ -56,17 +126,29 @@ export default function GrilleType({ chaineActive }) {
       .catch((err) => setErreur(err.message))
   }
 
-  function deposerGenre(jourIndex, minuteDebut) {
+  // Chevauchement possible à la création (dépôt ou bouton) : confirmation,
+  // jamais de fusion/écrasement silencieux — même règle qu'à l'étirement.
+  function creerAvecVerification(champs) {
+    const autre = trouverChevauchement(null, champs, blocs)
+    if (autre && !confirmerChevauchement(autre)) return
+    creerEtSelectionner(champs)
+  }
+
+  function deposerType(jourIndex, minuteDebut) {
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
-    creerEtSelectionner({
-      nom: payload.genre,
+    const type = TYPES_BLOC.find((t) => t.nom === payload.type)
+    if (!type) return
+    const dureeMin = minutesDepuisDebutAntenne(type.heure_fin) - minutesDepuisDebutAntenne(type.heure_debut)
+    creerAvecVerification({
+      nom: type.nom,
+      type_bloc: type.nom,
+      genre_attendu: type.genre_defaut,
       heure_debut: minutesEnHeure(minuteDebut),
-      heure_fin: minutesEnHeure(minuteDebut + DUREE_PAR_DEFAUT_BLOC_MIN),
+      heure_fin: minutesEnHeure(minuteDebut + dureeMin),
       jours: [jourIndex],
       frequence: 'Quotidien',
-      genre_attendu: payload.genre,
     })
   }
 
@@ -74,24 +156,110 @@ export default function GrilleType({ chaineActive }) {
   // glisser-déposer, valeurs génériques (renommables tout de suite dans le
   // panneau qui s'ouvre juste après, comme pour le dépôt).
   function nouveauBlocGenerique() {
-    creerEtSelectionner({
-      nom: GENRES[0].fr,
+    const type = TYPES_BLOC[0]
+    creerAvecVerification({
+      nom: type.nom,
+      type_bloc: type.nom,
+      genre_attendu: type.genre_defaut,
       heure_debut: '15:00',
       heure_fin: '17:00',
       jours: [0],
       frequence: 'Quotidien',
-      genre_attendu: GENRES[0].fr,
     })
   }
 
   function appliquerModification(maj) {
     setBlocs((prev) => prev.map((b) => (b.id === maj.id ? maj : b)))
-    setBlocSelectionne(maj)
+    setBlocSelectionne((actuel) => (actuel && actuel.id === maj.id ? maj : actuel))
   }
 
   function appliquerSuppression(id) {
     setBlocs((prev) => prev.filter((b) => b.id !== id))
     setBlocSelectionne(null)
+  }
+
+  // --- Étirement des bords (évolution 2) : suivi souris manuel, pas de HTML5
+  // DnD (nécessaire pour un retour visuel continu). Une seule écriture au
+  // relâchement ; annulation possible si chevauchement refusé.
+  function demarrerRedimensionnement(e, bloc, jourOccurrence, mode) {
+    e.preventDefault()
+    e.stopPropagation()
+    const rectsColonnes = colonneRefs.current.map((el) => el?.getBoundingClientRect())
+    etatRedimRef.current = { bloc, mode, jourOccurrence, rectsColonnes }
+    const preview = { blocId: bloc.id, heure_debut: bloc.heure_debut.slice(0, 5), heure_fin: bloc.heure_fin.slice(0, 5), jours: bloc.jours }
+    previsualisationRef.current = preview
+    setPrevisualisation(preview)
+    window.addEventListener('mousemove', gererDeplacementRedim)
+    window.addEventListener('mouseup', terminerRedimensionnement)
+  }
+
+  function gererDeplacementRedim(e) {
+    const etat = etatRedimRef.current
+    if (!etat) return
+    if (etat.mode === 'haut' || etat.mode === 'bas') {
+      const rect = etat.rectsColonnes[etat.jourOccurrence]
+      if (!rect) return
+      const minute = positionVersMinute(e.clientY - rect.top)
+      const debutMin = minutesDepuisDebutAntenne(etat.bloc.heure_debut)
+      const finMin = minutesDepuisDebutAntenne(etat.bloc.heure_fin)
+      let nouvelle
+      if (etat.mode === 'bas') {
+        if (minute - debutMin < PAS_ARRONDI_MIN) return
+        nouvelle = { ...previsualisationRef.current, heure_fin: minutesEnHeure(minute) }
+      } else {
+        if (finMin - minute < PAS_ARRONDI_MIN) return
+        nouvelle = { ...previsualisationRef.current, heure_debut: minutesEnHeure(minute) }
+      }
+      previsualisationRef.current = nouvelle
+      setPrevisualisation(nouvelle)
+    } else {
+      const index = etat.rectsColonnes.findIndex((r) => r && e.clientX >= r.left && e.clientX < r.right)
+      let jourPointeur = index
+      if (index === -1) {
+        const premier = etat.rectsColonnes[0]
+        jourPointeur = premier && e.clientX < premier.left ? 0 : 6
+      }
+      const nouvelle = {
+        ...previsualisationRef.current,
+        jours: calculerNouveauxJours(etat.bloc.jours, etat.jourOccurrence, etat.mode, jourPointeur),
+      }
+      previsualisationRef.current = nouvelle
+      setPrevisualisation(nouvelle)
+    }
+  }
+
+  async function terminerRedimensionnement() {
+    window.removeEventListener('mousemove', gererDeplacementRedim)
+    window.removeEventListener('mouseup', terminerRedimensionnement)
+    const etat = etatRedimRef.current
+    const preview = previsualisationRef.current
+    etatRedimRef.current = null
+    previsualisationRef.current = null
+    setPrevisualisation(null)
+    dernierRedimTermineRef.current = Date.now()
+    if (!etat || !preview) return
+
+    const inchange =
+      preview.heure_debut === etat.bloc.heure_debut.slice(0, 5) &&
+      preview.heure_fin === etat.bloc.heure_fin.slice(0, 5) &&
+      JSON.stringify(preview.jours) === JSON.stringify(etat.bloc.jours)
+    if (inchange) return
+
+    const candidat = { heure_debut: preview.heure_debut, heure_fin: preview.heure_fin, jours: preview.jours }
+    const autre = trouverChevauchement(etat.bloc.id, candidat, blocs)
+    if (autre && !confirmerChevauchement(autre)) return // annulé : aucune écriture, le bloc reprend son état d'origine
+
+    try {
+      const maj = await mettreAJourBlocGrilleType(etat.bloc.id, candidat)
+      appliquerModification(maj)
+    } catch (err) {
+      setErreur(err.message)
+    }
+  }
+
+  function selectionnerBloc(bloc) {
+    if (Date.now() - dernierRedimTermineRef.current < 200) return // ignore le clic qui suit un étirement (mousedown/up sur le même bloc)
+    setBlocSelectionne(bloc)
   }
 
   return (
@@ -112,14 +280,14 @@ export default function GrilleType({ chaineActive }) {
           </button>
         </div>
 
-        {genresPresents.length > 0 && (
+        {typesPresents.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
-            {genresPresents.map((g) => {
-              const { fond } = couleurGenre(g)
+            {typesPresents.map((t) => {
+              const { fond } = couleurType(t)
               return (
-                <span key={g} className="flex items-center gap-1.5 text-xs text-slate-600">
+                <span key={t} className="flex items-center gap-1.5 text-xs text-slate-600">
                   <span className={`h-2.5 w-2.5 rounded-full ${fond}`} />
-                  {g}
+                  {t}
                 </span>
               )
             })}
@@ -130,7 +298,7 @@ export default function GrilleType({ chaineActive }) {
       </div>
 
       <div className="flex items-start gap-4">
-        <PaletteGenres dragRef={dragRef} />
+        <PaletteTypes dragRef={dragRef} />
 
         {!chargement && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
@@ -165,6 +333,9 @@ export default function GrilleType({ chaineActive }) {
                   return (
                     <div
                       key={j.index}
+                      ref={(el) => {
+                        colonneRefs.current[j.index] = el
+                      }}
                       className="relative border-l border-slate-100"
                       style={{ gridRow: 2, gridColumn: i + 2, height: HAUTEUR_TOTALE }}
                       onDragOver={(e) => e.preventDefault()}
@@ -172,7 +343,7 @@ export default function GrilleType({ chaineActive }) {
                         e.preventDefault()
                         const rect = e.currentTarget.getBoundingClientRect()
                         const minute = positionVersMinute(e.clientY - rect.top)
-                        deposerGenre(j.index, minute)
+                        deposerType(j.index, minute)
                       }}
                     >
                       {MARQUES_HEURES.map((m) => (
@@ -182,16 +353,26 @@ export default function GrilleType({ chaineActive }) {
                           style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE }}
                         />
                       ))}
-                      {pistees.map(({ item: bloc, debut, fin, piste, nbPistes }) => {
+                      {pistees.map(({ item: bloc, debut: debutOrig, fin: finOrig, piste, nbPistes }) => {
+                        const enPrevisualisation = previsualisation?.blocId === bloc.id
+                        const debut = enPrevisualisation
+                          ? minutesDepuisDebutAntenne(previsualisation.heure_debut)
+                          : debutOrig
+                        const fin = enPrevisualisation ? minutesDepuisDebutAntenne(previsualisation.heure_fin) : finOrig
+                        // Pendant un étirement horizontal, seule l'occurrence
+                        // saisie doit disparaître si son jour est retiré de la
+                        // prévisualisation (les autres occurrences du même
+                        // bloc restent à leur état d'origine, affichées normalement).
+                        if (enPrevisualisation && !previsualisation.jours.includes(j.index)) return null
                         const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
                         const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
-                        const { fond, texte } = couleurGenre(bloc.genre_attendu)
+                        const { fond, texte } = couleurType(bloc.type_bloc)
                         const estSelectionne = blocSelectionne?.id === bloc.id
                         return (
                           <button
                             type="button"
                             key={bloc.id}
-                            onClick={() => setBlocSelectionne(bloc)}
+                            onClick={() => selectionnerBloc(bloc)}
                             className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
                               estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
                             }`}
@@ -202,7 +383,23 @@ export default function GrilleType({ chaineActive }) {
                               width: `${100 / nbPistes}%`,
                             }}
                           >
-                            <div className="font-medium truncate">{bloc.nom}</div>
+                            <div
+                              className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize hover:bg-black/20"
+                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'haut')}
+                            />
+                            <div
+                              className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize hover:bg-black/20"
+                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'bas')}
+                            />
+                            <div
+                              className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-black/20"
+                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'gauche')}
+                            />
+                            <div
+                              className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-black/20"
+                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'droite')}
+                            />
+                            <div className="font-medium truncate">{bloc.nom || bloc.type_bloc}</div>
                             <div className="truncate opacity-80">{bloc.genre_attendu}</div>
                           </button>
                         )

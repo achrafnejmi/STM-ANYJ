@@ -10,6 +10,7 @@ import {
   supprimerDiffusionLineaire,
 } from '../lib/db.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
+import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { PX_PAR_MINUTE, HAUTEUR_TOTALE, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
@@ -370,7 +371,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           Rendues avant les blocs de transmission dans le JSX
                           pour rester visuellement en arrière-plan. */}
                       {bandes.map((bloc) => {
-                        const { fondClair, bordure } = couleurGenre(bloc.genre_attendu)
+                        // Couleur du TYPE de bloc (Grille type — évolution des
+                        // types) ; repli sur le genre attendu pour d'éventuels
+                        // blocs sans type (avant cette évolution / migration).
+                        const { fondClair, bordure } = bloc.type_bloc
+                          ? couleurType(bloc.type_bloc)
+                          : couleurGenre(bloc.genre_attendu)
                         const topBande = (minutesDepuisDebutAntenne(bloc.heure_debut) - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
                         const hauteurBande =
                           (minutesDepuisDebutAntenne(bloc.heure_fin) - minutesDepuisDebutAntenne(bloc.heure_debut)) *
