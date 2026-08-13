@@ -13,12 +13,17 @@
 //     programme a un genre renseigné (les anciens imports sans genre ne sont
 //     pas de faux écarts — décision explicite, on ne signale pas un genre
 //     inconnu comme un désaccord).
-// Droits (aucun modèle de droits en base, différé M6/P14) et Hors grille type
-// (EXG-M3-06, Souhaitable, explicitement hors périmètre P13) restent hors
-// portée — la forme du résultat (type/niveau/message) permet de les ajouter
-// plus tard sans reprise.
+//   - Droits (RG-01/RG-03, Bloquant · RG-04/EXG-M6-08, Alerte, P14a) : une
+//     diffusion déjà programmée dont le titre n'est plus programmable
+//     (fenêtre fermée/épuisée) à sa date, ou dont la fenêtre couvrante ferme
+//     bientôt. Titre sans aucune fenêtre = jamais d'anomalie Droits (décision
+//     « permissif », voir droits.js).
+// Hors grille type (EXG-M3-06, Souhaitable, explicitement hors périmètre
+// P13) reste hors portée — la forme du résultat (type/niveau/message)
+// permet de l'ajouter plus tard sans reprise.
 import { minutesDepuisDebutAntenne, minutesEnHeure, jourAntenneLundi0 } from './semaine.js'
 import { blocsActifsCeJour, calculerTrous, trouverBlocPourMinute } from './grilleType.js'
+import { estProgrammable, fenetresProchesDeLaFermeture } from './droits.js'
 
 // RG-10..14 (P11, onglet Vecteur) : une scission crée 2 lignes indépendantes
 // (TNT/SATELLITE) qui représentent le MÊME créneau sur 2 voies de diffusion
@@ -39,7 +44,9 @@ function seChevauchent(a, b) {
 // `episodesParId` : Map(episode_id -> {pad, ...}) — voir listerTousLesEpisodes.
 // `blocsGrilleType` : blocs de la chaîne active (non filtrés par jour, le
 // filtrage par jour se fait ici, par date affichée).
-export function calculerAnomalies(diffusions, episodesParId, blocsGrilleType = []) {
+// `fenetresDroits` : toutes les fenêtres (non filtrées par programme, voir
+// listerToutesLesFenetresDroits) — droits.js filtre par programme_id.
+export function calculerAnomalies(diffusions, episodesParId, blocsGrilleType = [], fenetresDroits = []) {
   const idsEnChevauchement = new Set()
 
   const parJour = new Map()
@@ -99,6 +106,34 @@ export function calculerAnomalies(diffusions, episodesParId, blocsGrilleType = [
         niveau: 'bloquant',
         message: `${d.titre_cache} — support non prêt à diffuser (PAD)`,
       })
+    }
+
+    // Droits (RG-01/RG-03, P14a) : la diffusion était valide au moment de sa
+    // programmation, mais ne l'est plus (fenêtre depuis fermée/épuisée) —
+    // remonté ici plutôt que bloqué à l'écriture, puisque le garde-fou de la
+    // grille agit AU MOMENT du geste, pas rétroactivement sur l'existant.
+    const droits = estProgrammable(d.programme_id, fenetresDroits, d.date)
+    if (!droits.ok) {
+      anomalies.push({
+        id: d.id,
+        date: d.date,
+        heure: d.heure_debut,
+        type: 'Droits',
+        niveau: 'bloquant',
+        message: `${d.titre_cache} — ${droits.motif}`,
+      })
+    } else {
+      const fenetresDuTitre = fenetresDroits.filter((f) => f.programme_id === d.programme_id)
+      if (fenetresProchesDeLaFermeture(fenetresDuTitre, d.date).length > 0) {
+        anomalies.push({
+          id: d.id,
+          date: d.date,
+          heure: d.heure_debut,
+          type: 'Droits',
+          niveau: 'alerte',
+          message: `${d.titre_cache} — fenêtre de droits proche de la fermeture (EXG-M6-08)`,
+        })
+      }
     }
 
     // Écart de genre (EXG-M3-05) : uniquement si le programme a un genre

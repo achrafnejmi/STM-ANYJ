@@ -183,3 +183,30 @@ export async function mettreAJourBlocGrilleType(id, champs) {
 export async function supprimerBlocGrilleType(id) {
   verifie(await supabase.from('bloc_grille_type').delete().eq('id', id).select())
 }
+
+// --- fenetre_droits (M6, P14a) ---
+
+export async function listerFenetresDroitsParProgramme(programmeId) {
+  return verifie(
+    await supabase.from('fenetre_droits').select('*').eq('programme_id', programmeId).order('date_debut')
+  )
+}
+
+// Bulk, même précédent que listerTousLesEpisodes() : table de taille PoC,
+// filtrage client-side (par programme_id, déjà chargés et scopés par chaîne)
+// plutôt qu'une jointure PostgREST sur programme.chaine_id.
+export async function listerToutesLesFenetresDroits() {
+  return verifie(await supabase.from('fenetre_droits').select('*'))
+}
+
+export async function creerFenetreDroits(champs) {
+  return verifiePremiere(await supabase.from('fenetre_droits').insert(champs).select())
+}
+
+export async function mettreAJourFenetreDroits(id, champs) {
+  return verifiePremiere(await supabase.from('fenetre_droits').update(champs).eq('id', id).select())
+}
+
+export async function supprimerFenetreDroits(id) {
+  verifie(await supabase.from('fenetre_droits').delete().eq('id', id).select())
+}

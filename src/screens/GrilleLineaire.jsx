@@ -5,6 +5,7 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes,
   listerBlocsGrilleTypeParChaine,
+  listerToutesLesFenetresDroits,
   listerEpisodes,
   creerDiffusionLineaire,
   supprimerDiffusionLineaire,
@@ -13,6 +14,7 @@ import { couleurGenre } from '../lib/couleursGenre.js'
 import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
+import { estProgrammable, estEpisodePret } from '../lib/droits.js'
 import { PX_PAR_MINUTE, HAUTEUR_TOTALE, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
 import {
   aujourdHuiISO,
@@ -44,6 +46,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
+  const [fenetresDroits, setFenetresDroits] = useState([])
   const [afficherGrilleType, setAfficherGrilleType] = useState(true)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
@@ -60,12 +63,14 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       listerDiffusionsLineairesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
       listerBlocsGrilleTypeParChaine(chaineActive.id),
+      listerToutesLesFenetresDroits(),
     ])
-      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs]) => {
+      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs, lignesFenetres]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)
         setEpisodes(lignesEpisodes)
         setBlocsGrilleType(lignesBlocs)
+        setFenetresDroits(lignesFenetres)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -102,8 +107,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     [jours, diffusionsParJour]
   )
   const anomalies = useMemo(
-    () => calculerAnomalies(diffusionsAffichees, episodesParId, blocsGrilleType),
-    [diffusionsAffichees, episodesParId, blocsGrilleType]
+    () => calculerAnomalies(diffusionsAffichees, episodesParId, blocsGrilleType, fenetresDroits),
+    [diffusionsAffichees, episodesParId, blocsGrilleType, fenetresDroits]
   )
   const idsBloquants = useMemo(
     () => new Set(anomalies.filter((a) => a.niveau === 'bloquant').map((a) => a.id)),
@@ -189,10 +194,27 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   // La `date` d'une transmission = le jour d'antenne de la colonne où l'on
   // dépose/clique (RG-19/20) — jamais recalculée depuis heureDebut, même pour
   // un dépôt entre 00:00 et 05:59 qui reste rattaché à ce même jour d'antenne.
+  //
+  // Garde-fou (RG-01/RG-03/RG-07, EXG-M2-04/05, P14a) : contrôle AVANT toute
+  // écriture, à la date de diffusion VISÉE (jourAntenne), pas aujourd'hui.
+  // Le catalogue empêche déjà le drag d'un épisode non-PAD (defense en
+  // profondeur ici, même logique que les gardes anti-réponse-périmée déjà en
+  // place ailleurs) ; les droits du titre, eux, ne peuvent être vérifiés
+  // qu'ici puisqu'ils dépendent du jour visé, connu seulement au dépôt.
   function deposerEpisode(jourAntenne, minuteDebut) {
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
+    const episode = episodesParId.get(payload.episodeId)
+    if (!estEpisodePret(episode)) {
+      setErreur('Dépôt refusé — support non prêt à diffuser (PAD).')
+      return
+    }
+    const droits = estProgrammable(payload.programmeId, fenetresDroits, jourAntenne)
+    if (!droits.ok) {
+      setErreur(`Dépôt refusé — ${droits.motif}`)
+      return
+    }
     const heureDebut = minutesEnHeure(minuteDebut)
     const heureFin = minutesEnHeure(minuteDebut + (payload.duree ?? DUREE_PAR_DEFAUT_MIN))
     const programme = programmesParId.get(payload.programmeId)
@@ -453,6 +475,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             chaineActive={chaineActive}
             programmesDisponibles={programmesDeLaChaine}
             programmesParId={programmesParId}
+            fenetresDroits={fenetresDroits}
             onCree={appliquerCreation}
           />
         </Modal>
@@ -486,12 +509,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   )
 }
 
-function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, onCree }) {
-  const [programmeId, setProgrammeId] = useState(programmesDisponibles[0]?.id ?? '')
+function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, fenetresDroits, onCree }) {
+  const [date, setDate] = useState(modale.date)
+  // RG-03 : « non proposé » — les programmes hors droits À LA DATE COURANTE
+  // DU FORMULAIRE (pas la date d'ouverture) sont exclus du select, recalculé
+  // à chaque changement de date.
+  const programmesProgrammables = useMemo(
+    () => programmesDisponibles.filter((p) => estProgrammable(p.id, fenetresDroits, date).ok),
+    [programmesDisponibles, fenetresDroits, date]
+  )
+  const [programmeId, setProgrammeId] = useState(programmesProgrammables[0]?.id ?? '')
   const [episodes, setEpisodes] = useState([])
   const [chargementEpisodes, setChargementEpisodes] = useState(false)
   const [episodeId, setEpisodeId] = useState('')
-  const [date, setDate] = useState(modale.date)
   const [heureDebut, setHeureDebut] = useState(modale.heureDebut)
   const [heureFin, setHeureFin] = useState(
     minutesEnHeure(heureEnMinutes(modale.heureDebut ?? '06:00') + DUREE_PAR_DEFAUT_MIN)
@@ -504,6 +534,15 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
   const idDebut = useId()
   const idFin = useId()
   const requeteEpisodesId = useRef(0)
+
+  // Si le programme sélectionné sort de la liste programmable (changement de
+  // date vers un jour hors droits), retombe sur le premier programme encore
+  // programmable — RG-03 « non proposé », pas seulement refusé à la soumission.
+  useEffect(() => {
+    setProgrammeId((actuel) =>
+      programmesProgrammables.some((p) => p.id === actuel) ? actuel : (programmesProgrammables[0]?.id ?? '')
+    )
+  }, [programmesProgrammables])
 
   // `requeteEpisodesId` ignore la réponse d'un fetch dépassé par un
   // changement de programme plus récent (même pattern que `requeteId` dans
@@ -520,7 +559,10 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
       .then((lignes) => {
         if (idAppel !== requeteEpisodesId.current) return
         setEpisodes(lignes)
-        setEpisodeId((actuel) => (lignes.some((ep) => ep.id === actuel) ? actuel : (lignes[0]?.id ?? '')))
+        // RG-07 : ne présélectionne qu'un épisode prêt à diffuser (PAD).
+        setEpisodeId((actuel) =>
+          lignes.some((ep) => ep.id === actuel && estEpisodePret(ep)) ? actuel : (lignes.find(estEpisodePret)?.id ?? '')
+        )
       })
       .catch((err) => {
         if (idAppel !== requeteEpisodesId.current) return
@@ -530,6 +572,8 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
         if (idAppel === requeteEpisodesId.current) setChargementEpisodes(false)
       })
   }, [programmeId])
+
+  const episodesPrets = useMemo(() => episodes.filter(estEpisodePret), [episodes])
 
   // Recalcule heure_fin sur la durée de l'épisode sélectionné — réagit à la
   // valeur (episodeId), pas seulement à l'événement onChange du <select>, pour
@@ -554,10 +598,33 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
     )
   }
 
+  if (programmesProgrammables.length === 0) {
+    return (
+      <p className="text-sm text-amber-600">
+        Aucun programme programmable à cette date sur la chaîne « {chaineActive.nom} » (droits fermés ou épuisés).
+        Changez de date ou ajustez les fenêtres de droits depuis la fiche du titre.
+      </p>
+    )
+  }
+
   async function enregistrer(e) {
     e.preventDefault()
     if (!episodeId) {
       setErreur('Choisissez un épisode.')
+      return
+    }
+    // Revalidation silencieuse juste avant l'écriture (état potentiellement
+    // périmé si le formulaire est resté ouvert le temps qu'une donnée change)
+    // — défense en profondeur, le contrôle réel a déjà eu lieu via les
+    // options proposées (RG-03).
+    const episodeChoisi = episodes.find((ep) => ep.id === episodeId)
+    if (!estEpisodePret(episodeChoisi)) {
+      setErreur('Cet épisode n’est plus prêt à diffuser (PAD).')
+      return
+    }
+    const droits = estProgrammable(programmeId, fenetresDroits, date)
+    if (!droits.ok) {
+      setErreur(`Dépôt refusé — ${droits.motif}`)
       return
     }
     setEnregistrement(true)
@@ -599,7 +666,7 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
           onChange={(e) => setProgrammeId(e.target.value)}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         >
-          {programmesDisponibles.map((p) => (
+          {programmesProgrammables.map((p) => (
             <option key={p.id} value={p.id}>
               {p.titre}
             </option>
@@ -614,12 +681,14 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
           id={idEpisode}
           value={episodeId}
           required
-          disabled={chargementEpisodes || episodes.length === 0}
+          disabled={chargementEpisodes || episodesPrets.length === 0}
           onChange={(e) => setEpisodeId(e.target.value)}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
         >
-          {episodes.length === 0 && <option value="">{chargementEpisodes ? 'Chargement…' : 'Aucun épisode'}</option>}
-          {episodes.map((ep) => (
+          {episodesPrets.length === 0 && (
+            <option value="">{chargementEpisodes ? 'Chargement…' : 'Aucun épisode prêt à diffuser'}</option>
+          )}
+          {episodesPrets.map((ep) => (
             <option key={ep.id} value={ep.id}>
               ÉP.{String(ep.numero ?? '?').padStart(2, '0')} — {ep.titre || 'Sans titre'} ({ep.duree ?? '?'} min)
             </option>
@@ -628,6 +697,11 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
         {!chargementEpisodes && episodes.length === 0 && (
           <p className="mt-1 text-xs text-amber-600">
             Ce programme n'a aucun épisode — ajoutez-en un dans sa fiche avant de créer une transmission.
+          </p>
+        )}
+        {!chargementEpisodes && episodes.length > 0 && episodesPrets.length === 0 && (
+          <p className="mt-1 text-xs text-amber-600">
+            Aucun épisode de ce programme n'est prêt à diffuser (PAD) — RG-07.
           </p>
         )}
       </div>

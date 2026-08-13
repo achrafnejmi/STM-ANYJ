@@ -11,6 +11,7 @@ import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES, chaineParNom } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
+import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 
 const TAILLE_MAX_ATTESTATION = 5 * 1024 * 1024 // 5 Mo
 
@@ -26,6 +27,7 @@ const FORM_VIDE = {
   description: '',
   auteur: '',
   exclusivite: false,
+  reference_contrat: '',
 }
 
 function versFormulaire(programme) {
@@ -41,6 +43,7 @@ function versFormulaire(programme) {
     description: programme.description ?? '',
     auteur: programme.auteur ?? '',
     exclusivite: programme.exclusivite ?? false,
+    reference_contrat: programme.reference_contrat ?? '',
   }
 }
 
@@ -89,6 +92,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       description: form.description.trim() || null,
       auteur: form.auteur.trim() || null,
       exclusivite: form.exclusivite,
+      reference_contrat: form.reference_contrat.trim() || null,
     }
     try {
       if (id) {
@@ -176,9 +180,14 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             <Champ label="Sous-genre" value={form.sous_genre} onChange={(v) => setForm({ ...form, sous_genre: v })} />
             <Champ label="Thématique" value={form.thematique} onChange={(v) => setForm({ ...form, thematique: v })} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Champ label="Code" value={form.code} onChange={(v) => setForm({ ...form, code: v })} />
             <Champ label="Auteur" value={form.auteur} onChange={(v) => setForm({ ...form, auteur: v })} />
+            <Champ
+              label="Référence contrat"
+              value={form.reference_contrat}
+              onChange={(v) => setForm({ ...form, reference_contrat: v })}
+            />
           </div>
           <div>
             <label htmlFor={idDescription} className="mb-1 block text-sm font-medium text-slate-700">
@@ -256,6 +265,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       </div>
 
       {id && <EpisodesPanel programmeId={id} onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)} />}
+      {id && <FenetresDroitsPanel programmeId={id} />}
     </div>
   )
 }
