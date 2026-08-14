@@ -81,6 +81,17 @@ export function minutesDepuisDebutAntenne(hhmm) {
   return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
 }
 
+// Nombre de jours calendaires entre deux dates ISO, signé (positif si dateB
+// est après dateA). Même précédent UTC que le reste du fichier — utilisé par
+// autoprog.js pour la règle de séparation (P15), qui doit fonctionner dans
+// les deux sens (une diffusion existante peut être avant OU après la date en
+// cours de traitement).
+export function joursEntre(dateA, dateB) {
+  const a = new Date(`${dateA}T00:00:00Z`)
+  const b = new Date(`${dateB}T00:00:00Z`)
+  return Math.round((b - a) / 86400000)
+}
+
 // Dates ISO entre deux bornes (incluses) dont le jour de semaine figure dans
 // `joursCoches` (0=lundi..6=dimanche) — pour l'onglet Répéter de l'Inspecteur.
 export function joursSelonJoursSemaine(debutISO, finISO, joursCoches) {

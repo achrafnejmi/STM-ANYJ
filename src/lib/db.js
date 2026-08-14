@@ -88,10 +88,12 @@ export async function supprimerEpisode(id) {
 // (ListeProgrammes) sans une requête par ligne. `id`/`pad` servent aussi au
 // centre d'anomalies (P12, RG-08 : détecter un épisode programmé dont le
 // support n'est plus prêt à diffuser). `titre`/`titre_ar` servent à la
-// recherche multilingue (EXG-M6-02, P14b).
+// recherche multilingue (EXG-M6-02, P14b). `numero`/`duree` servent à la
+// rotation séquentielle et au dimensionnement des créneaux de
+// l'auto-programmation (autoprog.js, P15).
 export async function listerTousLesEpisodes() {
   return verifie(
-    await supabase.from('episode').select('id, programme_id, pad, derniere_diffusion, titre, titre_ar')
+    await supabase.from('episode').select('id, programme_id, pad, derniere_diffusion, titre, titre_ar, numero, duree')
   )
 }
 
@@ -143,6 +145,31 @@ export async function mettreAJourDiffusionLineaire(id, champs) {
 
 export async function supprimerDiffusionLineaire(id) {
   verifie(await supabase.from('diffusion_lineaire').delete().eq('id', id).select())
+}
+
+// --- auto-programmation (M4, P15) ---
+
+// EXG-M4-02/RG-16 : annulation en une seule opération de tout ce qu'un run a
+// créé — suppression en lot par run_id plutôt que la boucle par id de
+// l'onglet Répéter (P11), puisque run_id existe justement pour ça.
+export async function supprimerDiffusionsLineairesParRun(runId) {
+  return verifie(await supabase.from('diffusion_lineaire').delete().eq('run_id', runId).select())
+}
+
+// Mode « Écraser » : supprime les diffusions AUTOMATIQUE (jamais MANUELLE,
+// voir droits.js/autoprog.js) de la chaîne sur la période visée, avant
+// réinsertion des nouvelles propositions confirmées.
+export async function supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin) {
+  return verifie(
+    await supabase
+      .from('diffusion_lineaire')
+      .delete()
+      .eq('chaine_id', chaineId)
+      .eq('origine', 'AUTOMATIQUE')
+      .gte('date', dateDebut)
+      .lte('date', dateFin)
+      .select()
+  )
 }
 
 // --- diffusion_non_lineaire --- (CRUD prêt pour P9, rien ne l'appelle encore)
