@@ -11,6 +11,7 @@ import { GENRES } from '../lib/genres.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
+import { calculerParEpisode } from '../lib/historique.js'
 
 function formaterDuree(minutes) {
   if (minutes == null) return '—'
@@ -44,7 +45,7 @@ function LigneEpisode({ episode, programmeId, dragRef, derniereDiffusion }) {
 
 export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistorique }) {
   const [programmes, setProgrammes] = useState([])
-  const [nbEpisodesParProgramme, setNbEpisodesParProgramme] = useState(new Map())
+  const [episodes, setEpisodes] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [masquerHorsDroits, setMasquerHorsDroits] = useState(true)
   const [chargement, setChargement] = useState(true)
@@ -64,24 +65,45 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
       .then(([lignesProgrammes, lignesEpisodes, lignesFenetres]) => {
         setProgrammes(lignesProgrammes)
         setFenetresDroits(lignesFenetres)
-        const compteur = new Map()
-        for (const ep of lignesEpisodes) {
-          compteur.set(ep.programme_id, (compteur.get(ep.programme_id) ?? 0) + 1)
-        }
-        setNbEpisodesParProgramme(compteur)
+        setEpisodes(lignesEpisodes)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
   }, [chaineActive])
 
+  const nbEpisodesParProgramme = useMemo(() => {
+    const compteur = new Map()
+    for (const ep of episodes) compteur.set(ep.programme_id, (compteur.get(ep.programme_id) ?? 0) + 1)
+    return compteur
+  }, [episodes])
+
+  const episodesParProgrammeId = useMemo(() => {
+    const map = new Map()
+    for (const ep of episodes) {
+      if (!map.has(ep.programme_id)) map.set(ep.programme_id, [])
+      map.get(ep.programme_id).push(ep)
+    }
+    return map
+  }, [episodes])
+
+  // Recherche multilingue (EXG-M6-02) : titre du programme en FR/AR/EN, ou
+  // titre/titre_ar d'un de ses épisodes (déjà chargés en bulk ci-dessus).
   const programmesFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
+    const qBrut = recherche.trim()
     const aujourdHui = aujourdHuiISO()
     return programmes
-      .filter((p) => !q || p.titre.toLowerCase().includes(q) || (p.titre_ar ?? '').includes(recherche.trim()))
+      .filter((p) => {
+        if (!q) return true
+        if (p.titre.toLowerCase().includes(q)) return true
+        if ((p.titre_ar ?? '').includes(qBrut)) return true
+        if ((p.titre_en ?? '').toLowerCase().includes(q)) return true
+        const eps = episodesParProgrammeId.get(p.id) ?? []
+        return eps.some((ep) => (ep.titre ?? '').toLowerCase().includes(q) || (ep.titre_ar ?? '').includes(qBrut))
+      })
       .filter((p) => !filtreGenre || p.genre === filtreGenre)
       .filter((p) => !masquerHorsDroits || estProgrammable(p.id, fenetresDroits, aujourdHui).ok)
-  }, [programmes, recherche, filtreGenre, masquerHorsDroits, fenetresDroits])
+  }, [programmes, recherche, filtreGenre, masquerHorsDroits, fenetresDroits, episodesParProgrammeId])
 
   function basculerDepli(programme) {
     if (programmeOuvert === programme.id) {
@@ -91,17 +113,9 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
     setProgrammeOuvert(programme.id)
     setChargementEpisodes(true)
     Promise.all([listerEpisodes(programme.id), listerDiffusionsLineairesParProgramme(programme.id)])
-      .then(([episodes, diffusions]) => {
-        const aujourdHui = aujourdHuiISO()
-        const derniere = new Map()
-        for (const d of diffusions) {
-          if (d.date >= aujourdHui || d.episode_id == null) continue
-          if (!derniere.has(d.episode_id) || d.date > derniere.get(d.episode_id)) {
-            derniere.set(d.episode_id, d.date)
-          }
-        }
-        setEpisodesOuverts(episodes)
-        setDernieresDiffusions(derniere)
+      .then(([episodesDuTitre, diffusions]) => {
+        setEpisodesOuverts(episodesDuTitre)
+        setDernieresDiffusions(calculerParEpisode(diffusions))
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargementEpisodes(false))
@@ -116,7 +130,7 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
             type="text"
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
-            placeholder="Rechercher (FR/AR)…"
+            placeholder="Rechercher (FR/AR/EN)…"
             className="w-full rounded-md border border-slate-300 py-1.5 pl-8 pr-2 text-sm"
           />
         </div>
@@ -208,7 +222,7 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
                         episode={ep}
                         programmeId={p.id}
                         dragRef={dragRef}
-                        derniereDiffusion={dernieresDiffusions.get(ep.id)}
+                        derniereDiffusion={dernieresDiffusions.get(ep.id)?.derniere}
                       />
                     ))
                   )}

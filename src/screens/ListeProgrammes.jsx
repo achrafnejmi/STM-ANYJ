@@ -1,28 +1,33 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listerProgrammesParChaine, listerTousLesEpisodes } from '../lib/db.js'
+import { listerProgrammesParChaine, listerTousLesEpisodes, listerDiffusionsLineairesParChaine } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
+import { calculerDerniereParProgramme } from '../lib/historique.js'
+import { formaterDateLongue } from '../lib/semaine.js'
 
 const TAILLE_PAGE = 30
 
 export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   const [programmes, setProgrammes] = useState([])
-  const [episodesParProgramme, setEpisodesParProgramme] = useState(new Map())
+  const [episodes, setEpisodes] = useState([])
+  const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtreGenre, setFiltreGenre] = useState('')
+  const [recherche, setRecherche] = useState('')
   const [page, setPage] = useState(0)
   const idFiltreGenre = useId()
+  const idRecherche = useId()
   const requeteId = useRef(0)
 
   useEffect(() => {
     rafraichir()
   }, [chaineActive])
 
-  // La liste principale (listerProgrammes) est appliquée dès qu'elle résout,
-  // indépendamment de la requête annexe (épisodes) — un échec annexe ne doit
-  // jamais vider la liste. `requeteId` ignore les réponses d'un appel dépassé
+  // La liste principale (listerProgrammesParChaine) est appliquée dès qu'elle résout,
+  // indépendamment des requêtes annexes (épisodes, diffusions) — un échec annexe ne
+  // doit jamais vider la liste. `requeteId` ignore les réponses d'un appel dépassé
   // par un rafraîchissement plus récent.
   async function rafraichir() {
     const idAppel = ++requeteId.current
@@ -43,27 +48,15 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         if (idAppel === requeteId.current) setChargement(false)
       })
 
-    // DETTE CONNUE (P10) : "Dernière diffusion" ici vient de episode.derniere_diffusion,
-    // une colonne statique jamais recalculée par le code applicatif (seul l'import
-    // xlsx, supprimé, l'écrivait). C'est donc une valeur figée, potentiellement
-    // périmée — contrairement au calcul dynamique introduit en P10 pour le
-    // catalogue de la grille (basé sur diffusion_lineaire réellement créées).
-    // Les deux sources ne sont volontairement pas unifiées dans cette phase
-    // (hors périmètre) — à reprendre en P14 (Catalogue/fiche titre) ou P21.
-    const annexes = listerTousLesEpisodes()
-      .then((lignesEpisodes) => {
+    // Annexes : comptage d'épisodes + recherche multilingue (EXG-M6-02) et
+    // "Dernière diffusion" dynamique à partir de diffusion_lineaire (P14b —
+    // remplace l'ancienne colonne statique episode.derniere_diffusion,
+    // jamais recalculée depuis la suppression de l'import xlsx).
+    const annexes = Promise.all([listerTousLesEpisodes(), listerDiffusionsLineairesParChaine(chaineActive.id)])
+      .then(([lignesEpisodes, lignesDiffusions]) => {
         if (idAppel !== requeteId.current) return
-
-        const parProgramme = new Map()
-        for (const ep of lignesEpisodes) {
-          const entree = parProgramme.get(ep.programme_id) ?? { nb: 0, derniereDiffusion: null }
-          entree.nb += 1
-          if (ep.derniere_diffusion && (!entree.derniereDiffusion || ep.derniere_diffusion > entree.derniereDiffusion)) {
-            entree.derniereDiffusion = ep.derniere_diffusion
-          }
-          parProgramme.set(ep.programme_id, entree)
-        }
-        setEpisodesParProgramme(parProgramme)
+        setEpisodes(lignesEpisodes)
+        setDiffusions(lignesDiffusions)
       })
       .catch((err) => {
         console.error('Filtres/agrégats indisponibles, la liste principale reste affichée :', err)
@@ -72,10 +65,40 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
     await Promise.all([principale, annexes])
   }
 
-  const filtres = useMemo(
-    () => programmes.filter((p) => !filtreGenre || p.genre === filtreGenre),
-    [programmes, filtreGenre]
-  )
+  const nbEpisodesParProgramme = useMemo(() => {
+    const compteur = new Map()
+    for (const ep of episodes) compteur.set(ep.programme_id, (compteur.get(ep.programme_id) ?? 0) + 1)
+    return compteur
+  }, [episodes])
+
+  const episodesParProgrammeId = useMemo(() => {
+    const map = new Map()
+    for (const ep of episodes) {
+      if (!map.has(ep.programme_id)) map.set(ep.programme_id, [])
+      map.get(ep.programme_id).push(ep)
+    }
+    return map
+  }, [episodes])
+
+  const derniereDiffusionParProgramme = useMemo(() => calculerDerniereParProgramme(diffusions), [diffusions])
+
+  useEffect(() => {
+    setPage(0)
+  }, [filtreGenre, recherche])
+
+  const filtres = useMemo(() => {
+    const q = recherche.trim().toLowerCase()
+    const qBrut = recherche.trim()
+    return programmes.filter((p) => {
+      if (filtreGenre && p.genre !== filtreGenre) return false
+      if (!q) return true
+      if (p.titre.toLowerCase().includes(q)) return true
+      if ((p.titre_ar ?? '').includes(qBrut)) return true
+      if ((p.titre_en ?? '').toLowerCase().includes(q)) return true
+      const eps = episodesParProgrammeId.get(p.id) ?? []
+      return eps.some((ep) => (ep.titre ?? '').toLowerCase().includes(q) || (ep.titre_ar ?? '').includes(qBrut))
+    })
+  }, [programmes, filtreGenre, recherche, episodesParProgrammeId])
 
   const nbPages = Math.max(1, Math.ceil(filtres.length / TAILLE_PAGE))
   const pageAffichee = Math.min(page, nbPages - 1)
@@ -88,8 +111,8 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         Chaîne: p.chaine,
         Genre: p.genre ?? '',
         'Sous-genre': p.sous_genre ?? '',
-        'Nb épisodes': episodesParProgramme.get(p.id)?.nb ?? 0,
-        'Dernière diffusion': episodesParProgramme.get(p.id)?.derniereDiffusion ?? '',
+        'Nb épisodes': nbEpisodesParProgramme.get(p.id) ?? 0,
+        'Dernière diffusion': derniereDiffusionParProgramme.get(p.id) ?? '',
       }))
       const feuille = XLSX.utils.json_to_sheet(lignes)
       const classeur = XLSX.utils.book_new()
@@ -106,16 +129,29 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
             <div>
+              <label htmlFor={idRecherche} className="mb-1 block text-sm font-medium text-slate-700">
+                Recherche
+              </label>
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id={idRecherche}
+                  type="text"
+                  value={recherche}
+                  onChange={(e) => setRecherche(e.target.value)}
+                  placeholder="Titre (FR/AR/EN) ou épisode…"
+                  className="w-64 rounded-md border border-slate-300 py-2 pl-8 pr-3 text-sm"
+                />
+              </div>
+            </div>
+            <div>
               <label htmlFor={idFiltreGenre} className="mb-1 block text-sm font-medium text-slate-700">
                 Genre
               </label>
               <select
                 id={idFiltreGenre}
                 value={filtreGenre}
-                onChange={(e) => {
-                  setFiltreGenre(e.target.value)
-                  setPage(0)
-                }}
+                onChange={(e) => setFiltreGenre(e.target.value)}
                 className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">-- Tous --</option>
@@ -126,14 +162,6 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={() => setPage(0)}
-              className="flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-            >
-              <Search size={16} />
-              Rechercher
-            </button>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -181,8 +209,10 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                   <td className="py-2 pr-4 text-slate-700">{p.chaine}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.genre || '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.sous_genre || '—'}</td>
-                  <td className="py-2 pr-4 text-slate-700">{episodesParProgramme.get(p.id)?.nb ?? 0}</td>
-                  <td className="py-2 pr-4 text-slate-700">{episodesParProgramme.get(p.id)?.derniereDiffusion || '—'}</td>
+                  <td className="py-2 pr-4 text-slate-700">{nbEpisodesParProgramme.get(p.id) ?? 0}</td>
+                  <td className="py-2 pr-4 text-slate-700">
+                    {derniereDiffusionParProgramme.get(p.id) ? formaterDateLongue(derniereDiffusionParProgramme.get(p.id)) : '—'}
+                  </td>
                 </tr>
               ))}
               {!chargement && lignesPage.length === 0 && (

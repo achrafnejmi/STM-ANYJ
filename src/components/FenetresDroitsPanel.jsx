@@ -5,6 +5,7 @@ import {
   creerFenetreDroits,
   mettreAJourFenetreDroits,
   supprimerFenetreDroits,
+  listerDiffusionsLineairesParProgramme,
 } from '../lib/db.js'
 import { aujourdHuiISO } from '../lib/semaine.js'
 
@@ -35,10 +36,12 @@ function positionDansLaFenetre(debut, fin, dateISO) {
   return Math.max(0, Math.min(100, ((x - d) / total) * 100))
 }
 
-// Frise simple (EXG-M6-04, version allégée) : une barre par fenêtre, période
-// représentée proportionnellement, repère du jour courant, passages restants.
-// La frise pluriannuelle avec marques de diffusions passées est P14b.
-function Frise({ fenetres }) {
+// Frise (EXG-M6-04) : une barre par fenêtre, période représentée
+// proportionnellement, repère du jour courant, passages restants, et
+// marques des diffusions passées (P14b) — chaque diffusion_lineaire dont la
+// date tombe dans [date_debut, date_fin] de la fenêtre est repérée par un
+// petit trait sur la barre.
+function Frise({ fenetres, datesDiffusees }) {
   const aujourdHui = aujourdHuiISO()
   if (fenetres.length === 0) {
     return <p className="text-sm text-slate-500">Aucune fenêtre de droits pour ce titre — programmable par défaut (aucune restriction).</p>
@@ -50,6 +53,7 @@ function Frise({ fenetres }) {
         const expiree = aujourdHui > f.date_fin
         const epuisee = f.passages_consommes >= f.passages_autorises
         const restants = f.passages_autorises - f.passages_consommes
+        const marquesDeLaFenetre = datesDiffusees.filter((d) => d >= f.date_debut && d <= f.date_fin)
         return (
           <div key={f.id}>
             <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
@@ -65,6 +69,14 @@ function Frise({ fenetres }) {
                 className={`h-2 rounded-full ${expiree || epuisee ? 'bg-red-300' : 'bg-emerald-400'}`}
                 style={{ width: `${expiree ? 100 : position}%` }}
               />
+              {marquesDeLaFenetre.map((d) => (
+                <div
+                  key={d}
+                  className="absolute top-1/2 h-2.5 w-0.5 -translate-y-1/2 bg-slate-500/70"
+                  style={{ left: `${positionDansLaFenetre(f.date_debut, f.date_fin, d)}%` }}
+                  title={`Diffusion passée le ${d}`}
+                />
+              ))}
               {!expiree && (
                 <div
                   className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-snrt-navy"
@@ -82,6 +94,7 @@ function Frise({ fenetres }) {
 
 export default function FenetresDroitsPanel({ programmeId }) {
   const [fenetres, setFenetres] = useState([])
+  const [datesDiffusees, setDatesDiffusees] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [fenetreId, setFenetreId] = useState(null)
@@ -97,8 +110,13 @@ export default function FenetresDroitsPanel({ programmeId }) {
   async function rafraichir() {
     setChargement(true)
     try {
-      const lignes = await listerFenetresDroitsParProgramme(programmeId)
+      const [lignes, lignesDiffusions] = await Promise.all([
+        listerFenetresDroitsParProgramme(programmeId),
+        listerDiffusionsLineairesParProgramme(programmeId),
+      ])
       setFenetres(lignes)
+      const aujourdHui = aujourdHuiISO()
+      setDatesDiffusees([...new Set(lignesDiffusions.filter((d) => d.date < aujourdHui).map((d) => d.date))])
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -182,7 +200,11 @@ export default function FenetresDroitsPanel({ programmeId }) {
       </div>
 
       {messageSucces && <p className="mb-4 text-sm text-emerald-600">{messageSucces}</p>}
-      {!chargement && <div className="mb-4"><Frise fenetres={fenetres} /></div>}
+      {!chargement && (
+        <div className="mb-4">
+          <Frise fenetres={fenetres} datesDiffusees={datesDiffusees} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_1.5fr]">
         <div className="overflow-x-auto">

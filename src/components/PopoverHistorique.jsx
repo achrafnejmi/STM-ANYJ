@@ -21,7 +21,7 @@ export default function PopoverHistorique({ programme, onFermer }) {
   }, [programme.id])
 
   return (
-    <Modal titre={`Diffusions planifiées (passées) — ${programme.titre}`} onFermer={onFermer}>
+    <Modal titre={`Diffusions programmées (passées) — ${programme.titre}`} onFermer={onFermer}>
       {chargement && <p className="text-sm text-slate-500">Chargement…</p>}
       {erreur && <p className="text-sm text-red-600">{erreur}</p>}
       {!chargement && !erreur && diffusions.length === 0 && (

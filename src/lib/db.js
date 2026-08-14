@@ -87,9 +87,12 @@ export async function supprimerEpisode(id) {
 // Pour agréger nb épisodes / dernière diffusion par programme dans la liste
 // (ListeProgrammes) sans une requête par ligne. `id`/`pad` servent aussi au
 // centre d'anomalies (P12, RG-08 : détecter un épisode programmé dont le
-// support n'est plus prêt à diffuser).
+// support n'est plus prêt à diffuser). `titre`/`titre_ar` servent à la
+// recherche multilingue (EXG-M6-02, P14b).
 export async function listerTousLesEpisodes() {
-  return verifie(await supabase.from('episode').select('id, programme_id, pad, derniere_diffusion'))
+  return verifie(
+    await supabase.from('episode').select('id, programme_id, pad, derniere_diffusion, titre, titre_ar')
+  )
 }
 
 // --- diffusion_lineaire ---

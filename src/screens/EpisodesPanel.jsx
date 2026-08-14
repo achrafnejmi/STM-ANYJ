@@ -1,6 +1,14 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Plus, Trash2, CheckCircle2 } from 'lucide-react'
-import { listerEpisodes, creerEpisode, mettreAJourEpisode, supprimerEpisode } from '../lib/db.js'
+import {
+  listerEpisodes,
+  creerEpisode,
+  mettreAJourEpisode,
+  supprimerEpisode,
+  listerDiffusionsLineairesParProgramme,
+} from '../lib/db.js'
+import { calculerParEpisode } from '../lib/historique.js'
+import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
 
 const ONGLETS = [
@@ -12,6 +20,7 @@ const ONGLETS = [
 const EPISODE_VIDE = {
   numero: '',
   titre: '',
+  titre_ar: '',
   duree: '',
   date_production: '',
   code: '',
@@ -23,6 +32,7 @@ function versFormulaire(episode) {
   return {
     numero: episode.numero ?? '',
     titre: episode.titre ?? '',
+    titre_ar: episode.titre_ar ?? '',
     duree: episode.duree ?? '',
     date_production: episode.date_production ?? '',
     code: episode.code ?? '',
@@ -33,6 +43,7 @@ function versFormulaire(episode) {
 
 export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
+  const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [episodeId, setEpisodeId] = useState(null)
@@ -51,8 +62,12 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   async function rafraichir() {
     setChargement(true)
     try {
-      const lignes = await listerEpisodes(programmeId)
+      const [lignes, lignesDiffusions] = await Promise.all([
+        listerEpisodes(programmeId),
+        listerDiffusionsLineairesParProgramme(programmeId),
+      ])
       setEpisodes(lignes)
+      setDiffusions(lignesDiffusions)
       onEpisodesChange?.(lignes)
     } catch (err) {
       setErreur(err.message)
@@ -60,6 +75,11 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       setChargement(false)
     }
   }
+
+  // "Dernière diffusion" / "Nombre de diffusions" dynamiques (P14b) —
+  // remplacent la lecture des colonnes statiques episode.derniere_diffusion /
+  // nombre_diffusions, jamais recalculées depuis la suppression de l'import xlsx.
+  const historiqueParEpisode = useMemo(() => calculerParEpisode(diffusions), [diffusions])
 
   function afficherSucces(texte) {
     setMessageSucces(texte)
@@ -103,6 +123,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       const champs = {
         numero: form.numero === '' ? null : Number(form.numero),
         titre: form.titre.trim(),
+        titre_ar: form.titre_ar.trim() || null,
         duree: form.duree === '' ? null : Number(form.duree),
         date_production: form.date_production || null,
         code: form.code.trim() || null,
@@ -231,7 +252,15 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
                       onChange={(v) => setForm({ ...form, duree: v })}
                     />
                   </div>
-                  <Champ label="Titre" value={form.titre} onChange={(v) => setForm({ ...form, titre: v })} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Champ label="Titre" value={form.titre} onChange={(v) => setForm({ ...form, titre: v })} />
+                    <Champ
+                      label="Titre (arabe)"
+                      dir="rtl"
+                      value={form.titre_ar}
+                      onChange={(v) => setForm({ ...form, titre_ar: v })}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <Champ
                       label="Date de production"
@@ -266,11 +295,11 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
                     <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
                       <div>
                         Dernière diffusion :{' '}
-                        {episodes.find((ep) => ep.id === episodeId)?.derniere_diffusion || '—'}
+                        {historiqueParEpisode.get(episodeId)?.derniere
+                          ? formaterDateLongue(historiqueParEpisode.get(episodeId).derniere)
+                          : '—'}
                       </div>
-                      <div>
-                        Nombre de diffusions : {episodes.find((ep) => ep.id === episodeId)?.nombre_diffusions ?? 0}
-                      </div>
+                      <div>Nombre de diffusions : {historiqueParEpisode.get(episodeId)?.nb ?? 0}</div>
                     </div>
                   )}
                   {erreur && <p className="text-sm text-red-600">{erreur}</p>}
@@ -291,7 +320,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   )
 }
 
-function Champ({ label, type = 'text', value, onChange, required }) {
+function Champ({ label, type = 'text', value, onChange, required, dir }) {
   const id = useId()
   return (
     <div>
@@ -303,6 +332,7 @@ function Champ({ label, type = 'text', value, onChange, required }) {
         type={type}
         value={value}
         required={required}
+        dir={dir}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
