@@ -17,6 +17,12 @@ import Modal from './Modal.jsx'
 // une campagne → heure de début à la seconde près, validée en direct
 // (estPlacementValide, mêmes bornes/anti-chevauchement que le moteur auto).
 // origine='MANUELLE' : jamais retouché par une régénération (estProtege).
+//
+// `dateInitiale`/`coupureIdInitiale` (P17, Conducteur) : quand fournies,
+// la date et la coupure sont pré-remplies et non modifiables (les sélecteurs
+// laissent place à un simple rappel) — insertion « en place » depuis un point
+// d'insertion du déroulé (EXG-M7-04), sans changement d'écran. Absentes
+// (ouverture depuis Plan média), le comportement est inchangé.
 export default function PanneauInsertionManuelle({
   chaineActive,
   dates,
@@ -25,11 +31,13 @@ export default function PanneauInsertionManuelle({
   campagnes,
   spots,
   programmesParId,
+  dateInitiale,
+  coupureIdInitiale,
   onFermer,
   onElementCree,
 }) {
-  const [dateChoisie, setDateChoisie] = useState(dates[0])
-  const [coupureId, setCoupureId] = useState('')
+  const [dateChoisie, setDateChoisie] = useState(dateInitiale ?? dates[0])
+  const [coupureId, setCoupureId] = useState(coupureIdInitiale ?? '')
   const [sourceType, setSourceType] = useState('SPOT')
   const [spotId, setSpotId] = useState('')
   const [campagneId, setCampagneId] = useState('')
@@ -99,7 +107,10 @@ export default function PanneauInsertionManuelle({
       }
       const cree = await creerElementSecondaire(champs)
       onElementCree(cree)
-      setCoupureId('')
+      // Coupure pré-remplie (P17, Conducteur) : pas de sélecteur vers lequel
+      // retomber, on la garde pour permettre d'enchaîner plusieurs insertions
+      // dans la même coupure. Sinon (Plan média), on revient au sélecteur.
+      if (!coupureIdInitiale) setCoupureId('')
       setSpotId('')
       setCampagneId('')
     } catch (err) {
@@ -112,40 +123,50 @@ export default function PanneauInsertionManuelle({
   return (
     <Modal titre="Insertion manuelle" onFermer={onFermer}>
       <div className="space-y-4 text-sm">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Date</label>
-          <select
-            value={dateChoisie}
-            onChange={(e) => {
-              setDateChoisie(e.target.value)
-              setCoupureId('')
-            }}
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-          >
-            {dates.map((d) => (
-              <option key={d} value={d}>
-                {formaterDateLongue(d)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!dateInitiale && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Date</label>
+            <select
+              value={dateChoisie}
+              onChange={(e) => {
+                setDateChoisie(e.target.value)
+                setCoupureId('')
+              }}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              {dates.map((d) => (
+                <option key={d} value={d}>
+                  {formaterDateLongue(d)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Coupure</label>
-          <select
-            value={coupureId}
-            onChange={(e) => setCoupureId(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">— Choisir une coupure —</option>
-            {coupuresDuJour.map((iv) => (
-              <option key={iv.apresTransmissionId} value={iv.apresTransmissionId}>
-                {libelleCoupure(iv)}
-              </option>
-            ))}
-          </select>
-          {coupuresDuJour.length === 0 && <p className="mt-1 text-xs text-slate-500">Aucune coupure ce jour-là.</p>}
-        </div>
+        {!coupureIdInitiale ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Coupure</label>
+            <select
+              value={coupureId}
+              onChange={(e) => setCoupureId(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">— Choisir une coupure —</option>
+              {coupuresDuJour.map((iv) => (
+                <option key={iv.apresTransmissionId} value={iv.apresTransmissionId}>
+                  {libelleCoupure(iv)}
+                </option>
+              ))}
+            </select>
+            {coupuresDuJour.length === 0 && <p className="mt-1 text-xs text-slate-500">Aucune coupure ce jour-là.</p>}
+          </div>
+        ) : (
+          intervalleSelectionne && (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Insertion {libelleCoupure(intervalleSelectionne)}
+            </p>
+          )
+        )}
 
         {coupureId && (
           <>
