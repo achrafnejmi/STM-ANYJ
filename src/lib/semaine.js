@@ -6,6 +6,11 @@
 
 const JOURS_COURTS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
 const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+const JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+const MOIS_LONGS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+]
 
 export function aujourdHuiISO() {
   const d = new Date()
@@ -42,6 +47,30 @@ export function formaterJourCourt(dateISO) {
 export function formaterDateLongue(dateISO) {
   const d = new Date(`${dateISO}T00:00:00Z`)
   return `${d.getUTCDate()} ${MOIS_COURTS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// Nom de jour complet + date à chasse fixe (jour sur 2 chiffres, mois en
+// toutes lettres) — utilisé pour le nom de fichier de l'export Plan média
+// (ex. "mercredi 05 août 2026"), distinct de formaterDateLongue (pas de nom
+// de jour, jour non zéro-préfixé) qui reste utilisé pour l'affichage écran.
+export function formaterJourDateLongue(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${JOURS_LONGS[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')} ${MOIS_LONGS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// Comme formaterJourDateLongue mais sans le nom de jour (ex. "05 août 2026")
+// — pour les bornes "du <x> au <y>" du nom de fichier vue Semaine.
+export function formaterDateLonguePadded(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MOIS_LONGS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// JJ/MM/AAAA — colonne JOUR de l'export Plan média (texte libre, le fichier
+// réel ne stocke pas de vraie date Excel dans cette colonne, voir
+// src/lib/stm-import.js:147 : lecture brute sans conversion).
+export function formaterDateJJMMAAAA(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
 }
 
 export function formaterPlageSemaine(lundiISO) {

@@ -302,3 +302,33 @@ export async function supprimerElementsSecondairesAutomatiquesParPeriode(chaineI
       .select()
   )
 }
+
+// Insertion manuelle dans une coupure (P16b) : singulier, mirroir de
+// creerElementsSecondaires (bulk, moteur auto) — même coexistence que
+// creerDiffusionLineaire/creerDiffusionsLineaires.
+export async function creerElementSecondaire(champs) {
+  return verifiePremiere(await supabase.from('element_secondaire').insert(champs).select())
+}
+
+// --- spot_bibliotheque (P16b) ---
+
+// Fusionne bibliothèque globale (chaine_id NULL) et propre à la chaîne —
+// première utilisation de .or() dans ce fichier : un simple .eq() ne peut
+// pas exprimer « cette chaîne OU aucune chaîne » sur la même colonne.
+export async function listerSpotsBibliotheque(chaineId) {
+  return verifie(
+    await supabase.from('spot_bibliotheque').select('*').or(`chaine_id.eq.${chaineId},chaine_id.is.null`).order('libelle')
+  )
+}
+
+export async function creerSpotBibliotheque(champs) {
+  return verifiePremiere(await supabase.from('spot_bibliotheque').insert(champs).select())
+}
+
+export async function mettreAJourSpotBibliotheque(id, champs) {
+  return verifiePremiere(await supabase.from('spot_bibliotheque').update(champs).eq('id', id).select())
+}
+
+export async function supprimerSpotBibliotheque(id) {
+  verifie(await supabase.from('spot_bibliotheque').delete().eq('id', id).select())
+}

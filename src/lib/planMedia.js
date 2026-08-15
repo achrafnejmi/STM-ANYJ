@@ -74,6 +74,39 @@ export function secondesEnHeureHMS(secondesDepuisDebutAntenne) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// Inverse de secondesEnHeureHMS : reconstruit les « secondes depuis le début
+// de la journée d'antenne » à partir d'une heure d'horloge "HH:MM:SS" telle
+// que stockée en base (element_secondaire.heure_debut/heure_fin). Même
+// bascule que minutesDepuisDebutAntenne (semaine.js), à la seconde près :
+// une heure avant 06:00 appartient à la fin de la journée d'antenne en cours
+// (ex. "01:00:00" → 90000, pas 3600).
+export function heureHMSEnSecondes(hms) {
+  const [h, m, s] = hms.split(':').map(Number)
+  const secondesClock = h * 3600 + m * 60 + (s || 0)
+  const DEBUT_JOURNEE_ANTENNE_SECONDES = 360 * 60
+  return secondesClock < DEBUT_JOURNEE_ANTENNE_SECONDES ? secondesClock + 86400 : secondesClock
+}
+
+// Insertion manuelle (précision seconde) : vrai si le placement reste dans
+// les bornes de la coupure (intervalle, en minutes d'antenne — mêmes bornes
+// que calculerIntervalles) ET ne chevauche aucun élément déjà présent dans
+// cette même coupure. `elementsDansCetIntervalle` : lignes element_secondaire
+// dont apres_transmission_id est déjà celui de la coupure visée (filtrage à
+// la charge de l'appelant, pas ici).
+export function estPlacementValide(heureDebutSecondes, dureeSecondes, intervalle, elementsDansCetIntervalle) {
+  const debutBorne = intervalle.debut * 60
+  const finBorne = intervalle.fin * 60
+  if (heureDebutSecondes < debutBorne) return false
+  if (heureDebutSecondes + dureeSecondes > finBorne) return false
+
+  const finPlacement = heureDebutSecondes + dureeSecondes
+  return elementsDansCetIntervalle.every((e) => {
+    const debutExistant = heureHMSEnSecondes(e.heure_debut)
+    const finExistant = heureHMSEnSecondes(e.heure_fin)
+    return finPlacement <= debutExistant || heureDebutSecondes >= finExistant
+  })
+}
+
 // --- notation des campagnes candidates (§4.6.5) ---
 //
 // Le cahier énonce 3 facteurs sans formule ("sa priorité, l'écart entre son
