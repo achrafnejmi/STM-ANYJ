@@ -240,3 +240,65 @@ export async function mettreAJourFenetreDroits(id, champs) {
 export async function supprimerFenetreDroits(id) {
   verifie(await supabase.from('fenetre_droits').delete().eq('id', id).select())
 }
+
+// --- campagne (M5, P16) ---
+
+export async function listerCampagnesParChaine(chaineId) {
+  return verifie(await supabase.from('campagne').select('*').eq('chaine_id', chaineId).order('date_debut'))
+}
+
+export async function creerCampagne(champs) {
+  return verifiePremiere(await supabase.from('campagne').insert(champs).select())
+}
+
+export async function mettreAJourCampagne(id, champs) {
+  return verifiePremiere(await supabase.from('campagne').update(champs).eq('id', id).select())
+}
+
+export async function supprimerCampagne(id) {
+  verifie(await supabase.from('campagne').delete().eq('id', id).select())
+}
+
+// --- element_secondaire (M5, P16) ---
+
+// Bulk, non filtré par date : RG-M5-01/02/03 portent sur tout l'historique de
+// la chaîne (diffusion à venir, maximum journalier, séparation), jamais
+// seulement la fenêtre affichée à l'écran — même précédent que
+// listerDiffusionsLineairesParChaine, déjà utilisé ainsi par autoprog.js.
+export async function listerElementsSecondairesParChaine(chaineId) {
+  return verifie(
+    await supabase.from('element_secondaire').select('*').eq('chaine_id', chaineId).order('date').order('heure_debut')
+  )
+}
+
+export async function creerElementsSecondaires(lignes) {
+  return verifie(await supabase.from('element_secondaire').insert(lignes).select())
+}
+
+// EXG-M5-06 : suppression unitaire d'un élément généré, sans attendre le
+// Conducteur (P17) qui offrira la même action depuis son propre écran.
+export async function supprimerElementSecondaire(id) {
+  verifie(await supabase.from('element_secondaire').delete().eq('id', id).select())
+}
+
+// EXG-M5-02/RG-16 (même mécanisme que M4) : annulation en une opération de
+// tout ce qu'un run a créé.
+export async function supprimerElementsSecondairesParRun(runId) {
+  return verifie(await supabase.from('element_secondaire').delete().eq('run_id', runId).select())
+}
+
+// RG-M5-06 : contrairement à son équivalent M4, cette suppression est
+// INCONDITIONNELLE — pas de case « Écraser », chaque génération recalcule
+// systématiquement les éléments AUTOMATIQUE de la période, jamais les MANUELLE.
+export async function supprimerElementsSecondairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin) {
+  return verifie(
+    await supabase
+      .from('element_secondaire')
+      .delete()
+      .eq('chaine_id', chaineId)
+      .eq('origine', 'AUTOMATIQUE')
+      .gte('date', dateDebut)
+      .lte('date', dateFin)
+      .select()
+  )
+}

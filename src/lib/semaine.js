@@ -81,6 +81,17 @@ export function minutesDepuisDebutAntenne(hhmm) {
   return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
 }
 
+// Comparateur (date, minute d'antenne) — vrai si (dateA, minutesA) est
+// strictement postérieur à (dateB, minutesB). Pas une concaténation de
+// chaînes (déjà fausse pour comparer des heures d'antenne, voir autoprog.js) :
+// compare la date en premier, la minute seulement en cas d'égalité. Utilisé
+// par planMedia.js (RG-M5-01 : diffusion à venir, postérieure à l'instant
+// considéré) mais générique, réutilisable au-delà.
+export function estPosterieur(dateA, minutesA, dateB, minutesB) {
+  if (dateA !== dateB) return dateA > dateB
+  return minutesA > minutesB
+}
+
 // Nombre de jours calendaires entre deux dates ISO, signé (positif si dateB
 // est après dateA). Même précédent UTC que le reste du fichier — utilisé par
 // autoprog.js pour la règle de séparation (P15), qui doit fonctionner dans

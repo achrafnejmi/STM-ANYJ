@@ -11,6 +11,7 @@ import Contrats from './screens/Contrats.jsx'
 import GrilleType from './screens/GrilleType.jsx'
 import GrilleLineaire from './screens/GrilleLineaire.jsx'
 import AutoProgrammation from './screens/AutoProgrammation.jsx'
+import PlanMedia from './screens/PlanMedia.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
 import Administration from './screens/Administration.jsx'
@@ -22,6 +23,7 @@ const ECRANS = {
   GRILLE_TYPE: GrilleType,
   GRILLE_LINEAIRE: GrilleLineaire,
   AUTO_PROGRAMMATION: AutoProgrammation,
+  PLAN_MEDIA: PlanMedia,
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
   ADMINISTRATION: Administration,
