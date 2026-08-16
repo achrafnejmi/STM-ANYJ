@@ -28,3 +28,15 @@ export function calculerCouverture(campagnes, elementsSecondaires) {
   }
   return couverture
 }
+
+// Résumé pour un widget de synthèse (P18, Accueil) : nombre de campagnes et
+// taux moyen de couverture (chaque campagne plafonnée à 100 %, pour qu'une
+// campagne ayant dépassé son objectif n'écrase pas la moyenne des autres).
+export function resumerCouverture(couvertureParCampagne) {
+  const valeurs = [...couvertureParCampagne.values()].filter((c) => c.objectif > 0)
+  if (valeurs.length === 0) return { nbCampagnes: 0, tauxMoyenPct: null }
+  const tauxMoyenPct = Math.round(
+    (valeurs.reduce((somme, c) => somme + Math.min(1, c.placees / c.objectif), 0) / valeurs.length) * 100
+  )
+  return { nbCampagnes: valeurs.length, tauxMoyenPct }
+}
