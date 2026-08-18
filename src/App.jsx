@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
 import { lireChaineActive, definirChaineActive } from './lib/chaines.js'
 import { sectionVersHash, hashVersSection } from './lib/navigation.js'
+import { chargerGenres } from './lib/genres.js'
+import { chargerTranches } from './lib/tranches.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import TopBar from './components/TopBar.jsx'
+import RechercheGlobale from './components/RechercheGlobale.jsx'
 import Accueil from './screens/Accueil.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
@@ -38,6 +41,13 @@ function App() {
   // écran qui écrit sur diffusion_lineaire — reste affichée (dernière valeur
   // connue) en naviguant ailleurs, puisque rien d'autre ne peut la faire varier.
   const [nbAnomaliesBloquantes, setNbAnomaliesBloquantes] = useState(0)
+  const [rechercheOuverte, setRechercheOuverte] = useState(false)
+  // Bascule Programmes sur une fiche précise depuis l'extérieur de cet écran
+  // (résultat de recherche globale, EXG-M10-04) — objet { id, cle } plutôt
+  // qu'un id nu : une NOUVELLE référence à chaque sélection, même si le même
+  // programme est rouvert deux fois de suite, pour que l'effet de
+  // Programmes.jsx se redéclenche à chaque fois.
+  const [programmeCible, setProgrammeCible] = useState(null)
 
   useEffect(() => {
     function onHashChange() {
@@ -46,6 +56,24 @@ function App() {
     }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  // Nomenclatures administrables (P19a) : chargées une fois au démarrage,
+  // indépendamment de la chaîne active (genre/tranche_antenne sont globaux).
+  useEffect(() => {
+    chargerGenres()
+    chargerTranches()
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setRechercheOuverte(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   if (!utilisateur) {
@@ -68,6 +96,13 @@ function App() {
     setChaineActive(lireChaineActive())
   }
 
+  // Résultat de recherche globale (EXG-M10-04) : bascule sur Programmes et
+  // ouvre directement la fiche visée.
+  function ouvrirProgrammeDepuisRecherche(id) {
+    naviguer('PROGRAMMES')
+    setProgrammeCible({ id, cle: crypto.randomUUID() })
+  }
+
   const Ecran = ECRANS[section]
 
   return (
@@ -86,11 +121,22 @@ function App() {
           onToggleSidebar={() => setSidebarOuverte((v) => !v)}
           chaineActive={chaineActive}
           onChangerChaine={changerChaine}
+          onOuvrirRecherche={() => setRechercheOuverte(true)}
         />
         <main className="flex-1 overflow-y-auto p-6">
-          <Ecran chaineActive={chaineActive} onAnomaliesBloquantes={setNbAnomaliesBloquantes} />
+          <Ecran
+            chaineActive={chaineActive}
+            onAnomaliesBloquantes={setNbAnomaliesBloquantes}
+            programmeCible={programmeCible}
+          />
         </main>
       </div>
+      <RechercheGlobale
+        chaineActive={chaineActive}
+        ouverte={rechercheOuverte}
+        onFermer={() => setRechercheOuverte(false)}
+        onOuvrirProgramme={ouvrirProgrammeDepuisRecherche}
+      />
     </div>
   )
 }

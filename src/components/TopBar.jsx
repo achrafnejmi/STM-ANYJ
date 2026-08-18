@@ -1,4 +1,4 @@
-import { Menu, LogOut, UserRound } from 'lucide-react'
+import { Menu, LogOut, UserRound, Search } from 'lucide-react'
 import { CHAINES } from '../lib/chaines.js'
 import Marque from './Marque.jsx'
 
@@ -8,6 +8,7 @@ export default function TopBar({
   onToggleSidebar,
   chaineActive,
   onChangerChaine,
+  onOuvrirRecherche,
 }) {
   return (
     <div>
@@ -19,6 +20,17 @@ export default function TopBar({
           </button>
           <Marque variante="topbar" />
         </div>
+
+        <button
+          type="button"
+          onClick={onOuvrirRecherche}
+          title="Recherche globale (Ctrl+K)"
+          className="hidden items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 sm:flex"
+        >
+          <Search size={16} />
+          Rechercher…
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-400">Ctrl+K</kbd>
+        </button>
 
         <div className="flex items-center gap-2">
           <span

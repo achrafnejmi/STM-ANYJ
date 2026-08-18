@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ListeProgrammes from './ListeProgrammes.jsx'
 import FicheProgramme from './FicheProgramme.jsx'
 
-export default function Programmes({ chaineActive }) {
+export default function Programmes({ chaineActive, programmeCible }) {
   const [vue, setVue] = useState('LISTE')
   const [programmeId, setProgrammeId] = useState(null)
 
@@ -10,6 +10,13 @@ export default function Programmes({ chaineActive }) {
     setProgrammeId(id)
     setVue('FICHE')
   }
+
+  // Résultat de recherche globale (EXG-M10-04, App.jsx) : `programmeCible`
+  // change de référence à chaque sélection (même id inclus), donc cet effet
+  // se redéclenche systématiquement.
+  useEffect(() => {
+    if (programmeCible?.id) ouvrir(programmeCible.id)
+  }, [programmeCible])
 
   function nouveau() {
     setProgrammeId(null)

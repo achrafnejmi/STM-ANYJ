@@ -332,3 +332,63 @@ export async function mettreAJourSpotBibliotheque(id, champs) {
 export async function supprimerSpotBibliotheque(id) {
   verifie(await supabase.from('spot_bibliotheque').delete().eq('id', id).select())
 }
+
+// --- genre (M0/Administration, P19a) ---
+
+export async function listerGenres() {
+  return verifie(await supabase.from('genre').select('*').order('ordre'))
+}
+
+export async function creerGenre(champs) {
+  return verifiePremiere(await supabase.from('genre').insert(champs).select())
+}
+
+export async function mettreAJourGenre(id, champs) {
+  return verifiePremiere(await supabase.from('genre').update(champs).eq('id', id).select())
+}
+
+export async function supprimerGenre(id) {
+  verifie(await supabase.from('genre').delete().eq('id', id).select())
+}
+
+// Garde-fou avant renommage/suppression (P19a) : combien de programmes
+// portent aujourd'hui ce libellé — .select avec count/head:true ne rapatrie
+// aucune ligne, juste le nombre.
+export async function compterProgrammesParGenre(libelleFr) {
+  const { count, error } = await supabase
+    .from('programme')
+    .select('id', { count: 'exact', head: true })
+    .eq('genre', libelleFr)
+  if (error) throw error
+  return count ?? 0
+}
+
+// --- tranche_antenne (M5/Administration, P19a) ---
+
+export async function listerTranchesAntenne() {
+  return verifie(await supabase.from('tranche_antenne').select('*').order('ordre'))
+}
+
+export async function creerTrancheAntenne(champs) {
+  return verifiePremiere(await supabase.from('tranche_antenne').insert(champs).select())
+}
+
+export async function mettreAJourTrancheAntenne(id, champs) {
+  return verifiePremiere(await supabase.from('tranche_antenne').update(champs).eq('id', id).select())
+}
+
+export async function supprimerTrancheAntenne(id) {
+  verifie(await supabase.from('tranche_antenne').delete().eq('id', id).select())
+}
+
+// Garde-fou avant renommage/suppression (P19a) : combien de campagnes ciblent
+// aujourd'hui ce code de tranche (campagne.tranches_ciblees, tableau de codes,
+// P16) — .contains() teste l'appartenance au tableau côté PostgREST.
+export async function compterCampagnesParTranche(code) {
+  const { count, error } = await supabase
+    .from('campagne')
+    .select('id', { count: 'exact', head: true })
+    .contains('tranches_ciblees', [code])
+  if (error) throw error
+  return count ?? 0
+}
