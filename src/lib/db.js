@@ -202,6 +202,10 @@ export async function listerBlocsGrilleTypeParChaine(chaineId) {
   )
 }
 
+export async function obtenirBlocGrilleType(id) {
+  return verifie(await supabase.from('bloc_grille_type').select('*').eq('id', id).maybeSingle())
+}
+
 export async function creerBlocGrilleType(champs) {
   return verifiePremiere(await supabase.from('bloc_grille_type').insert(champs).select())
 }
@@ -391,4 +395,43 @@ export async function compterCampagnesParTranche(code) {
     .contains('tranches_ciblees', [code])
   if (error) throw error
   return count ?? 0
+}
+
+// --- historique_action (Undo/Rollback ciblé, P19b) ---
+
+// Table de taille PoC — une seule lecture par écran+chaîne, tri/filtrage
+// ACTIVE/ANNULEE fait côté undoManager.js (même précédent que
+// listerToutesLesFenetresDroits/listerTousLesEpisodes).
+export async function listerHistoriqueActionsParChaineEcran(chaineId, ecran) {
+  return verifie(
+    await supabase
+      .from('historique_action')
+      .select('*')
+      .eq('chaine_id', chaineId)
+      .eq('ecran', ecran)
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function creerHistoriqueAction(champs) {
+  return verifiePremiere(await supabase.from('historique_action').insert(champs).select())
+}
+
+export async function mettreAJourHistoriqueAction(id, champs) {
+  return verifiePremiere(await supabase.from('historique_action').update(champs).eq('id', id).select())
+}
+
+// Périme la pile de rétablissement d'un écran+chaîne — appelé avant toute
+// nouvelle action réelle (pas un Annuler/Rétablir), sémantique undo/redo
+// standard : une nouvelle branche d'historique invalide le redo en attente.
+export async function perimerActionsAnnulees(chaineId, ecran) {
+  return verifie(
+    await supabase
+      .from('historique_action')
+      .update({ statut: 'PERIMEE' })
+      .eq('chaine_id', chaineId)
+      .eq('ecran', ecran)
+      .eq('statut', 'ANNULEE')
+      .select()
+  )
 }

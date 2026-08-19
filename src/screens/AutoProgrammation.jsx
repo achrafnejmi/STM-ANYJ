@@ -7,9 +7,9 @@ import {
   listerBlocsGrilleTypeParChaine,
   listerToutesLesFenetresDroits,
   creerDiffusionsLineaires,
-  supprimerDiffusionsLineairesParRun,
   supprimerDiffusionsLineairesAutomatiquesParPeriode,
 } from '../lib/db.js'
+import { enregistrerAction, etatPile, annulerDerniereAction, fusionnerChangements } from '../lib/undoManager.js'
 import { aujourdHuiISO, ajouterJours, lundiDeLaSemaine, joursDeLaSemaine, formaterPlageSemaine, formaterDateLongue } from '../lib/semaine.js'
 import { genererOccurrencesAPourvoir, genererProposition } from '../lib/autoprog.js'
 import ReservoirPanel from '../components/ReservoirPanel.jsx'
@@ -34,6 +34,11 @@ export default function AutoProgrammation({ chaineActive }) {
   // confirmation ({ rapport, runId }) — les deux sont mutuellement exclusifs.
   const [proposition, setProposition] = useState(null)
   const [rapportEcrit, setRapportEcrit] = useState(null)
+  // Id de l'entrée d'historique créée par la dernière confirmation — le
+  // bouton "Annuler la génération" n'est qu'un raccourci vers la pile
+  // générique (undoManager.js, unifiée avec Grille linéaire), revérifié au
+  // clic qu'il en représente toujours le sommet avant de déléguer.
+  const [derniereActionId, setDerniereActionId] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [annulation, setAnnulation] = useState(false)
 
@@ -117,10 +122,22 @@ export default function AutoProgrammation({ chaineActive }) {
         supprimees = await supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineActive.id, dateDebut, dateFin)
       }
       const creees = retenues.length > 0 ? await creerDiffusionsLineaires(retenues) : []
+      // Action composée (delete "Écraser" + insert de la génération) : le
+      // clic "Confirmer" est un seul geste utilisateur, une seule entrée
+      // d'historique — annulée/rétablie en bloc, jamais la moitié.
+      const entree = await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Auto-programmation (${creees.length} diffusion${creees.length > 1 ? 's' : ''})`,
+        operations: [
+          ...supprimees.map((d) => ({ table: 'diffusion_lineaire', type: 'DELETE', id: d.id, avant: d })),
+          ...creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
+        ],
+      })
       const idsSupprimes = new Set(supprimees.map((d) => d.id))
       setDiffusions((prev) => [...prev.filter((d) => !idsSupprimes.has(d.id)), ...creees])
+      setDerniereActionId(entree.id)
       setRapportEcrit({
-        runId: proposition.runId,
         rapport: {
           placements: creees,
           nonPourvus: proposition.rapport.nonPourvus,
@@ -135,17 +152,28 @@ export default function AutoProgrammation({ chaineActive }) {
     }
   }
 
-  // EXG-M4-02/RG-16 : retire en une seule opération tout ce que ce run a créé
-  // — uniquement le run qui vient d'être écrit dans cette session.
+  // Raccourci vers la pile générique (unifiée avec Grille linéaire,
+  // undoManager.js) : revérifie au clic que cette génération représente
+  // toujours le sommet de la pile GRILLE_LINEAIRE avant de déléguer — sinon
+  // une autre action a eu lieu depuis (sur cet écran ou sur Grille linéaire).
   async function annulerGeneration() {
-    if (!rapportEcrit) return
+    if (!rapportEcrit || !derniereActionId) return
     setAnnulation(true)
     setErreur(null)
     try {
-      const runId = rapportEcrit.runId
-      await supprimerDiffusionsLineairesParRun(runId)
-      setDiffusions((prev) => prev.filter((d) => d.run_id !== runId))
+      const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE')
+      if (entreeActiveId !== derniereActionId) {
+        setErreur("Cette génération n'est plus la dernière action sur la grille — utilisez Annuler depuis Grille linéaire si besoin.")
+        return
+      }
+      const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+      if (!resultat.ok) {
+        setErreur(resultat.motif)
+        return
+      }
+      setDiffusions((prev) => fusionnerChangements(prev, resultat.changements))
       setRapportEcrit(null)
+      setDerniereActionId(null)
     } catch (err) {
       setErreur(err.message)
     } finally {

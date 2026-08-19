@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleAlert, Layers3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2 } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
@@ -8,8 +8,8 @@ import {
   listerToutesLesFenetresDroits,
   listerEpisodes,
   creerDiffusionLineaire,
-  supprimerDiffusionLineaire,
 } from '../lib/db.js'
+import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
@@ -54,6 +54,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [blocSelectionne, setBlocSelectionne] = useState(null)
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
+  const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
 
   useEffect(() => {
@@ -74,6 +75,33 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
+  }, [chaineActive])
+
+  // Rafraîchi après chaque écriture (diffusions change systématiquement
+  // après une création/édition/suppression, y compris via undoManager) — pas
+  // de canal séparé à faire remonter depuis chaque site d'écriture.
+  useEffect(() => {
+    etatPile(chaineActive.id, 'GRILLE_LINEAIRE').then(setPile)
+  }, [chaineActive, diffusions])
+
+  // Ctrl+Z/Ctrl+Y locaux à cet écran (pas globaux comme Ctrl+K de la
+  // recherche) — jamais interceptés si le focus est dans un champ texte, pour
+  // ne pas voler le undo natif du navigateur.
+  useEffect(() => {
+    function onKeyDown(e) {
+      const cible = document.activeElement
+      if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        gererAnnuler()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        gererRetablir()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive par closure, seule dépendance réelle
   }, [chaineActive])
 
   const lundi = lundiDeLaSemaine(dateReference)
@@ -182,13 +210,36 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     setDiffusions((prev) => [...prev, ...nouvelles])
   }
 
-  // Annulation locale (non générique, P11 uniquement) : supprime en base les
-  // lignes que l'onglet Répéter vient tout juste de créer, par id.
-  function annulerCreationMultiple(ids) {
-    const idsASupprimer = new Set(ids)
-    Promise.all(ids.map((id) => supprimerDiffusionLineaire(id)))
-      .then(() => setDiffusions((prev) => prev.filter((d) => !idsASupprimer.has(d.id))))
-      .catch((err) => setErreur(err.message))
+  // Applique le résultat d'un Annuler/Rétablir (toolbar ou raccourcis P11/P15
+  // unifiés dans la pile générique, undoManager.js) à l'état local — même
+  // mécanique que appliquerEdition/appliquerSuppression, réutilisée plutôt
+  // que dupliquée : `ligne === null` -> la transmission disparaît, sinon elle
+  // (ré)apparaît avec ce contenu.
+  function appliquerChangementsPile(changements) {
+    setDiffusions((prev) => fusionnerChangements(prev, changements))
+    setBlocSelectionne((actuel) => {
+      if (!actuel) return actuel
+      const c = changements.find((c) => c.id === actuel.id)
+      return c ? c.ligne : actuel
+    })
+  }
+
+  async function gererAnnuler() {
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
+  }
+
+  async function gererRetablir() {
+    const resultat = await retablirAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
   }
 
   // La `date` d'une transmission = le jour d'antenne de la colonne où l'on
@@ -230,7 +281,16 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       genre: programme?.genre || null,
       titre_cache: programme?.titre ?? null,
     }
-    creerDiffusionLineaire(champs).then(appliquerCreation).catch((err) => setErreur(err.message))
+    creerDiffusionLineaire(champs)
+      .then((cree) =>
+        enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: 'GRILLE_LINEAIRE',
+          libelle: `Dépôt : ${cree.titre_cache}`,
+          operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
+        }).then(() => appliquerCreation(cree))
+      )
+      .catch((err) => setErreur(err.message))
   }
 
   return (
@@ -308,6 +368,26 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <span className="rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{nbBloquantes}</span>
               )}
             </button>
+            <div className="flex rounded-md border border-slate-300">
+              <button
+                type="button"
+                onClick={gererAnnuler}
+                disabled={!pile.peutAnnuler}
+                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
+                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={gererRetablir}
+                disabled={!pile.peutRetablir}
+                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
+                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -494,7 +574,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           onModifie={appliquerEdition}
           onSupprime={appliquerSuppression}
           onCreerPlusieurs={appliquerCreationMultiple}
-          onAnnulerPlusieurs={annulerCreationMultiple}
+          onChangementsPile={appliquerChangementsPile}
         />
       )}
 
@@ -645,6 +725,12 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
     }
     try {
       const cree = await creerDiffusionLineaire(champs)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Création : ${cree.titre_cache}`,
+        operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
+      })
       onCree(cree)
     } catch (err) {
       setErreur(err.message)

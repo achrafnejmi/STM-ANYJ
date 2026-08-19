@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { mettreAJourBlocGrilleType, supprimerBlocGrilleType } from '../lib/db.js'
+import { enregistrerAction } from '../lib/undoManager.js'
 import { GENRES } from '../lib/genres.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { minutesDepuisDebutAntenne } from '../lib/semaine.js'
@@ -19,7 +20,7 @@ function formaterDuree(heureDebut, heureFin) {
 // bloc déjà persisté : la création (glisser-déposer ou bouton « Ajouter »)
 // écrit directement en base côté GrilleType.jsx avant d'ouvrir ce panneau, pas
 // de mode « brouillon non enregistré » ici.
-export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSupprime }) {
+export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, onModifie, onSupprime }) {
   const [form, setForm] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -62,6 +63,12 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
       // 9 noms de type ou NULL, jamais une chaîne vide.
       const champs = { ...form, nom: form.nom.trim(), type_bloc: form.type_bloc || null }
       const maj = await mettreAJourBlocGrilleType(bloc.id, champs)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_TYPE',
+        libelle: `Édition : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
+        operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: bloc.id, avant: bloc, apres: maj }],
+      })
       onModifie(maj)
     } catch (err) {
       setErreur(err.message)
@@ -73,6 +80,12 @@ export default function PanneauBlocGrilleType({ bloc, onFermer, onModifie, onSup
   async function supprimer() {
     try {
       await supprimerBlocGrilleType(bloc.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_TYPE',
+        libelle: `Suppression : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
+        operations: [{ table: 'bloc_grille_type', type: 'DELETE', id: bloc.id, avant: bloc }],
+      })
       onSupprime(bloc.id)
     } catch (err) {
       setErreur(err.message)

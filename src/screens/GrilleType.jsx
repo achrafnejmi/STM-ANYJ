@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Undo2, Redo2 } from 'lucide-react'
 import { listerBlocsGrilleTypeParChaine, creerBlocGrilleType, mettreAJourBlocGrilleType } from '../lib/db.js'
+import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { couleurType } from '../lib/couleursType.js'
 import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE } from '../lib/semaine.js'
@@ -96,6 +97,7 @@ export default function GrilleType({ chaineActive }) {
   const [erreur, setErreur] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
   const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
+  const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
@@ -111,6 +113,31 @@ export default function GrilleType({ chaineActive }) {
       .finally(() => setChargement(false))
   }, [chaineActive])
 
+  // Rafraîchi après chaque écriture (blocs change systématiquement après une
+  // création/édition/suppression, y compris via undoManager).
+  useEffect(() => {
+    etatPile(chaineActive.id, 'GRILLE_TYPE').then(setPile)
+  }, [chaineActive, blocs])
+
+  // Ctrl+Z/Ctrl+Y locaux à cet écran, jamais interceptés si le focus est dans
+  // un champ texte (même garde que GrilleLineaire.jsx).
+  useEffect(() => {
+    function onKeyDown(e) {
+      const cible = document.activeElement
+      if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        gererAnnuler()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        gererRetablir()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive par closure, seule dépendance réelle
+  }, [chaineActive])
+
   const typesPresents = [...new Set(blocs.map((b) => b.type_bloc).filter(Boolean))]
 
   // Création directe en base (pas d'étape de formulaire intermédiaire), le
@@ -119,11 +146,47 @@ export default function GrilleType({ chaineActive }) {
   function creerEtSelectionner(champs) {
     setErreur(null)
     creerBlocGrilleType({ ...champs, chaine_id: chaineActive.id })
-      .then((cree) => {
-        setBlocs((prev) => [...prev, cree])
-        setBlocSelectionne(cree)
-      })
+      .then((cree) =>
+        enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: 'GRILLE_TYPE',
+          libelle: `Création : ${cree.nom || cree.type_bloc || 'bloc'}`,
+          operations: [{ table: 'bloc_grille_type', type: 'INSERT', id: cree.id, apres: cree }],
+        }).then(() => {
+          setBlocs((prev) => [...prev, cree])
+          setBlocSelectionne(cree)
+        })
+      )
       .catch((err) => setErreur(err.message))
+  }
+
+  // Applique le résultat d'un Annuler/Rétablir à l'état local — même
+  // mécanique que appliquerModification/appliquerSuppression.
+  function appliquerChangementsPile(changements) {
+    setBlocs((prev) => fusionnerChangements(prev, changements))
+    setBlocSelectionne((actuel) => {
+      if (!actuel) return actuel
+      const c = changements.find((c) => c.id === actuel.id)
+      return c ? c.ligne : actuel
+    })
+  }
+
+  async function gererAnnuler() {
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_TYPE')
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
+  }
+
+  async function gererRetablir() {
+    const resultat = await retablirAction(chaineActive.id, 'GRILLE_TYPE')
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
   }
 
   // Chevauchement possible à la création (dépôt ou bouton) : confirmation,
@@ -251,6 +314,12 @@ export default function GrilleType({ chaineActive }) {
 
     try {
       const maj = await mettreAJourBlocGrilleType(etat.bloc.id, candidat)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_TYPE',
+        libelle: `Déplacement/étirement : ${etat.bloc.nom || etat.bloc.type_bloc || 'bloc'}`,
+        operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: etat.bloc.id, avant: etat.bloc, apres: maj }],
+      })
       appliquerModification(maj)
     } catch (err) {
       setErreur(err.message)
@@ -270,14 +339,36 @@ export default function GrilleType({ chaineActive }) {
             <h2 className="text-base font-semibold text-slate-900">Grille type — {chaineActive.nom}</h2>
             <p className="text-sm text-slate-500">La grille type décrit la structure de la journée, pas les titres.</p>
           </div>
-          <button
-            type="button"
-            onClick={nouveauBlocGenerique}
-            className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
-          >
-            <Plus size={16} />
-            Ajouter un bloc
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-md border border-slate-300">
+              <button
+                type="button"
+                onClick={gererAnnuler}
+                disabled={!pile.peutAnnuler}
+                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
+                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={gererRetablir}
+                disabled={!pile.peutRetablir}
+                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
+                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={nouveauBlocGenerique}
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+            >
+              <Plus size={16} />
+              Ajouter un bloc
+            </button>
+          </div>
         </div>
 
         {typesPresents.length > 0 && (
@@ -415,6 +506,7 @@ export default function GrilleType({ chaineActive }) {
       {blocSelectionne && (
         <PanneauBlocGrilleType
           bloc={blocSelectionne}
+          chaineActive={chaineActive}
           onFermer={() => setBlocSelectionne(null)}
           onModifie={appliquerModification}
           onSupprime={appliquerSuppression}

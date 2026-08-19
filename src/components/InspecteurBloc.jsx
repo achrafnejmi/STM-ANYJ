@@ -7,6 +7,7 @@ import {
   creerDiffusionLineaire,
   creerDiffusionsLineaires,
 } from '../lib/db.js'
+import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoManager.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { ajouterJours, formaterJourCourt, formaterDateLongue, joursSelonJoursSemaine } from '../lib/semaine.js'
 
@@ -22,7 +23,7 @@ export default function InspecteurBloc({
   onModifie,
   onSupprime,
   onCreerPlusieurs,
-  onAnnulerPlusieurs,
+  onChangementsPile,
 }) {
   const [onglet, setOnglet] = useState('BLOC')
 
@@ -57,24 +58,26 @@ export default function InspecteurBloc({
         ))}
       </div>
 
-      {onglet === 'BLOC' && <OngletBloc diffusion={diffusion} programme={programme} onModifie={onModifie} onSupprime={onSupprime} />}
+      {onglet === 'BLOC' && (
+        <OngletBloc diffusion={diffusion} programme={programme} chaineActive={chaineActive} onModifie={onModifie} onSupprime={onSupprime} />
+      )}
       {onglet === 'REPETER' && (
         <OngletRepeter
           diffusion={diffusion}
           programme={programme}
           chaineActive={chaineActive}
           onCreerPlusieurs={onCreerPlusieurs}
-          onAnnulerPlusieurs={onAnnulerPlusieurs}
+          onChangementsPile={onChangementsPile}
         />
       )}
       {onglet === 'VECTEUR' && (
-        <OngletVecteur diffusion={diffusion} onModifie={onModifie} onCreerPlusieurs={onCreerPlusieurs} />
+        <OngletVecteur diffusion={diffusion} chaineActive={chaineActive} onModifie={onModifie} onCreerPlusieurs={onCreerPlusieurs} />
       )}
     </div>
   )
 }
 
-function OngletBloc({ diffusion, programme, onModifie, onSupprime }) {
+function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime }) {
   const [heureDebut, setHeureDebut] = useState(diffusion.heure_debut)
   const [heureFin, setHeureFin] = useState(diffusion.heure_fin)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -94,6 +97,12 @@ function OngletBloc({ diffusion, programme, onModifie, onSupprime }) {
     setErreur(null)
     try {
       const maj = await mettreAJourDiffusionLineaire(diffusion.id, { heure_debut: heureDebut, heure_fin: heureFin })
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Modification horaire : ${diffusion.titre_cache}`,
+        operations: [{ table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: maj }],
+      })
       onModifie(maj)
     } catch (err) {
       setErreur(err.message)
@@ -112,6 +121,12 @@ function OngletBloc({ diffusion, programme, onModifie, onSupprime }) {
     setErreur(null)
     try {
       await supprimerDiffusionLineaire(diffusion.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Déprogrammation : ${diffusion.titre_cache}`,
+        operations: [{ table: 'diffusion_lineaire', type: 'DELETE', id: diffusion.id, avant: diffusion }],
+      })
       onSupprime(diffusion.id)
     } catch (err) {
       setErreur(err.message)
@@ -189,7 +204,7 @@ function OngletBloc({ diffusion, programme, onModifie, onSupprime }) {
   )
 }
 
-function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, onAnnulerPlusieurs }) {
+function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, onChangementsPile }) {
   const [episodes, setEpisodes] = useState([])
   const [chargementEpisodes, setChargementEpisodes] = useState(true)
   const requeteId = useRef(0)
@@ -200,7 +215,11 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
   const [joursCoches, setJoursCoches] = useState(() => [jourOrigineIndex])
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
-  const [dernierLotCree, setDernierLotCree] = useState(null)
+  // Id de l'entrée d'historique créée par le dernier "Appliquer" — le bandeau
+  // "Annuler" ci-dessous n'est qu'un raccourci vers la pile générique
+  // (undoManager.js), revérifié au clic qu'il en représente toujours le
+  // sommet avant de déléguer (sinon une autre action a eu lieu depuis).
+  const [derniereActionId, setDerniereActionId] = useState(null)
 
   // Garde anti-réponse-périmée (même pattern que FormulaireCreneau) : si le
   // bloc sélectionné change vite, une réponse arrivée en retard pour l'ancien
@@ -262,8 +281,14 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
         titre_cache: diffusion.titre_cache,
       }))
       const creees = await creerDiffusionsLineaires(lignes)
+      const entree = await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Répétition : ${diffusion.titre_cache} (${creees.length} occurrence${creees.length > 1 ? 's' : ''})`,
+        operations: creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
+      })
       onCreerPlusieurs(creees)
-      setDernierLotCree(creees.map((d) => d.id))
+      setDerniereActionId(entree.id)
       setJoursCoches([jourOrigineIndex])
     } catch (err) {
       setErreur(err.message)
@@ -272,10 +297,20 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
     }
   }
 
-  function annuler() {
-    if (!dernierLotCree) return
-    onAnnulerPlusieurs(dernierLotCree)
-    setDernierLotCree(null)
+  async function annulerViaPile() {
+    if (!derniereActionId) return
+    const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (entreeActiveId !== derniereActionId) {
+      setErreur("Cette répétition n'est plus la dernière action sur la grille — utilisez Annuler dans la barre d'outils.")
+      return
+    }
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    onChangementsPile(resultat.changements)
+    setDerniereActionId(null)
   }
 
   return (
@@ -357,10 +392,10 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
         {enregistrement ? 'Application…' : `Appliquer (${retenues.length})`}
       </button>
 
-      {dernierLotCree && (
+      {derniereActionId && (
         <div className="flex items-center justify-between rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          <span>{dernierLotCree.length} transmission(s) créée(s).</span>
-          <button type="button" onClick={annuler} className="font-medium underline hover:no-underline">
+          <span>Transmissions créées.</span>
+          <button type="button" onClick={annulerViaPile} className="font-medium underline hover:no-underline">
             Annuler
           </button>
         </div>
@@ -369,7 +404,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
   )
 }
 
-function OngletVecteur({ diffusion, onModifie, onCreerPlusieurs }) {
+function OngletVecteur({ diffusion, chaineActive, onModifie, onCreerPlusieurs }) {
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const estException = diffusion.vecteur != null
@@ -389,6 +424,17 @@ function OngletVecteur({ diffusion, onModifie, onCreerPlusieurs }) {
       const original = await mettreAJourDiffusionLineaire(diffusion.id, { vecteur: valeurOriginal })
       const { id: _id, ...champsACopier } = diffusion
       const nouvelle = await creerDiffusionLineaire({ ...champsACopier, vecteur: valeurNouvelle })
+      // Action composée (1 update + 1 insert) : une seule entrée d'historique,
+      // annulée/rétablie comme un bloc (jamais la moitié d'une scission).
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        libelle: `Scission vecteur : ${diffusion.titre_cache}`,
+        operations: [
+          { table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: original },
+          { table: 'diffusion_lineaire', type: 'INSERT', id: nouvelle.id, apres: nouvelle },
+        ],
+      })
       onModifie(original)
       onCreerPlusieurs([nouvelle])
     } catch (err) {
