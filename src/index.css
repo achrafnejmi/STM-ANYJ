@@ -15,4 +15,13 @@
   --color-snrt-indigo: #4f46e5; /* P9 — genre Religieux (repris du mockup V3) */
   --color-snrt-purple: #7c3aed; /* P9 — genre Divertissement (repris du mockup V3) */
   --color-snrt-amber: #f59e0b; /* Grille type — type de bloc Matinale */
+
+  /* Grille non-linéaire (P20, hors cahier) — couleurs de marque des
+     plateformes réseaux sociaux. FORJA n'a pas de couleur ici : son logo
+     réel (public/brand/forja-logo.svg) s'affiche sans fond coloré. */
+  --color-plateforme-facebook: #1877f2;
+  --color-plateforme-instagram: #e1306c; /* approximation plate, pas le dégradé officiel */
+  --color-plateforme-tiktok: #010101;
+  --color-plateforme-snapchat: #fffc00;
+  --color-plateforme-youtube: #ff0000;
 }

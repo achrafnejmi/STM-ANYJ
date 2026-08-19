@@ -172,26 +172,42 @@ export async function supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineI
   )
 }
 
-// --- diffusion_non_lineaire --- (CRUD prêt pour P9, rien ne l'appelle encore)
+// --- publication_reseau (Grille non-linéaire, hors cahier, P20) ---
 
-export async function listerDiffusionsNonLineaires() {
-  return verifie(await supabase.from('diffusion_non_lineaire').select('*').order('date_publication'))
+export async function listerPublicationsReseauParChaine(chaineId) {
+  return verifie(
+    await supabase.from('publication_reseau').select('*').eq('chaine_id', chaineId).order('date_publication')
+  )
 }
 
-export async function obtenirDiffusionNonLineaire(id) {
-  return verifie(await supabase.from('diffusion_non_lineaire').select('*').eq('id', id).maybeSingle())
+export async function creerPublicationReseau(champs) {
+  return verifiePremiere(await supabase.from('publication_reseau').insert(champs).select())
 }
 
-export async function creerDiffusionNonLineaire(champs) {
-  return verifiePremiere(await supabase.from('diffusion_non_lineaire').insert(champs).select())
+export async function mettreAJourPublicationReseau(id, champs) {
+  return verifiePremiere(await supabase.from('publication_reseau').update(champs).eq('id', id).select())
 }
 
-export async function mettreAJourDiffusionNonLineaire(id, champs) {
-  return verifiePremiere(await supabase.from('diffusion_non_lineaire').update(champs).eq('id', id).select())
+export async function supprimerPublicationReseau(id) {
+  verifie(await supabase.from('publication_reseau').delete().eq('id', id).select())
 }
 
-export async function supprimerDiffusionNonLineaire(id) {
-  verifie(await supabase.from('diffusion_non_lineaire').delete().eq('id', id).select())
+// --- publication_vod (Grille non-linéaire, hors cahier, P20) ---
+
+export async function listerPublicationsVodParChaine(chaineId) {
+  return verifie(await supabase.from('publication_vod').select('*').eq('chaine_id', chaineId).order('date_publication'))
+}
+
+export async function creerPublicationVod(champs) {
+  return verifiePremiere(await supabase.from('publication_vod').insert(champs).select())
+}
+
+export async function mettreAJourPublicationVod(id, champs) {
+  return verifiePremiere(await supabase.from('publication_vod').update(champs).eq('id', id).select())
+}
+
+export async function supprimerPublicationVod(id) {
+  verifie(await supabase.from('publication_vod').delete().eq('id', id).select())
 }
 
 // --- bloc_grille_type (M3, P13) ---
