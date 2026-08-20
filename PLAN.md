@@ -63,21 +63,80 @@ Chaque phase apporte sa **migration SQL** (fichier `supabase/migration-*.sql`, j
 
 ## 8. Feuille de route (brique par brique, Essentiel d'abord)
 
-Acquis : **P0–P8**. Nouvelles briques :
+Acquis : **P0–P8** (fondation). **P9–P20 livrés ✅** — cœur linéaire complet (espace par
+chaîne, plan de diffusion + inspecteur + anomalies, grille type, auto-programmation, plan
+média, catalogue/fiche/droits, conducteur, stock & bilans, recherche globale + admin + undo
+ciblé, grille non-linéaire réseaux + VOD).
 
-- **P9 — M1 Espace de travail par chaîne** : sélecteur de chaîne dans la coquille (5 chaînes, code, couleur, ligne éditoriale) ; scoping des données par chaîne ; bande de couleur chaîne. *Test : changer de chaîne recharge le contexte, sans perte.*
-- **P10 — M2 (1/3) Plan de diffusion : catalogue glissable + drag-drop + aperçu historique** ⭐ (demande en cours). Panneau Catalogue à gauche (recherche, genre, vignette, durée, épisodes) ; **drag-drop d'un titre sur la grille** (heure calculée depuis la position, arrondi 5 min) ; **aperçu historique de diffusion au clic** sur un titre. *Drag autorisé pour tout programme pour l'instant (le garde-fou PAD/droits arrive avec M6).* *Test : glisser un titre → bloc créé au bon horaire ; clic titre → aperçu historique.*
-- **P11 — M2 (2/3) Inspecteur de bloc** : onglets Bloc (heure début/fin, durée, déprogrammation) / Répéter (jours, incrément épisodes) / Vecteur (TNT/Sat, exception). *Test : éditer/répéter/déprogrammer un bloc.*
-- **P12 — M2 (partiel) + M8 Anomalies** : **chevauchements** + centre d'anomalies + compteur sur le rail (+ contrôle des droits au geste quand dispo). **Trous d'antenne REPORTÉS après M3** (un trou se définit *dans un bloc de grille type*, EXG-M2-07). *Test : chevauchements détectés et listés dans le centre d'anomalies.*
-- **P13 — M3 Grille type** : blocs nommés par chaîne (plage, fréquence, jours, genre attendu — **aucun titre**), remplace la « pré-grille ». Affichage en **fond du plan** (bandes colorées, EXG-M3-04) **+ trous d'antenne** (désormais définissables par rapport aux blocs). *Test : définir un bloc, le voir en fond, un vide dans un bloc = trou signalé.*
-- **P14 — M6 Catalogue et fiche titre (complet)** : historique complet, frise des droits, épisodes, métadonnées FR/AR/EN, statut PAD → **active le garde-fou PAD/droits** du drag (M2). *Test : fiche complète, historique intégral, droits.*
-- **P15 — M4 Auto-programmation** : moteur déterministe + réservoir + règles + rapport, annulable. *Test : générer une journée, rapport des blocs vides motivés.*
-- **P16 — M5 Plan média** : campagnes + remplissage inter-programmes + couverture. *Test : campagne → bandes-annonces placées.*
-- **P17 — M7 Conducteur d'antenne** : déroulé minuté, timecodes cumulés, insertion en place. *Test : conducteur d'un jour, écarts affichés.*
-- **P18 — M9 Stock et bilans** : indicateurs, répartition par genre, fins de droits. *Test : bilan cohérent, export.*
-- **P19 — M0 finitions + M10 recherche globale** : annuler/rétablir global, notifications motivées, sélecteur de vecteur, recherche par raccourci. *Test : undo/redo, recherche épisode → titre.*
-- **P20 — Extension : Grille non-linéaire (par plateforme)** — hors cahier, conservée (voir §9).
-- **P21 — Finition UI/UX + exports (PDF/Excel/Word) + déploiement.**
+- **P9 — M1 Espace de travail par chaîne** ✅ LIVRÉ : sélecteur de chaîne dans la coquille (5 chaînes, code, couleur, ligne éditoriale) ; scoping des données par chaîne ; bande de couleur chaîne. *Test : changer de chaîne recharge le contexte, sans perte.*
+- **P10 — M2 (1/3) Plan de diffusion : catalogue glissable + drag-drop + aperçu historique** ✅ LIVRÉ. Panneau Catalogue à gauche (recherche, genre, vignette, durée, épisodes) ; **drag-drop d'un titre sur la grille** (heure calculée depuis la position, arrondi 5 min) ; **aperçu historique de diffusion au clic** sur un titre. *Drag autorisé pour tout programme pour l'instant (le garde-fou PAD/droits arrive avec M6).* *Test : glisser un titre → bloc créé au bon horaire ; clic titre → aperçu historique.*
+- **P11 — M2 (2/3) Inspecteur de bloc** ✅ LIVRÉ : onglets Bloc (heure début/fin, durée, déprogrammation) / Répéter (jours, incrément épisodes) / Vecteur (TNT/Sat, exception). *Test : éditer/répéter/déprogrammer un bloc.*
+- **P12 — M2 (partiel) + M8 Anomalies** ✅ LIVRÉ : **chevauchements** + centre d'anomalies + compteur sur le rail (+ contrôle des droits au geste quand dispo). **Trous d'antenne REPORTÉS après M3** (un trou se définit *dans un bloc de grille type*, EXG-M2-07). *Test : chevauchements détectés et listés dans le centre d'anomalies.*
+- **P13 — M3 Grille type** ✅ LIVRÉ : blocs nommés par chaîne (plage, fréquence, jours, genre attendu — **aucun titre**), remplace la « pré-grille ». Affichage en **fond du plan** (bandes colorées, EXG-M3-04) **+ trous d'antenne** (désormais définissables par rapport aux blocs). *Test : définir un bloc, le voir en fond, un vide dans un bloc = trou signalé.*
+- **P14 — M6 Catalogue et fiche titre (complet)** ✅ LIVRÉ : historique complet, frise des droits, épisodes, métadonnées FR/AR/EN, statut PAD → **active le garde-fou PAD/droits** du drag (M2). *Test : fiche complète, historique intégral, droits.*
+- **P15 — M4 Auto-programmation** ✅ LIVRÉ : moteur déterministe + réservoir + règles + rapport, annulable. *Test : générer une journée, rapport des blocs vides motivés.*
+- **P16 — M5 Plan média** ✅ LIVRÉ : campagnes + remplissage inter-programmes + couverture. *Test : campagne → bandes-annonces placées.*
+- **P17 — M7 Conducteur d'antenne** ✅ LIVRÉ : déroulé minuté, timecodes cumulés, insertion en place. *Test : conducteur d'un jour, écarts affichés.*
+- **P18 — M9 Stock et bilans** ✅ LIVRÉ : indicateurs, répartition par genre, fins de droits. *Test : bilan cohérent, export.*
+- **P19 — M0 finitions + M10 recherche globale** ✅ LIVRÉ : annuler/rétablir global, notifications motivées, sélecteur de vecteur, recherche par raccourci. *Test : undo/redo, recherche épisode → titre.*
+- **P20 — Extension : Grille non-linéaire (par plateforme)** ✅ LIVRÉ — hors cahier, conservée (voir §9).
+
+### P21 — Finitions UI/UX (légères, faible risque)
+
+6 lots indépendants. Un lot = plan → validation → code → test ✅ → commit. Ne touchent PAS le
+scoping par chaîne (donc sans conflit avec le changement d'exclusivité P22).
+
+- **Lot A — Programme (fiche + liste)** : « Attestation » → « Contrat » partout (label +
+  champ + stockage) + bouton « Consulter le contrat » (ouvrir le fichier) ; supprimer le champ
+  Thématique ; liste Programmes : afficher la durée moyenne (Σ durées épisodes ÷ nb épisodes) à
+  la place de la colonne sous-genre ; fiche : la section Droits suit directement l'upload du
+  contrat, supprimer la jauge, afficher clairement début / fin / passages restants (couleur ou
+  placement soigné) ; filtre par épisode dans l'onglet Historique.
+- **Lot B — Grille linéaire (UX)** : déprogrammer un bloc via un X rouge à droite du bloc (en
+  plus de l'inspecteur).
+- **Lot C — Plein écran / masquer panneaux** : grille type ET grille linéaire — bouton pour
+  masquer la barre latérale (catalogue/palette) et élargir la grille.
+- **Lot D — Accueil (dashboard)** : remplacer les barres CSS par de vrais graphes (camembert
+  répartition par genre, barres/histogramme), écran plus convivial.
+- **Lot E — Logos de chaînes** : afficher le logo de chaque chaîne dans le sélecteur (5 logos
+  fournis) + aligner la baseline des deux logos (étoile + lockup).
+- **Lot F — Contrats & droits** : densifier l'écran (trop de vide), meilleure mise en page du
+  tableau de bord des droits.
+
+> **En attente de clarification** : « Type de bloc == Genre (grille linéaire) : corriger la
+> logique » — sens à préciser avec l'utilisateur. Rattachement probable : P21 ou P22.
+
+### P22–P30 — Nouvelles fonctionnalités (lourdes), brique par brique
+
+> **Principe — Exclusivité (P22)** : programme partagé toutes chaînes par défaut, `chaine_id`
+> nullable ; exclusif = `chaine_id` renseigné. À traiter avant les autres features car ça touche
+> tout le scoping.
+
+- **P22 — Modèle d'exclusivité (FONDATION, en premier)** : un programme est partagé par toutes
+  les chaînes par défaut ; seuls les programmes marqués exclusifs sont liés à une chaîne.
+  `programme.chaine_id` devient **nullable** : NULL = partagé toutes chaînes, renseigné =
+  exclusif à cette chaîne. Catalogue d'une chaîne = programmes partagés (chaine_id NULL) +
+  exclusifs de cette chaîne. Adapter : contrainte d'unicité, filtrage catalogue, création (case
+  « Exclusif à cette chaîne » qui fixe chaine_id si cochée). ⚠️ Répercussions sur TOUT le
+  scoping — audit de tous les usages de chaine_id avant de coder.
+- **P23 — Multi-documents : Grille linéaire** : enregistrer des grilles nommées, les rouvrir,
+  plusieurs onglets ouverts, copier/coller un ou plusieurs programmes entre grilles.
+- **P24 — Multi-documents : Plan média** (même mécanique que P23 : enregistrer / renommer /
+  supprimer, onglets, copier/coller BA & spots).
+- **P25 — Grille : vues mois & an + zoom** : vues mensuelle/annuelle ; zoom pour programmer à
+  la minute, précision via config prédéfinie.
+- **P26 — Exports & imports** : export de la grille en Excel/Word/PDF ; import d'un plan média
+  Excel (format fourni par l'utilisateur).
+- **P27 — Rediffusion avancée + vecteur TNT⇄SAT** : rediffusion — cocher tous les jours d'un
+  coup, définir un pas, sauter des jours ; vecteur — une exception TNT vide le créneau SAT et
+  prévient clairement l'utilisateur (et inversement).
+- **P28 — Grille type : création & saisonnalité** : créer une grille type de zéro puis
+  l'enregistrer ; 3 grilles types saisonnières (Ramadan, rentrée, été) qui basculent
+  automatiquement selon la période de l'année.
+- **P29 — Notifications** : alerter au 1er ajout d'un programme ; signaler si un programme est
+  en fin de droits ou proche (reprise de l'idée notification d'origine).
+- **P30 — Rollback étendu** : étendre annuler/rétablir au plan média et à la grille
+  non-linéaire.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
