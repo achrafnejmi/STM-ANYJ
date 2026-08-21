@@ -10,10 +10,10 @@
   --color-snrt-red: #cc2430;
   --color-snrt-green: #007824;
   --color-snrt-orange: #d86000;
-  --color-snrt-genre-turquoise: #45d6b8; /* adouci depuis #60fccc */
-  --color-snrt-genre-rose: #e478b4;
-  --color-snrt-indigo: #4f46e5; /* P9 — genre Religieux (repris du mockup V3) */
-  --color-snrt-purple: #7c3aed; /* P9 — genre Divertissement (repris du mockup V3) */
+  --color-snrt-genre-turquoise: #00a374; /* corrigé contraste+CVD (audit dataviz, P21 lot palette) — remplace #45d6b8 */
+  --color-snrt-genre-rose: #c571ae; /* corrigé contraste (audit dataviz) — remplace #e478b4 */
+  --color-snrt-indigo: #3a09f5; /* P9 — genre Religieux ; re-teinté (audit dataviz, indiscernable de Divertissement) — remplace #4f46e5 */
+  --color-snrt-purple: #921e98; /* P9 — genre Divertissement ; re-teinté (audit dataviz) — remplace #7c3aed */
   --color-snrt-amber: #f59e0b; /* Grille type — type de bloc Matinale */
 
   /* Grille non-linéaire (P20, hors cahier) — couleurs de marque des
