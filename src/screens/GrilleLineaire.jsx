@@ -544,9 +544,9 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                                   setErreur(err.message)
                                 )
                               }}
-                              className="absolute -top-1.5 -right-1.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
+                              className="absolute top-0.5 right-0.5 z-10 flex h-3 w-3 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
                             >
-                              <X size={10} strokeWidth={3} />
+                              <X size={8} strokeWidth={3} />
                             </button>
                             <div className="font-medium">
                               {diffusion.heure_debut}–{diffusion.heure_fin}
