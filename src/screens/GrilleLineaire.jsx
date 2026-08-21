@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2, X } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
@@ -10,6 +10,7 @@ import {
   creerDiffusionLineaire,
 } from '../lib/db.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
+import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
@@ -504,17 +505,23 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
                         const estSelectionne = blocSelectionne?.id === diffusion.id
                         const enAnomalieBloquante = idsBloquants.has(diffusion.id)
+                        const selectionner = (e) => {
+                          e.stopPropagation()
+                          setModale(null)
+                          setAnomaliesOuvertes(false)
+                          setBlocSelectionne(diffusion)
+                        }
                         return (
-                          <button
-                            type="button"
+                          <div
+                            role="button"
+                            tabIndex={0}
                             key={diffusion.id}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setModale(null)
-                              setAnomaliesOuvertes(false)
-                              setBlocSelectionne(diffusion)
+                            onClick={selectionner}
+                            onKeyDown={(e) => {
+                              if (e.target !== e.currentTarget) return
+                              if (e.key === 'Enter' || e.key === ' ') selectionner(e)
                             }}
-                            className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
+                            className={`group absolute cursor-pointer overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
                               estSelectionne
                                 ? 'ring-2 ring-offset-1 ring-snrt-navy'
                                 : enAnomalieBloquante
@@ -528,6 +535,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                               width: `${100 / nbPistes}%`,
                             }}
                           >
+                            <button
+                              type="button"
+                              title="Déprogrammer"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deprogrammerDiffusion(diffusion, { chaineActive, onSupprime: appliquerSuppression }).catch((err) =>
+                                  setErreur(err.message)
+                                )
+                              }}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
+                            >
+                              <X size={10} strokeWidth={3} />
+                            </button>
                             <div className="font-medium">
                               {diffusion.heure_debut}–{diffusion.heure_fin}
                             </div>
@@ -536,7 +556,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                               {diffusion.vecteur ? `[${diffusion.vecteur === 'SATELLITE' ? 'SAT' : 'TNT'}] ` : ''}
                               {diffusion.titre_cache}
                             </div>
-                          </button>
+                          </div>
                         )
                       })}
                     </div>

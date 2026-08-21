@@ -3,11 +3,11 @@ import { X, Trash2, SplitSquareHorizontal, Tv, Radio, Layers3 } from 'lucide-rea
 import {
   listerEpisodes,
   mettreAJourDiffusionLineaire,
-  supprimerDiffusionLineaire,
   creerDiffusionLineaire,
   creerDiffusionsLineaires,
 } from '../lib/db.js'
 import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoManager.js'
+import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { ajouterJours, formaterJourCourt, formaterDateLongue, joursSelonJoursSemaine } from '../lib/semaine.js'
 
@@ -112,22 +112,12 @@ function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime 
   }
 
   // window.confirm suffit pour ce PoC — à remplacer par une vraie modale de
-  // confirmation en P21 (finition UI/UX).
+  // confirmation en P21 Lot G. Chemin de suppression partagé avec le X de la
+  // grille (P21 Lot B) — voir lib/deprogrammation.js.
   async function deprogrammer() {
-    const confirme = window.confirm(
-      `Déprogrammer « ${diffusion.titre_cache} » (${diffusion.heure_debut}) du ${formaterDateLongue(diffusion.date)} ?`
-    )
-    if (!confirme) return
     setErreur(null)
     try {
-      await supprimerDiffusionLineaire(diffusion.id)
-      await enregistrerAction({
-        chaineId: chaineActive.id,
-        ecran: 'GRILLE_LINEAIRE',
-        libelle: `Déprogrammation : ${diffusion.titre_cache}`,
-        operations: [{ table: 'diffusion_lineaire', type: 'DELETE', id: diffusion.id, avant: diffusion }],
-      })
-      onSupprime(diffusion.id)
+      await deprogrammerDiffusion(diffusion, { chaineActive, onSupprime })
     } catch (err) {
       setErreur(err.message)
     }
