@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
@@ -49,6 +49,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [afficherGrilleType, setAfficherGrilleType] = useState(true)
+  const [pleinEcran, setPleinEcran] = useState(false)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
@@ -343,6 +344,17 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             </button>
             <button
               type="button"
+              onClick={() => setPleinEcran((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+              title={pleinEcran ? 'Afficher le panneau catalogue' : 'Masquer le panneau catalogue pour élargir la grille'}
+            >
+              {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+              Plein écran
+            </button>
+            <button
+              type="button"
               onClick={() => setAfficherGrilleType((v) => !v)}
               className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
                 afficherGrilleType
@@ -410,7 +422,9 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       </div>
 
       <div className="flex items-start gap-4">
-        <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
+        {!pleinEcran && (
+          <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
+        )}
 
         {!chargement && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">

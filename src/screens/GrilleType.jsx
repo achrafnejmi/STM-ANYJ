@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
-import { Plus, Undo2, Redo2 } from 'lucide-react'
+import { Plus, Undo2, Redo2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { listerBlocsGrilleTypeParChaine, creerBlocGrilleType, mettreAJourBlocGrilleType } from '../lib/db.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
@@ -98,6 +98,7 @@ export default function GrilleType({ chaineActive }) {
   const [blocSelectionne, setBlocSelectionne] = useState(null)
   const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
+  const [pleinEcran, setPleinEcran] = useState(false)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
@@ -340,6 +341,17 @@ export default function GrilleType({ chaineActive }) {
             <p className="text-sm text-slate-500">La grille type décrit la structure de la journée, pas les titres.</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPleinEcran((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+              title={pleinEcran ? 'Afficher le panneau des types de bloc' : 'Masquer le panneau des types de bloc pour élargir la grille'}
+            >
+              {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+              Plein écran
+            </button>
             <div className="flex rounded-md border border-slate-300">
               <button
                 type="button"
@@ -389,7 +401,7 @@ export default function GrilleType({ chaineActive }) {
       </div>
 
       <div className="flex items-start gap-4">
-        <PaletteTypes dragRef={dragRef} />
+        {!pleinEcran && <PaletteTypes dragRef={dragRef} />}
 
         {!chargement && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
