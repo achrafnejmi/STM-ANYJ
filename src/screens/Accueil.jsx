@@ -42,6 +42,69 @@ function CarteIndicateur({ libelle, valeur }) {
   )
 }
 
+// Variable CSS Tailwind v4 correspondant à une classe `bg-snrt-*` (couleursGenre.js)
+// — style inline, pas une classe Tailwind construite dynamiquement (le scanner JIT
+// n'indexerait pas une classe assemblée à l'exécution).
+function couleurCss(classeFond) {
+  return `var(${classeFond.replace(/^bg-/, '--color-')})`
+}
+
+const RAYON_DONUT = 15.9155 // circonférence ≈ 100 : les pourcentages s'appliquent directement au dasharray
+const GAP_DONUT = 0.8 // % de circonférence laissé vide entre deux secteurs
+
+// Camembert de répartition par genre (P21 Lot D) — anneau SVG, une piste par
+// genre, technique stroke-dasharray (pas de calcul trigonométrique). Sert de
+// vue proportionnelle complémentaire aux barres ; la liste de barres à côté fait
+// office de légende commune (mêmes couleurs, mêmes noms de genre).
+function Camembert({ repartition, volumeTotalMinutes }) {
+  if (volumeTotalMinutes <= 0) {
+    return (
+      <div className="relative h-40 w-40 shrink-0">
+        <svg viewBox="0 0 42 42" className="h-full w-full">
+          <circle cx="21" cy="21" r={RAYON_DONUT} fill="none" strokeWidth="6" className="stroke-slate-100" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-slate-400">
+          Aucun volume disponible
+        </div>
+      </div>
+    )
+  }
+  let cumul = 0
+  return (
+    <div className="relative h-40 w-40 shrink-0">
+      <svg viewBox="0 0 42 42" className="h-full w-full -rotate-90">
+        <circle cx="21" cy="21" r={RAYON_DONUT} fill="none" strokeWidth="6" className="stroke-slate-100" />
+        {repartition
+          .filter((r) => r.volumeMinutes > 0)
+          .map((r) => {
+            const { fond } = couleurGenre(r.genre.fr)
+            const pct = (r.volumeMinutes / volumeTotalMinutes) * 100
+            const longueur = Math.max(0, pct - GAP_DONUT)
+            const decalage = -cumul
+            cumul += pct
+            return (
+              <circle
+                key={r.genre.fr}
+                cx="21"
+                cy="21"
+                r={RAYON_DONUT}
+                fill="none"
+                strokeWidth="6"
+                strokeDasharray={`${longueur} ${100 - longueur}`}
+                strokeDashoffset={decalage}
+                style={{ stroke: couleurCss(fond) }}
+              />
+            )
+          })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-sm font-semibold text-slate-900">{formaterVolumeHeures(volumeTotalMinutes)}</span>
+        <span className="text-[10px] text-slate-500">volume total</span>
+      </div>
+    </div>
+  )
+}
+
 export default function Accueil({ chaineActive }) {
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
@@ -131,6 +194,8 @@ export default function Accueil({ chaineActive }) {
     [programmes, episodesParProgrammeId, fenetresDroits, dateReference]
   )
   const volumeMaxGenre = Math.max(1, ...repartition.map((r) => r.volumeMinutes))
+  const volumeTotalRepartition = useMemo(() => repartition.reduce((acc, r) => acc + r.volumeMinutes, 0), [repartition])
+  const graduationsAxe = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(volumeMaxGenre * f))
 
   // Bonus (hors périmètre littéral du cahier M9) : couverture plan média,
   // peu coûteuse et toujours fraîche — pas le compteur d'anomalies (valeur
@@ -294,22 +359,34 @@ export default function Accueil({ chaineActive }) {
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Répartition par genre (stock disponible)</h2>
-            <div className="space-y-3">
-              {repartition.map((r) => {
-                const { fond } = couleurGenre(r.genre.fr)
-                const pct = Math.round((r.volumeMinutes / volumeMaxGenre) * 100)
-                return (
-                  <div key={r.genre.fr}>
-                    <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                      <span>{r.genre.fr} / {r.genre.ar}</span>
-                      <span>{formaterVolumeHeures(r.volumeMinutes)} · {r.nbEpisodesPrets} ép. prêts · {r.nbTitres} titres</span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-slate-100">
-                      <div className={`h-2.5 rounded-full ${fond}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="flex flex-col gap-8 lg:flex-row">
+              <div className="mx-auto lg:mx-0">
+                <Camembert repartition={repartition} volumeTotalMinutes={volumeTotalRepartition} />
+              </div>
+              <div className="flex-1">
+                <div className="space-y-3">
+                  {repartition.map((r) => {
+                    const { fond } = couleurGenre(r.genre.fr)
+                    const pct = Math.round((r.volumeMinutes / volumeMaxGenre) * 100)
+                    return (
+                      <div key={r.genre.fr}>
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                          <span>{r.genre.fr} / {r.genre.ar}</span>
+                          <span>{formaterVolumeHeures(r.volumeMinutes)} · {r.nbEpisodesPrets} ép. prêts · {r.nbTitres} titres</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-slate-100">
+                          <div className={`h-2.5 rounded-full ${fond}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+                  {graduationsAxe.map((g, i) => (
+                    <span key={i}>{formaterVolumeHeures(g)}</span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
