@@ -19,6 +19,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
   const [episodes, setEpisodes] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
+  const [filtreEpisode, setFiltreEpisode] = useState('')
 
   useEffect(() => {
     setChargement(true)
@@ -38,6 +39,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
   // qu'en interne, pour déterminer la 1re occurrence de chaque épisode).
   const passees = diffusions.filter((d) => d.date < aujourdHui)
   const annotees = annoterNature(passees)
+  const anoteesFiltrees = filtreEpisode ? annotees.filter((d) => d.episode_id === filtreEpisode) : annotees
   const historiqueParEpisode = calculerParEpisode(diffusions)
   const episodesParId = new Map(episodes.map((e) => [e.id, e]))
 
@@ -46,13 +48,32 @@ export default function HistoriqueTitrePanel({ programmeId }) {
       <h2 className="mb-4 text-base font-semibold text-slate-900">Historique</h2>
 
       <div className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-slate-700">Diffusions programmées (passées)</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-700">Diffusions programmées (passées)</h3>
+          {episodes.length > 0 && (
+            <select
+              value={filtreEpisode}
+              onChange={(e) => setFiltreEpisode(e.target.value)}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+            >
+              <option value="">Tous les épisodes</option>
+              {episodes.map((ep) => (
+                <option key={ep.id} value={ep.id}>
+                  {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
+                  {ep.titre ? ` — ${ep.titre}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         {chargement && <p className="text-sm text-slate-500">Chargement…</p>}
         {erreur && <p className="text-sm text-red-600">{erreur}</p>}
-        {!chargement && !erreur && annotees.length === 0 && (
-          <p className="text-sm text-slate-500">Aucune diffusion passée enregistrée pour ce titre.</p>
+        {!chargement && !erreur && anoteesFiltrees.length === 0 && (
+          <p className="text-sm text-slate-500">
+            {filtreEpisode ? 'Aucune diffusion passée pour cet épisode.' : 'Aucune diffusion passée enregistrée pour ce titre.'}
+          </p>
         )}
-        {annotees.length > 0 && (
+        {anoteesFiltrees.length > 0 && (
           <div className="max-h-96 overflow-y-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 bg-white">
@@ -66,7 +87,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
                 </tr>
               </thead>
               <tbody>
-                {annotees.map((d) => {
+                {anoteesFiltrees.map((d) => {
                   const episode = episodesParId.get(d.episode_id)
                   const etiquetteEpisode = d.episode_numero != null ? `ÉP.${String(d.episode_numero).padStart(2, '0')}` : '—'
                   return (

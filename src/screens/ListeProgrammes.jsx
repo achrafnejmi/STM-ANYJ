@@ -4,7 +4,7 @@ import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide
 import { listerProgrammesParChaine, listerTousLesEpisodes, listerDiffusionsLineairesParChaine } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
 import { calculerDerniereParProgramme } from '../lib/historique.js'
-import { formaterDateLongue } from '../lib/semaine.js'
+import { formaterDateLongue, formaterDureeMinutes } from '../lib/semaine.js'
 
 const TAILLE_PAGE = 30
 
@@ -82,6 +82,17 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
 
   const derniereDiffusionParProgramme = useMemo(() => calculerDerniereParProgramme(diffusions), [diffusions])
 
+  // Durée moyenne (P21 Lot A) : Σ durées épisodes ÷ nb épisodes, null si aucun épisode.
+  const dureeMoyenneParProgramme = useMemo(() => {
+    const map = new Map()
+    for (const [programmeId, eps] of episodesParProgrammeId) {
+      if (eps.length === 0) continue
+      const somme = eps.reduce((acc, ep) => acc + (ep.duree ?? 0), 0)
+      map.set(programmeId, somme / eps.length)
+    }
+    return map
+  }, [episodesParProgrammeId])
+
   useEffect(() => {
     setPage(0)
   }, [filtreGenre, recherche])
@@ -110,7 +121,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
         Titre: p.titre,
         Chaîne: p.chaine,
         Genre: p.genre ?? '',
-        'Sous-genre': p.sous_genre ?? '',
+        'Durée moyenne': formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id)),
         'Nb épisodes': nbEpisodesParProgramme.get(p.id) ?? 0,
         'Dernière diffusion': derniereDiffusionParProgramme.get(p.id) ?? '',
       }))
@@ -193,7 +204,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                 <th className="py-2 pr-4 font-medium">Titre</th>
                 <th className="py-2 pr-4 font-medium">Chaîne</th>
                 <th className="py-2 pr-4 font-medium">Genre</th>
-                <th className="py-2 pr-4 font-medium">Sous-genre</th>
+                <th className="py-2 pr-4 font-medium">Durée moyenne</th>
                 <th className="py-2 pr-4 font-medium">Nb épisodes</th>
                 <th className="py-2 pr-4 font-medium">Dernière diffusion</th>
               </tr>
@@ -208,7 +219,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                   <td className="py-2 pr-4 text-slate-700">{p.titre}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.chaine}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.genre || '—'}</td>
-                  <td className="py-2 pr-4 text-slate-700">{p.sous_genre || '—'}</td>
+                  <td className="py-2 pr-4 text-slate-700">{formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id))}</td>
                   <td className="py-2 pr-4 text-slate-700">{nbEpisodesParProgramme.get(p.id) ?? 0}</td>
                   <td className="py-2 pr-4 text-slate-700">
                     {derniereDiffusionParProgramme.get(p.id) ? formaterDateLongue(derniereDiffusionParProgramme.get(p.id)) : '—'}

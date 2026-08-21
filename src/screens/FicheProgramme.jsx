@@ -41,7 +41,6 @@ const FORM_VIDE = {
   titre_en: '',
   genre: '',
   sous_genre: '',
-  thematique: '',
   chaine: '',
   date_production: '',
   code: '',
@@ -60,7 +59,6 @@ function versFormulaire(programme) {
     titre_en: programme.titre_en ?? '',
     genre: programme.genre ?? '',
     sous_genre: programme.sous_genre ?? '',
-    thematique: programme.thematique ?? '',
     chaine: programme.chaine ?? '',
     date_production: programme.date_production ?? '',
     code: programme.code ?? '',
@@ -120,7 +118,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       titre_en: form.titre_en.trim() || null,
       genre: form.genre.trim() || null,
       sous_genre: form.sous_genre.trim() || null,
-      thematique: form.thematique.trim() || null,
       chaine: form.chaine.trim(),
       chaine_id: chaineParNom(form.chaine.trim())?.id ?? null,
       date_production: form.date_production || null,
@@ -245,7 +242,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               />
               <Champ label="Date de production" type="date" value={form.date_production} onChange={(v) => setForm({ ...form, date_production: v })} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <ChampSelect
                 label="Genre"
                 value={form.genre}
@@ -254,16 +251,10 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 vide="— Choisir un genre —"
               />
               <Champ label="Sous-genre" value={form.sous_genre} onChange={(v) => setForm({ ...form, sous_genre: v })} />
-              <Champ label="Thématique" value={form.thematique} onChange={(v) => setForm({ ...form, thematique: v })} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <Champ label="Code" value={form.code} onChange={(v) => setForm({ ...form, code: v })} />
               <Champ label="Auteur" value={form.auteur} onChange={(v) => setForm({ ...form, auteur: v })} />
-              <Champ
-                label="Référence contrat"
-                value={form.reference_contrat}
-                onChange={(v) => setForm({ ...form, reference_contrat: v })}
-              />
             </div>
             <div>
               <label htmlFor={idDescription} className="mb-1 block text-sm font-medium text-slate-700">
@@ -286,41 +277,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               />
               Exclusivité
             </label>
-
-            <div>
-              <span className="mb-1 block text-sm font-medium text-slate-700">Attestation</span>
-              {!id ? (
-                <p className="text-sm text-slate-500">Enregistrez d'abord le programme pour joindre une attestation.</p>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <label
-                    className={`flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white ${
-                      televersementEnCours ? 'opacity-60' : 'cursor-pointer hover:bg-slate-700'
-                    }`}
-                  >
-                    {televersementEnCours ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
-                    {televersementEnCours ? 'Envoi…' : 'Choisir un fichier'}
-                    <input
-                      type="file"
-                      accept="image/*,application/pdf"
-                      className="hidden"
-                      onChange={handleAttestation}
-                      disabled={televersementEnCours}
-                    />
-                  </label>
-                  {programme?.attestation_chemin && (
-                    <a
-                      href={urlAttestation(programme.attestation_chemin)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-snrt-blue hover:underline"
-                    >
-                      {programme.attestation_chemin.split('/').pop()}
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>
@@ -393,7 +349,60 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       {onglet === 'EPISODES' && id && (
         <EpisodesPanel programmeId={id} onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)} />
       )}
-      {onglet === 'DROITS' && id && <FenetresDroitsPanel programmeId={id} />}
+      {onglet === 'DROITS' && id && (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-slate-200 bg-white p-6">
+            <h2 className="mb-4 text-base font-semibold text-slate-900">Contrat</h2>
+            <form onSubmit={enregistrer} className="mb-4 flex items-end gap-3">
+              <div className="max-w-xs flex-1">
+                <Champ
+                  label="Référence"
+                  value={form.reference_contrat}
+                  onChange={(v) => setForm({ ...form, reference_contrat: v })}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={enregistrement}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </form>
+            <div className="flex items-center gap-3">
+              <label
+                className={`flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white ${
+                  televersementEnCours ? 'opacity-60' : 'cursor-pointer hover:bg-slate-700'
+                }`}
+              >
+                {televersementEnCours ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+                {televersementEnCours ? 'Envoi…' : 'Choisir un fichier'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={handleAttestation}
+                  disabled={televersementEnCours}
+                />
+              </label>
+              {programme?.attestation_chemin && (
+                <a
+                  href={urlAttestation(programme.attestation_chemin)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={programme.attestation_chemin.split('/').pop()}
+                  className="text-sm text-snrt-blue hover:underline"
+                >
+                  Consulter le contrat
+                </a>
+              )}
+            </div>
+            {messageSucces && <p className="mt-4 text-sm text-emerald-600">{messageSucces}</p>}
+            {erreur && <p className="mt-4 text-sm text-red-600">{erreur}</p>}
+          </div>
+          <FenetresDroitsPanel programmeId={id} />
+        </div>
+      )}
       {onglet === 'HISTORIQUE' && id && <HistoriqueTitrePanel programmeId={id} />}
     </div>
   )

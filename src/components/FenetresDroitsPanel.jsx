@@ -5,7 +5,6 @@ import {
   creerFenetreDroits,
   mettreAJourFenetreDroits,
   supprimerFenetreDroits,
-  listerDiffusionsLineairesParProgramme,
 } from '../lib/db.js'
 import { aujourdHuiISO } from '../lib/semaine.js'
 
@@ -25,66 +24,49 @@ function versFormulaire(fenetre) {
   }
 }
 
-// Position 0-100% de `dateISO` dans [debut, fin], clampée aux bords (avant
-// la fenêtre = 0%, après = 100%) — pour le repère "aujourd'hui" de la frise.
-function positionDansLaFenetre(debut, fin, dateISO) {
-  const d = new Date(`${debut}T00:00:00Z`)
-  const f = new Date(`${fin}T00:00:00Z`)
-  const x = new Date(`${dateISO}T00:00:00Z`)
-  const total = f - d
-  if (total <= 0) return 0
-  return Math.max(0, Math.min(100, ((x - d) / total) * 100))
+// Seuil "proche de l'expiration" (P21 Lot A, remplace l'ancienne jauge) :
+// ambre si la fin approche (≤30 jours) ou s'il ne reste qu'un seul passage,
+// rouge si expirée ou épuisée, vert sinon — même convention rouge/ambre/vert
+// que le reste de l'app (cf. Conducteur.jsx, PanneauAnomalies.jsx).
+const JOURS_SEUIL_PROCHE = 30
+
+function statutFenetre(f, aujourdHui) {
+  const expiree = aujourdHui > f.date_fin
+  const restants = f.passages_autorises - f.passages_consommes
+  const epuisee = restants <= 0
+  if (expiree || epuisee) return 'rouge'
+  const joursAvantFin = Math.ceil((new Date(`${f.date_fin}T00:00:00Z`) - new Date(`${aujourdHui}T00:00:00Z`)) / 86400000)
+  if (joursAvantFin <= JOURS_SEUIL_PROCHE || restants === 1) return 'ambre'
+  return 'vert'
 }
 
-// Frise (EXG-M6-04) : une barre par fenêtre, période représentée
-// proportionnellement, repère du jour courant, passages restants, et
-// marques des diffusions passées (P14b) — chaque diffusion_lineaire dont la
-// date tombe dans [date_debut, date_fin] de la fenêtre est repérée par un
-// petit trait sur la barre.
-function Frise({ fenetres, datesDiffusees }) {
+const CLASSES_STATUT = {
+  rouge: 'bg-red-100 text-red-700',
+  ambre: 'bg-amber-100 text-amber-700',
+  vert: 'bg-emerald-100 text-emerald-700',
+}
+
+// Cartes de fenêtres de droits (EXG-M6-04) : début / fin / passages restants
+// affichés clairement, pastille de couleur selon l'état (P21 Lot A —
+// remplace l'ancienne jauge de progression).
+function CartesFenetres({ fenetres }) {
   const aujourdHui = aujourdHuiISO()
   if (fenetres.length === 0) {
     return <p className="text-sm text-slate-500">Aucune fenêtre de droits pour ce titre — programmable par défaut (aucune restriction).</p>
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {fenetres.map((f) => {
-        const position = positionDansLaFenetre(f.date_debut, f.date_fin, aujourdHui)
-        const expiree = aujourdHui > f.date_fin
-        const epuisee = f.passages_consommes >= f.passages_autorises
         const restants = f.passages_autorises - f.passages_consommes
-        const marquesDeLaFenetre = datesDiffusees.filter((d) => d >= f.date_debut && d <= f.date_fin)
+        const statut = statutFenetre(f, aujourdHui)
         return (
-          <div key={f.id}>
-            <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-              <span>
-                {f.date_debut} → {f.date_fin}
-              </span>
-              <span className={epuisee || expiree ? 'font-medium text-red-600' : 'text-slate-600'}>
-                {restants < 0 ? 0 : restants}/{f.passages_autorises} passages restants
-              </span>
-            </div>
-            <div className="relative h-2 rounded-full bg-slate-100">
-              <div
-                className={`h-2 rounded-full ${expiree || epuisee ? 'bg-red-300' : 'bg-emerald-400'}`}
-                style={{ width: `${expiree ? 100 : position}%` }}
-              />
-              {marquesDeLaFenetre.map((d) => (
-                <div
-                  key={d}
-                  className="absolute top-1/2 h-2.5 w-0.5 -translate-y-1/2 bg-slate-500/70"
-                  style={{ left: `${positionDansLaFenetre(f.date_debut, f.date_fin, d)}%` }}
-                  title={`Diffusion passée le ${d}`}
-                />
-              ))}
-              {!expiree && (
-                <div
-                  className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-snrt-navy"
-                  style={{ left: `${position}%` }}
-                  title="Aujourd'hui"
-                />
-              )}
-            </div>
+          <div key={f.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+            <span className="text-sm text-slate-700">
+              {f.date_debut} → {f.date_fin}
+            </span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASSES_STATUT[statut]}`}>
+              {restants < 0 ? 0 : restants}/{f.passages_autorises} passages restants
+            </span>
           </div>
         )
       })}
@@ -94,7 +76,6 @@ function Frise({ fenetres, datesDiffusees }) {
 
 export default function FenetresDroitsPanel({ programmeId }) {
   const [fenetres, setFenetres] = useState([])
-  const [datesDiffusees, setDatesDiffusees] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [fenetreId, setFenetreId] = useState(null)
@@ -110,13 +91,8 @@ export default function FenetresDroitsPanel({ programmeId }) {
   async function rafraichir() {
     setChargement(true)
     try {
-      const [lignes, lignesDiffusions] = await Promise.all([
-        listerFenetresDroitsParProgramme(programmeId),
-        listerDiffusionsLineairesParProgramme(programmeId),
-      ])
+      const lignes = await listerFenetresDroitsParProgramme(programmeId)
       setFenetres(lignes)
-      const aujourdHui = aujourdHuiISO()
-      setDatesDiffusees([...new Set(lignesDiffusions.filter((d) => d.date < aujourdHui).map((d) => d.date))])
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -202,7 +178,7 @@ export default function FenetresDroitsPanel({ programmeId }) {
       {messageSucces && <p className="mb-4 text-sm text-emerald-600">{messageSucces}</p>}
       {!chargement && (
         <div className="mb-4">
-          <Frise fenetres={fenetres} datesDiffusees={datesDiffusees} />
+          <CartesFenetres fenetres={fenetres} />
         </div>
       )}
 

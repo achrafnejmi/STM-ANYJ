@@ -4,16 +4,13 @@ import { mettreAJourBlocGrilleType, supprimerBlocGrilleType } from '../lib/db.js
 import { enregistrerAction } from '../lib/undoManager.js'
 import { GENRES } from '../lib/genres.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
-import { minutesDepuisDebutAntenne } from '../lib/semaine.js'
+import { minutesDepuisDebutAntenne, formaterDureeMinutes } from '../lib/semaine.js'
 
 const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
 
 function formaterDuree(heureDebut, heureFin) {
   const minutes = minutesDepuisDebutAntenne(heureFin) - minutesDepuisDebutAntenne(heureDebut)
-  if (minutes <= 0) return '—'
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`
+  return formaterDureeMinutes(minutes)
 }
 
 // Panneau flottant (même gabarit que InspecteurBloc, P11) — édite toujours un

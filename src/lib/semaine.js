@@ -94,6 +94,15 @@ export function minutesEnHeure(minutes) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+// Formate une durée (minutes) en "Xh MM" ou "M min" — pour une durée, pas une
+// heure de la journée (contrairement à minutesEnHeure, pas de modulo 24).
+export function formaterDureeMinutes(minutes) {
+  if (!minutes || minutes <= 0) return '—'
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`
+}
+
 // Journée d'antenne (RG-19/20 du cahier) : 06:00 → 06:00 le lendemain. La
 // `date` stockée d'une transmission est celle du jour d'antenne, pas du jour
 // calendaire de l'heure d'horloge — un programme entre 00:00 et 05:59
