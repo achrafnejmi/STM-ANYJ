@@ -9,6 +9,7 @@ import { listerDiffusionsLineairesParProgramme } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { STATUTS_PUBLICATION } from '../lib/statutsPublication.js'
+import { useNotification, useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
 
 export default function PanneauPublication({
   publication,
@@ -21,9 +22,10 @@ export default function PanneauPublication({
   onCree,
   onModifie,
   onSupprime,
+  onModifieChange,
 }) {
   const estEdition = !!publication
-  const [form, setForm] = useState(() => ({
+  const [valeurInitiale] = useState(() => ({
     programme_id: publication?.programme_id ?? programmeInitial ?? '',
     plateforme: publication?.plateforme ?? config.plateformes[0].code,
     format: publication?.format ?? '',
@@ -35,6 +37,10 @@ export default function PanneauPublication({
     visuel: publication?.visuel ?? '',
     statut: publication?.statut ?? 'BROUILLON',
   }))
+  const [form, setForm] = useState(valeurInitiale)
+  const { confirmer } = useNotification()
+  const { estModifie } = useGardeModifications(form, valeurInitiale)
+  useSignalerModifications(estModifie, onModifieChange)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const [diffusionsLineaires, setDiffusionsLineaires] = useState([])
@@ -102,7 +108,12 @@ export default function PanneauPublication({
   }
 
   async function supprimer() {
-    if (!window.confirm(`Supprimer cette publication ${estEdition ? `(« ${publication.titre || 'sans titre'} »)` : ''} ?`)) return
+    const confirme = await confirmer({
+      titre: 'Supprimer la publication',
+      message: `Supprimer cette publication ${estEdition ? `(« ${publication.titre || 'sans titre'} »)` : ''} ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
     try {
       await config.supprimer(publication.id)
       onSupprime(publication.id)

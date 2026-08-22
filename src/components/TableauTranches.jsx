@@ -13,6 +13,7 @@ import {
   compterCampagnesParTranche,
 } from '../lib/db.js'
 import { minutesEnHeure } from '../lib/semaine.js'
+import { useNotification } from './NotificationProvider.jsx'
 
 const TRANCHE_VIDE = { code: '', libelle_fr: '', libelle_ar: '', debut_minutes: 360, fin_minutes: 720 }
 
@@ -25,6 +26,7 @@ export default function TableauTranches({ tranches, onRafraichir }) {
   const idAr = useId()
   const idDebut = useId()
   const idFin = useId()
+  const { confirmer, erreur: notifierErreur } = useNotification()
 
   async function creer(e) {
     e.preventDefault()
@@ -51,7 +53,14 @@ export default function TableauTranches({ tranches, onRafraichir }) {
   async function renommerCode(tranche, nouveauCode) {
     if (!nouveauCode || nouveauCode === tranche.code) return
     const nb = await compterCampagnesParTranche(tranche.code)
-    if (nb > 0 && !window.confirm(`${nb} campagne(s) ciblent la tranche « ${tranche.code} ». Renommer en « ${nouveauCode} » ?`)) {
+    if (
+      nb > 0 &&
+      !(await confirmer({
+        titre: 'Renommer la tranche',
+        message: `${nb} campagne(s) ciblent la tranche « ${tranche.code} ». Renommer en « ${nouveauCode} » ?`,
+        labelConfirmer: 'Renommer',
+      }))
+    ) {
       return
     }
     try {
@@ -74,10 +83,15 @@ export default function TableauTranches({ tranches, onRafraichir }) {
   async function supprimer(tranche) {
     const nb = await compterCampagnesParTranche(tranche.code)
     if (nb > 0) {
-      window.alert(`Impossible de supprimer « ${tranche.code} » : ${nb} campagne(s) la ciblent encore.`)
+      notifierErreur(`Impossible de supprimer « ${tranche.code} » : ${nb} campagne(s) la ciblent encore.`)
       return
     }
-    if (!window.confirm(`Supprimer la tranche « ${tranche.libelle_fr} » ?`)) return
+    const confirme = await confirmer({
+      titre: 'Supprimer la tranche',
+      message: `Supprimer la tranche « ${tranche.libelle_fr} » ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
     try {
       await supprimerTrancheAntenne(tranche.id)
       onRafraichir()

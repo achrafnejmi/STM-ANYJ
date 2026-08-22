@@ -30,6 +30,7 @@ import LogoPlateforme from './LogosPlateformes.jsx'
 import CataloguePanel from './CataloguePanel.jsx'
 import PopoverHistorique from './PopoverHistorique.jsx'
 import PanneauPublication from './PanneauPublication.jsx'
+import { useNotification } from './NotificationProvider.jsx'
 
 // Sans heure = en tête de journée (confirmé) ; sinon tri chronologique.
 function comparerPublications(a, b) {
@@ -46,6 +47,8 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [panneau, setPanneau] = useState(null) // { publication?, programmeId?, date? }
+  const [panneauModifie, setPanneauModifie] = useState(false)
+  const { confirmer } = useNotification()
   const [filtrePlateforme, setFiltrePlateforme] = useState('')
   const [filtreFormat, setFiltreFormat] = useState('')
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
@@ -96,6 +99,23 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
     setDateReference((d) => ajouterJours(d, pas))
   }
 
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
+  // pour changer OU fermer (nouveau=null) le panneau — panneauModifie est
+  // reporté par PanneauPublication.
+  async function changerPanneau(nouveau) {
+    if (panneau && panneauModifie) {
+      const ok = await confirmer({
+        titre: 'Modifications non enregistrées',
+        message: 'Modifications non enregistrées. Quitter sans enregistrer ?',
+        labelConfirmer: 'Quitter sans enregistrer',
+        labelAnnuler: 'Rester',
+      })
+      if (!ok) return
+    }
+    setPanneau(nouveau)
+    setPanneauModifie(false)
+  }
+
   function appliquerCreation(cree) {
     setPublications((prev) => [...prev, cree])
     setPanneau(null)
@@ -113,7 +133,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
-    setPanneau({ programmeId: payload.programmeId, date: jour })
+    changerPanneau({ programmeId: payload.programmeId, date: jour })
   }
 
   const periodeLabel = vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)
@@ -261,7 +281,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
             </button>
             <button
               type="button"
-              onClick={() => setPanneau({ programmeId: null, date: dateReference })}
+              onClick={() => changerPanneau({ programmeId: null, date: dateReference })}
               className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
             >
               <Plus size={15} />
@@ -310,7 +330,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
                         <button
                           type="button"
                           key={p.id}
-                          onClick={() => setPanneau({ publication: p })}
+                          onClick={() => changerPanneau({ publication: p })}
                           className="flex w-full flex-col gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-[11px] shadow-sm hover:border-snrt-navy"
                         >
                           <div className="flex items-center gap-1.5">
@@ -343,16 +363,18 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
 
       {panneau && (
         <PanneauPublication
+          key={panneau.publication?.id ?? `nouveau:${panneau.programmeId ?? ''}:${panneau.date ?? ''}`}
           publication={panneau.publication ?? null}
           programmeInitial={panneau.programmeId}
           dateInitiale={panneau.date}
           programmes={programmes}
           chaineActive={chaineActive}
           config={config}
-          onFermer={() => setPanneau(null)}
+          onFermer={() => changerPanneau(null)}
           onCree={appliquerCreation}
           onModifie={appliquerModification}
           onSupprime={appliquerSuppression}
+          onModifieChange={setPanneauModifie}
         />
       )}
     </div>

@@ -10,6 +10,7 @@ import {
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
+import { useNotification, useGardeModifications } from '../components/NotificationProvider.jsx'
 
 const ONGLETS = [
   { id: 'INFOS', label: 'Informations générales' },
@@ -49,10 +50,12 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   const [episodeId, setEpisodeId] = useState(null)
   const [onglet, setOnglet] = useState('INFOS')
   const [form, setForm] = useState(null)
+  const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
-  const [messageSucces, setMessageSucces] = useState(null)
   const idDescription = useId()
   const idPad = useId()
+  const notifier = useNotification()
+  const { demanderConfirmation } = useGardeModifications(form, valeurInitiale)
 
   useEffect(() => {
     rafraichir()
@@ -81,25 +84,26 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   // nombre_diffusions, jamais recalculées depuis la suppression de l'import xlsx.
   const historiqueParEpisode = useMemo(() => calculerParEpisode(diffusions), [diffusions])
 
-  function afficherSucces(texte) {
-    setMessageSucces(texte)
-    setTimeout(() => setMessageSucces(null), 4000)
-  }
-
-  function selectionner(episode) {
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : changer d'épisode
+  // sélectionné ou ouvrir "nouvel épisode" abandonnerait silencieusement la
+  // saisie en cours sinon.
+  async function selectionner(episode) {
+    if (!(await demanderConfirmation())) return
     setEpisodeId(episode.id)
     setForm(versFormulaire(episode))
+    setValeurInitiale(versFormulaire(episode))
     setOnglet('INFOS')
     setErreur(null)
-    setMessageSucces(null)
   }
 
-  function nouvelEpisode() {
+  async function nouvelEpisode() {
+    if (!(await demanderConfirmation())) return
+    const vide = { ...EPISODE_VIDE, numero: episodes.length + 1 }
     setEpisodeId('NOUVEAU')
-    setForm({ ...EPISODE_VIDE, numero: episodes.length + 1 })
+    setForm(vide)
+    setValeurInitiale(vide)
     setOnglet('INFOS')
     setErreur(null)
-    setMessageSucces(null)
   }
 
   async function supprimer(id) {
@@ -108,6 +112,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       if (episodeId === id) {
         setEpisodeId(null)
         setForm(null)
+        setValeurInitiale(null)
       }
       await rafraichir()
     } catch (err) {
@@ -133,15 +138,17 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       }
       if (episodeId === 'NOUVEAU') {
         const cree = await creerEpisode(champs)
-        afficherSucces(`Épisode « ${cree.titre || 'sans titre'} » enregistré.`)
+        notifier.succes(`Épisode « ${cree.titre || 'sans titre'} » enregistré.`)
         // Referme le formulaire : sans ça, episodeId reste sur la ligne qu'on
         // vient de créer et la saisie suivante la modifie au lieu d'en créer
         // une nouvelle (c'était la cause de la perte de données).
         setEpisodeId(null)
         setForm(null)
+        setValeurInitiale(null)
       } else {
         await mettreAJourEpisode(episodeId, champs)
-        afficherSucces('Épisode modifié.')
+        notifier.succes('Épisode modifié.')
+        setValeurInitiale(form)
       }
       await rafraichir()
     } catch (err) {
@@ -164,8 +171,6 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
           <Plus size={16} />
         </button>
       </div>
-
-      {messageSucces && <p className="mb-4 text-sm text-emerald-600">{messageSucces}</p>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_2fr]">
         <div className="overflow-x-auto">

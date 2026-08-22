@@ -10,6 +10,7 @@ import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoM
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { ajouterJours, formaterJourCourt, formaterDateLongue, joursSelonJoursSemaine } from '../lib/semaine.js'
+import { useNotification, useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
 
 const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
 
@@ -24,6 +25,7 @@ export default function InspecteurBloc({
   onSupprime,
   onCreerPlusieurs,
   onChangementsPile,
+  onModifieChange,
 }) {
   const [onglet, setOnglet] = useState('BLOC')
 
@@ -59,7 +61,14 @@ export default function InspecteurBloc({
       </div>
 
       {onglet === 'BLOC' && (
-        <OngletBloc diffusion={diffusion} programme={programme} chaineActive={chaineActive} onModifie={onModifie} onSupprime={onSupprime} />
+        <OngletBloc
+          diffusion={diffusion}
+          programme={programme}
+          chaineActive={chaineActive}
+          onModifie={onModifie}
+          onSupprime={onSupprime}
+          onModifieChange={onModifieChange}
+        />
       )}
       {onglet === 'REPETER' && (
         <OngletRepeter
@@ -77,19 +86,31 @@ export default function InspecteurBloc({
   )
 }
 
-function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime }) {
+function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime, onModifieChange }) {
   const [heureDebut, setHeureDebut] = useState(diffusion.heure_debut)
   const [heureFin, setHeureFin] = useState(diffusion.heure_fin)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const idDebut = useId()
   const idFin = useId()
+  const { confirmer } = useNotification()
 
   useEffect(() => {
     setHeureDebut(diffusion.heure_debut)
     setHeureFin(diffusion.heure_fin)
     setErreur(null)
   }, [diffusion.id, diffusion.heure_debut, diffusion.heure_fin])
+
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : instantané figé
+  // sur les mêmes dépendances que la réinitialisation ci-dessus, reporté au
+  // parent (GrilleLineaire.jsx) qui l'utilise pour garder le X rouge de la
+  // grille et la fermeture de l'inspecteur.
+  const valeurInitiale = useMemo(
+    () => ({ heureDebut: diffusion.heure_debut, heureFin: diffusion.heure_fin }),
+    [diffusion.heure_debut, diffusion.heure_fin]
+  )
+  const { estModifie } = useGardeModifications({ heureDebut, heureFin }, valeurInitiale)
+  useSignalerModifications(estModifie, onModifieChange)
 
   async function enregistrerHoraire(e) {
     e.preventDefault()
@@ -111,13 +132,13 @@ function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime 
     }
   }
 
-  // window.confirm suffit pour ce PoC — à remplacer par une vraie modale de
-  // confirmation en P21 Lot G. Chemin de suppression partagé avec le X de la
-  // grille (P21 Lot B) — voir lib/deprogrammation.js.
+  // Chemin de suppression partagé avec le X de la grille (P21 Lot B) — voir
+  // lib/deprogrammation.js. Confirmation via la modale du Lot G (plus de
+  // window.confirm natif).
   async function deprogrammer() {
     setErreur(null)
     try {
-      await deprogrammerDiffusion(diffusion, { chaineActive, onSupprime })
+      await deprogrammerDiffusion(diffusion, { chaineActive, onSupprime, confirmer })
     } catch (err) {
       setErreur(err.message)
     }

@@ -6,11 +6,15 @@ import { formaterDateLongue } from './semaine.js'
 // X de la grille) : confirmation, suppression, puis alimentation de la pile
 // annuler/rétablir (P19b). Ne gère pas l'affichage d'erreur — chaque appelant
 // a son propre état local et attrape l'exception (même convention que le
-// reste de l'app).
-export async function deprogrammerDiffusion(diffusion, { chaineActive, onSupprime }) {
-  const confirme = window.confirm(
-    `Déprogrammer « ${diffusion.titre_cache} » (${diffusion.heure_debut}) du ${formaterDateLongue(diffusion.date)} ?`
-  )
+// reste de l'app). `confirmer` = NotificationProvider.useNotification().confirmer
+// (P21 Lot G) — injecté plutôt qu'importé : ce fichier n'est pas un composant,
+// il ne peut pas appeler un hook lui-même.
+export async function deprogrammerDiffusion(diffusion, { chaineActive, onSupprime, confirmer }) {
+  const confirme = await confirmer({
+    titre: 'Déprogrammer',
+    message: `Déprogrammer « ${diffusion.titre_cache} » (${diffusion.heure_debut}) du ${formaterDateLongue(diffusion.date)} ?`,
+    labelConfirmer: 'Déprogrammer',
+  })
   if (!confirme) return false
   await supprimerDiffusionLineaire(diffusion.id)
   await enregistrerAction({

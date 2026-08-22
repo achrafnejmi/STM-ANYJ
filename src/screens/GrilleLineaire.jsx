@@ -36,6 +36,7 @@ import CataloguePanel from '../components/CataloguePanel.jsx'
 import PopoverHistorique from '../components/PopoverHistorique.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
+import { useNotification } from '../components/NotificationProvider.jsx'
 
 const DUREE_PAR_DEFAUT_MIN = 30
 const MARQUES_HEURES = genererMarquesHeures()
@@ -54,10 +55,32 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [erreur, setErreur] = useState(null)
   const [modale, setModale] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
+  const [blocModifie, setBlocModifie] = useState(false)
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
+  const { confirmer } = useNotification()
+
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
+  // pour changer/fermer le bloc inspecté — bloc_Modifie est reporté par
+  // InspecteurBloc (onglet Bloc). Les mises à jour "système" après une
+  // écriture réussie (appliquerEdition/appliquerSuppression/pile) restent en
+  // setBlocSelectionne direct, plus bas — rien à confirmer, ce n'est pas
+  // l'utilisateur qui abandonne une saisie.
+  async function changerBlocSelectionne(nouveau) {
+    if (blocSelectionne && blocModifie && !(await confirmer({
+      titre: 'Modifications non enregistrées',
+      message: 'Modifications non enregistrées. Quitter sans enregistrer ?',
+      labelConfirmer: 'Quitter sans enregistrer',
+      labelAnnuler: 'Rester',
+    }))) {
+      return false
+    }
+    setBlocSelectionne(nouveau)
+    setBlocModifie(false)
+    return true
+  }
 
   useEffect(() => {
     setChargement(true)
@@ -165,8 +188,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     setDateReference((d) => ajouterJours(d, pas))
   }
 
-  function ouvrirCreation(date, heureDebut) {
-    setBlocSelectionne(null)
+  async function ouvrirCreation(date, heureDebut) {
+    if (!(await changerBlocSelectionne(null))) return
     setAnomaliesOuvertes(false)
     setModale({ mode: 'CREATION', date, heureDebut })
   }
@@ -174,16 +197,16 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   // Panneau Anomalies et Inspecteur partagent le même emplacement flottant
   // (P11 : panneau flottant plutôt que 3e colonne) — mutuellement exclusifs,
   // comme le prescrit le cahier pour les 2 onglets du panneau droit (§4.3.2).
-  function ouvrirAnomalies() {
-    setBlocSelectionne(null)
+  async function ouvrirAnomalies() {
+    if (!(await changerBlocSelectionne(null))) return
     setAnomaliesOuvertes(true)
   }
 
-  function allerVersAnomalie(id) {
+  async function allerVersAnomalie(id) {
     const diffusion = diffusions.find((d) => d.id === id)
     if (!diffusion) return
+    if (!(await changerBlocSelectionne(diffusion))) return
     setAnomaliesOuvertes(false)
-    setBlocSelectionne(diffusion)
   }
 
   function appliquerCreation(nouvelle) {
@@ -519,11 +542,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
                         const estSelectionne = blocSelectionne?.id === diffusion.id
                         const enAnomalieBloquante = idsBloquants.has(diffusion.id)
-                        const selectionner = (e) => {
+                        const selectionner = async (e) => {
                           e.stopPropagation()
+                          if (!(await changerBlocSelectionne(diffusion))) return
                           setModale(null)
                           setAnomaliesOuvertes(false)
-                          setBlocSelectionne(diffusion)
                         }
                         return (
                           <div
@@ -554,9 +577,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                               title="Déprogrammer"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                deprogrammerDiffusion(diffusion, { chaineActive, onSupprime: appliquerSuppression }).catch((err) =>
-                                  setErreur(err.message)
-                                )
+                                deprogrammerDiffusion(diffusion, {
+                                  chaineActive,
+                                  onSupprime: appliquerSuppression,
+                                  confirmer,
+                                }).catch((err) => setErreur(err.message))
                               }}
                               className="absolute top-0.5 right-0.5 z-10 flex h-3 w-3 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
                             >
@@ -604,11 +629,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           diffusion={blocSelectionne}
           programme={programmesParId.get(blocSelectionne.programme_id)}
           chaineActive={chaineActive}
-          onFermer={() => setBlocSelectionne(null)}
+          onFermer={() => changerBlocSelectionne(null)}
           onModifie={appliquerEdition}
           onSupprime={appliquerSuppression}
           onCreerPlusieurs={appliquerCreationMultiple}
           onChangementsPile={appliquerChangementsPile}
+          onModifieChange={setBlocModifie}
         />
       )}
 

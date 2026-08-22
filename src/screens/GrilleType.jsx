@@ -15,6 +15,7 @@ import {
 } from '../lib/grilleAxe.js'
 import PaletteTypes from '../components/PaletteTypes.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
+import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
 
@@ -35,10 +36,14 @@ const JOURS_SEMAINE = [
 // Message de confirmation partagé (création par dépôt ET étirement) — jamais
 // de fusion/écrasement automatique, juste une coexistence côte à côte comme
 // n'importe quel autre chevauchement (EXG-M3-07) si l'utilisateur confirme.
-function confirmerChevauchement(autre) {
-  return window.confirm(
-    `Ce créneau chevauche « ${autre.nom || autre.type_bloc || 'un bloc existant'} ». Continuer ? Les deux blocs resteront côte à côte.`
-  )
+// `confirmer` = NotificationProvider.useNotification().confirmer (P21 Lot G) —
+// injecté : fonction hors composant, pas d'accès direct aux hooks.
+function confirmerChevauchement(autre, confirmer) {
+  return confirmer({
+    titre: 'Chevauchement',
+    message: `Ce créneau chevauche « ${autre.nom || autre.type_bloc || 'un bloc existant'} ». Continuer ? Les deux blocs resteront côte à côte.`,
+    labelConfirmer: 'Continuer',
+  })
 }
 
 // Premier bloc (hors celui qu'on exclut par id) dont les jours et l'horaire
@@ -96,6 +101,7 @@ export default function GrilleType({ chaineActive }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
+  const [blocModifie, setBlocModifie] = useState(false)
   const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const [pleinEcran, setPleinEcran] = useState(false)
@@ -104,6 +110,7 @@ export default function GrilleType({ chaineActive }) {
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
   const previsualisationRef = useRef(null)
   const dernierRedimTermineRef = useRef(0)
+  const { confirmer } = useNotification()
 
   useEffect(() => {
     setChargement(true)
@@ -192,9 +199,9 @@ export default function GrilleType({ chaineActive }) {
 
   // Chevauchement possible à la création (dépôt ou bouton) : confirmation,
   // jamais de fusion/écrasement silencieux — même règle qu'à l'étirement.
-  function creerAvecVerification(champs) {
+  async function creerAvecVerification(champs) {
     const autre = trouverChevauchement(null, champs, blocs)
-    if (autre && !confirmerChevauchement(autre)) return
+    if (autre && !(await confirmerChevauchement(autre, confirmer))) return
     creerEtSelectionner(champs)
   }
 
@@ -311,7 +318,7 @@ export default function GrilleType({ chaineActive }) {
 
     const candidat = { heure_debut: preview.heure_debut, heure_fin: preview.heure_fin, jours: preview.jours }
     const autre = trouverChevauchement(etat.bloc.id, candidat, blocs)
-    if (autre && !confirmerChevauchement(autre)) return // annulé : aucune écriture, le bloc reprend son état d'origine
+    if (autre && !(await confirmerChevauchement(autre, confirmer))) return // annulé : aucune écriture, le bloc reprend son état d'origine
 
     try {
       const maj = await mettreAJourBlocGrilleType(etat.bloc.id, candidat)
@@ -327,9 +334,22 @@ export default function GrilleType({ chaineActive }) {
     }
   }
 
-  function selectionnerBloc(bloc) {
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
+  // pour changer OU fermer (bloc=null) le bloc inspecté — blocModifie est
+  // reporté par PanneauBlocGrilleType.
+  async function selectionnerBloc(bloc) {
     if (Date.now() - dernierRedimTermineRef.current < 200) return // ignore le clic qui suit un étirement (mousedown/up sur le même bloc)
+    if (blocSelectionne && blocModifie) {
+      const ok = await confirmer({
+        titre: 'Modifications non enregistrées',
+        message: 'Modifications non enregistrées. Quitter sans enregistrer ?',
+        labelConfirmer: 'Quitter sans enregistrer',
+        labelAnnuler: 'Rester',
+      })
+      if (!ok) return
+    }
     setBlocSelectionne(bloc)
+    setBlocModifie(false)
   }
 
   return (
@@ -519,9 +539,10 @@ export default function GrilleType({ chaineActive }) {
         <PanneauBlocGrilleType
           bloc={blocSelectionne}
           chaineActive={chaineActive}
-          onFermer={() => setBlocSelectionne(null)}
+          onFermer={() => selectionnerBloc(null)}
           onModifie={appliquerModification}
           onSupprime={appliquerSuppression}
+          onModifieChange={setBlocModifie}
         />
       )}
     </div>

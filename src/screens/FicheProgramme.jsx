@@ -14,6 +14,7 @@ import { GENRES } from '../lib/genres.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
+import { useNotification, useGardeModifications, useSignalerModifications } from '../components/NotificationProvider.jsx'
 
 const TAILLE_MAX_ATTESTATION = 5 * 1024 * 1024 // 5 Mo
 
@@ -71,26 +72,29 @@ function versFormulaire(programme) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL' }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange }) {
   const [id, setId] = useState(idInitial)
-  const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : { ...FORM_VIDE, chaine: chaineActive.nom }))
+  const valeurVide = { ...FORM_VIDE, chaine: chaineActive.nom }
+  const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
+  const [valeurInitiale, setValeurInitiale] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
   const [programme, setProgramme] = useState(null)
   const [chargement, setChargement] = useState(Boolean(idInitial))
   const [onglet, setOnglet] = useState(ongletInitial)
   const [langueActive, setLangueActive] = useState('FR')
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
-  const [messageSucces, setMessageSucces] = useState(null)
   const [nombreEpisodes, setNombreEpisodes] = useState(0)
   const [televersementEnCours, setTeleversementEnCours] = useState(false)
   const idDescription = useId()
   const idExclusivite = useId()
+  const notifier = useNotification()
 
   useEffect(() => {
     if (!idInitial) return
     obtenirProgramme(idInitial).then((p) => {
       setProgramme(p)
       setForm(versFormulaire(p))
+      setValeurInitiale(versFormulaire(p))
       setChargement(false)
     })
   }, [idInitial])
@@ -102,16 +106,20 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       .catch(() => {})
   }, [id])
 
-  function afficherSucces(texte) {
-    setMessageSucces(texte)
-    setTimeout(() => setMessageSucces(null), 4000)
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) — reporté à
+  // Programmes.jsx pour protéger une réouverture externe (recherche globale,
+  // Contrats & droits) pendant que cette fiche est en cours d'édition.
+  const { estModifie, demanderConfirmation } = useGardeModifications(form, valeurInitiale)
+  useSignalerModifications(estModifie, onModifieChange)
+
+  async function gererRetour() {
+    if (!(await demanderConfirmation())) return
+    onRetour()
   }
 
   async function enregistrer(e) {
     e.preventDefault()
-    setEnregistrement(true)
     setErreur(null)
-    setMessageSucces(null)
     const champs = {
       titre: form.titre.trim(),
       titre_ar: form.titre_ar.trim() || null,
@@ -131,19 +139,25 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     }
     if (!champs.titre) {
       setErreur('Le titre (français) est obligatoire.')
-      setEnregistrement(false)
       return
     }
+    if (id && !estModifie) {
+      notifier.info('Aucune modification à enregistrer.')
+      return
+    }
+    setEnregistrement(true)
     try {
       if (id) {
         const maj = await mettreAJourProgramme(id, champs)
         setProgramme(maj)
-        afficherSucces('Programme modifié.')
+        setValeurInitiale(versFormulaire(maj))
+        notifier.succes('Programme modifié.')
       } else {
         const cree = await creerProgramme({ ...champs, cree_par: lireUtilisateur() })
         setProgramme(cree)
         setId(cree.id)
-        afficherSucces('Programme créé.')
+        setValeurInitiale(versFormulaire(cree))
+        notifier.succes('Programme créé.')
       }
     } catch (err) {
       if (err.code === '23505') {
@@ -187,7 +201,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     <div className="space-y-6">
       <button
         type="button"
-        onClick={onRetour}
+        onClick={gererRetour}
         className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
       >
         <ArrowLeft size={16} />
@@ -284,7 +298,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               <div>Nombre d'épisodes : {nombreEpisodes}</div>
             </div>
 
-            {messageSucces && <p className="text-sm text-emerald-600">{messageSucces}</p>}
             {erreur && <p className="text-sm text-red-600">{erreur}</p>}
             <button
               type="submit"
@@ -333,7 +346,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 </div>
               </div>
             </div>
-            {messageSucces && <p className="text-sm text-emerald-600">{messageSucces}</p>}
             {erreur && <p className="text-sm text-red-600">{erreur}</p>}
             <button
               type="submit"
@@ -397,7 +409,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 </a>
               )}
             </div>
-            {messageSucces && <p className="mt-4 text-sm text-emerald-600">{messageSucces}</p>}
             {erreur && <p className="mt-4 text-sm text-red-600">{erreur}</p>}
           </div>
           <FenetresDroitsPanel programmeId={id} />

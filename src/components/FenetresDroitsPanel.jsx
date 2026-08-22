@@ -7,6 +7,7 @@ import {
   supprimerFenetreDroits,
 } from '../lib/db.js'
 import { aujourdHuiISO } from '../lib/semaine.js'
+import { useNotification, useGardeModifications } from './NotificationProvider.jsx'
 
 const FENETRE_VIDE = {
   date_debut: aujourdHuiISO(),
@@ -80,8 +81,10 @@ export default function FenetresDroitsPanel({ programmeId }) {
   const [erreur, setErreur] = useState(null)
   const [fenetreId, setFenetreId] = useState(null)
   const [form, setForm] = useState(null)
+  const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
-  const [messageSucces, setMessageSucces] = useState(null)
+  const notifier = useNotification()
+  const { demanderConfirmation } = useGardeModifications(form, valeurInitiale)
 
   useEffect(() => {
     rafraichir()
@@ -100,23 +103,23 @@ export default function FenetresDroitsPanel({ programmeId }) {
     }
   }
 
-  function afficherSucces(texte) {
-    setMessageSucces(texte)
-    setTimeout(() => setMessageSucces(null), 4000)
-  }
-
-  function selectionner(fenetre) {
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : changer de ligne
+  // sélectionnée ou ouvrir "nouvelle fenêtre" abandonnerait silencieusement la
+  // saisie en cours sinon.
+  async function selectionner(fenetre) {
+    if (!(await demanderConfirmation())) return
     setFenetreId(fenetre.id)
     setForm(versFormulaire(fenetre))
+    setValeurInitiale(versFormulaire(fenetre))
     setErreur(null)
-    setMessageSucces(null)
   }
 
-  function nouvelleFenetre() {
+  async function nouvelleFenetre() {
+    if (!(await demanderConfirmation())) return
     setFenetreId('NOUVEAU')
     setForm({ ...FENETRE_VIDE })
+    setValeurInitiale({ ...FENETRE_VIDE })
     setErreur(null)
-    setMessageSucces(null)
   }
 
   async function supprimer(id) {
@@ -146,12 +149,14 @@ export default function FenetresDroitsPanel({ programmeId }) {
       }
       if (fenetreId === 'NOUVEAU') {
         await creerFenetreDroits(champs)
-        afficherSucces('Fenêtre de droits enregistrée.')
+        notifier.succes('Fenêtre de droits enregistrée.')
         setFenetreId(null)
         setForm(null)
+        setValeurInitiale(null)
       } else {
         await mettreAJourFenetreDroits(fenetreId, champs)
-        afficherSucces('Fenêtre modifiée.')
+        notifier.succes('Fenêtre modifiée.')
+        setValeurInitiale(form)
       }
       await rafraichir()
     } catch (err) {
@@ -175,7 +180,6 @@ export default function FenetresDroitsPanel({ programmeId }) {
         </button>
       </div>
 
-      {messageSucces && <p className="mb-4 text-sm text-emerald-600">{messageSucces}</p>}
       {!chargement && (
         <div className="mb-4">
           <CartesFenetres fenetres={fenetres} />

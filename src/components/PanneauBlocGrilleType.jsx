@@ -5,6 +5,7 @@ import { enregistrerAction } from '../lib/undoManager.js'
 import { GENRES } from '../lib/genres.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { minutesDepuisDebutAntenne, formaterDureeMinutes } from '../lib/semaine.js'
+import { useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
 
 const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
 
@@ -17,8 +18,9 @@ function formaterDuree(heureDebut, heureFin) {
 // bloc déjà persisté : la création (glisser-déposer ou bouton « Ajouter »)
 // écrit directement en base côté GrilleType.jsx avant d'ouvrir ce panneau, pas
 // de mode « brouillon non enregistré » ici.
-export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, onModifie, onSupprime }) {
+export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, onModifie, onSupprime, onModifieChange }) {
   const [form, setForm] = useState(null)
+  const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const idNom = useId()
@@ -26,7 +28,7 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, on
   const idFin = useId()
 
   useEffect(() => {
-    setForm({
+    const initial = {
       nom: bloc.nom,
       type_bloc: bloc.type_bloc ?? '',
       heure_debut: bloc.heure_debut.slice(0, 5),
@@ -34,9 +36,18 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, on
       jours: bloc.jours,
       frequence: bloc.frequence,
       genre_attendu: bloc.genre_attendu,
-    })
+    }
+    setForm(initial)
+    setValeurInitiale(initial)
     setErreur(null)
   }, [bloc])
+
+  // Garde-fou "modifications non enregistrées" (P21 Lot G) : `bloc` change de
+  // référence après un enregistrement réussi (appliquerModification côté
+  // GrilleType.jsx), donc l'effet ci-dessus rebascule automatiquement
+  // valeurInitiale sur les valeurs fraîchement sauvegardées.
+  const { estModifie } = useGardeModifications(form, valeurInitiale)
+  useSignalerModifications(estModifie, onModifieChange)
 
   if (!form) return null
 

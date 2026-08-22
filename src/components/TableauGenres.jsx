@@ -13,6 +13,7 @@ import {
   compterProgrammesParGenre,
 } from '../lib/db.js'
 import { TOKENS_PALETTE, couleurDuToken } from '../lib/couleursGenre.js'
+import { useNotification } from './NotificationProvider.jsx'
 
 const GENRE_VIDE = { libelle_fr: '', libelle_ar: '', couleur_token: TOKENS_PALETTE[0], ordre: 0 }
 
@@ -22,6 +23,7 @@ export default function TableauGenres({ genres, onRafraichir }) {
   const [erreur, setErreur] = useState(null)
   const idFr = useId()
   const idAr = useId()
+  const { confirmer, erreur: notifierErreur } = useNotification()
 
   async function creer(e) {
     e.preventDefault()
@@ -49,7 +51,14 @@ export default function TableauGenres({ genres, onRafraichir }) {
   async function renommer(genre, nouveauLibelle) {
     if (!nouveauLibelle || nouveauLibelle === genre.libelle_fr) return
     const nb = await compterProgrammesParGenre(genre.libelle_fr)
-    if (nb > 0 && !window.confirm(`${nb} titre(s) utilisent le genre « ${genre.libelle_fr} ». Renommer en « ${nouveauLibelle} » ?`)) {
+    if (
+      nb > 0 &&
+      !(await confirmer({
+        titre: 'Renommer le genre',
+        message: `${nb} titre(s) utilisent le genre « ${genre.libelle_fr} ». Renommer en « ${nouveauLibelle} » ?`,
+        labelConfirmer: 'Renommer',
+      }))
+    ) {
       return
     }
     try {
@@ -72,10 +81,15 @@ export default function TableauGenres({ genres, onRafraichir }) {
   async function supprimer(genre) {
     const nb = await compterProgrammesParGenre(genre.libelle_fr)
     if (nb > 0) {
-      window.alert(`Impossible de supprimer « ${genre.libelle_fr} » : ${nb} titre(s) l'utilisent encore.`)
+      notifierErreur(`Impossible de supprimer « ${genre.libelle_fr} » : ${nb} titre(s) l'utilisent encore.`)
       return
     }
-    if (!window.confirm(`Supprimer le genre « ${genre.libelle_fr} » ?`)) return
+    const confirme = await confirmer({
+      titre: 'Supprimer le genre',
+      message: `Supprimer le genre « ${genre.libelle_fr} » ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
     try {
       await supprimerGenre(genre.id)
       onRafraichir()

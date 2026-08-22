@@ -83,8 +83,10 @@ ciblé, grille non-linéaire réseaux + VOD).
 
 ### P21 — Finitions UI/UX (légères, faible risque)
 
-6 lots indépendants. Un lot = plan → validation → code → test ✅ → commit. Ne touchent PAS le
-scoping par chaîne (donc sans conflit avec le changement d'exclusivité P22).
+7 lots. Un lot = plan → validation → code → test ✅ → commit. Ne touchent PAS le scoping par
+chaîne (donc sans conflit avec le changement d'exclusivité P22). Le Lot G (ajouté après coup,
+voir plus bas) déroge à l'esprit « finition légère » des lots A-F : c'est une brique
+d'architecture transverse (contexte React global), pas une simple retouche d'écran.
 
 - **Lot A — Programme (fiche + liste)** : « Attestation » → « Contrat » partout (label +
   champ + stockage) + bouton « Consulter le contrat » (ouvrir le fichier) ; supprimer le champ
@@ -102,6 +104,18 @@ scoping par chaîne (donc sans conflit avec le changement d'exclusivité P22).
   fournis) + aligner la baseline des deux logos (étoile + lockup).
 - **Lot F — Contrats & droits** : densifier l'écran (trop de vide), meilleure mise en page du
   tableau de bord des droits.
+- **Lot G — Système de notifications** (ajouté après l'intégration de la roadmap v2, reprend un
+  point laissé en suspens au Lot B) : (1) toasts centrés réutilisables (succès/erreur/info) via
+  un contexte global `NotificationProvider`/`useNotification()`, remplaçant les 3 bricolages
+  `messageSucces` + `setTimeout` existants (FicheProgramme, FenetresDroitsPanel, EpisodesPanel)
+  et le cas « aucune modification à enregistrer » (info) ; (2) garde-fou « modifications non
+  enregistrées » — snapshot de la valeur initiale au chargement, comparaison à l'état courant,
+  confirmation avant d'abandonner une édition (bouton retour/fermer, ou sélection d'un autre
+  élément) sur les 6 formulaires à Enregistrer de l'app (FicheProgramme, FenetresDroitsPanel,
+  EpisodesPanel, InspecteurBloc, PanneauBlocGrilleType, PanneauPublication) — pas de garde-fou
+  sur la navigation Sidebar (hors périmètre, l'enregistrement de grille sera un bouton explicite
+  en P23) ni de `beforeunload` navigateur ; (3) remplacement des 7 `window.confirm` (+ 2
+  `window.alert`) existants par la modale de confirmation du même système.
 
 > **En attente de clarification** : « Type de bloc == Genre (grille linéaire) : corriger la
 > logique » — sens à préciser avec l'utilisateur. Rattachement probable : P21 ou P22.
