@@ -32,8 +32,8 @@ export default function TopBar({
           <kbd className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-400">Ctrl+K</kbd>
         </button>
 
-        <div className="flex items-center gap-2">
-          <img src={chaineActive.logo} alt={chaineActive.nom} className="h-9 w-9 shrink-0 object-contain" />
+        <div className="flex items-start gap-2">
+          <img src={chaineActive.logo} alt={chaineActive.nom} className="h-8 w-8 shrink-0 object-contain" />
           <div className="flex flex-col">
             <select
               value={chaineActive.code}
