@@ -25,6 +25,7 @@ import {
 } from '../lib/bilans.js'
 import { calculerCouverture, resumerCouverture } from '../lib/couverture.js'
 import { construireDonneesBilan, construireLignesExcelBilan, construireNomFichierBilan } from '../lib/exportBilan.js'
+import CarteIndicateur from '../components/CarteIndicateur.jsx'
 
 const STATUTS = [
   { code: 'TOUS', label: 'Tous' },
@@ -32,15 +33,6 @@ const STATUTS = [
   { code: 'FINS_DE_DROITS', label: 'Fins de droits proches' },
   { code: 'NON_PROGRAMMES', label: 'Non programmés sur la période' },
 ]
-
-function CarteIndicateur({ libelle, valeur }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs font-medium text-slate-500">{libelle}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-900">{valeur}</div>
-    </div>
-  )
-}
 
 // Variable CSS Tailwind v4 correspondant à une classe `bg-snrt-*` (couleursGenre.js)
 // — style inline, pas une classe Tailwind construite dynamiquement (le scanner JIT

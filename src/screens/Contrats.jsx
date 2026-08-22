@@ -1,8 +1,17 @@
-import { useEffect, useState } from 'react'
-import { ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { Search, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
 import { listerProgrammesParChaine, listerToutesLesFenetresDroits } from '../lib/db.js'
 import { estProgrammable, fenetresProchesDeLaFermeture } from '../lib/droits.js'
 import { aujourdHuiISO } from '../lib/semaine.js'
+import CarteIndicateur from '../components/CarteIndicateur.jsx'
+
+const STATUTS = [
+  { code: 'TOUS', label: 'Tous' },
+  { code: 'OK', label: 'OK' },
+  { code: 'ALERTE', label: 'Alerte (ferme bientôt)' },
+  { code: 'HORS_DROITS', label: 'Hors droits' },
+  { code: 'SANS_RESTRICTION', label: 'Sans restriction' },
+]
 
 // Fenêtre la plus pertinente à afficher pour un titre : celle qui couvre
 // aujourd'hui si elle existe, sinon la plus récente (date de fin la plus
@@ -14,11 +23,48 @@ function fenetrePertinente(fenetres, aujourdHui) {
   return [...fenetres].sort((a, b) => b.date_fin.localeCompare(a.date_fin))[0] ?? null
 }
 
+// Classification à 4 catégories d'un titre (OK / alerte / hors droits / sans
+// restriction) — source unique pour les cartes indicateurs ET le tableau.
+function classifierDroits(programme, fenetresDroits, aujourdHui) {
+  const fenetresDuTitre = fenetresDroits.filter((f) => f.programme_id === programme.id)
+  const droits = estProgrammable(programme.id, fenetresDroits, aujourdHui)
+  const alerte = droits.ok && fenetresProchesDeLaFermeture(fenetresDuTitre, aujourdHui).length > 0
+  const fenetre = fenetrePertinente(fenetresDuTitre, aujourdHui)
+
+  if (!droits.ok) {
+    return { categorie: 'HORS_DROITS', Icone: ShieldX, classeTexte: 'text-red-600', libelle: droits.motif, fenetre }
+  }
+  if (alerte) {
+    return {
+      categorie: 'ALERTE',
+      Icone: ShieldAlert,
+      classeTexte: 'text-amber-600',
+      libelle: 'Ferme bientôt / peu de passages',
+      fenetre,
+    }
+  }
+  if (fenetresDuTitre.length === 0) {
+    return {
+      categorie: 'SANS_RESTRICTION',
+      Icone: ShieldCheck,
+      classeTexte: 'text-slate-500',
+      libelle: 'Sans restriction (aucune fenêtre)',
+      fenetre,
+    }
+  }
+  return { categorie: 'OK', Icone: ShieldCheck, classeTexte: 'text-emerald-600', libelle: 'OK', fenetre }
+}
+
 export default function Contrats({ chaineActive }) {
   const [programmes, setProgrammes] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
+
+  const [recherche, setRecherche] = useState('')
+  const [filtreStatut, setFiltreStatut] = useState('TOUS')
+  const idRecherche = useId()
+  const idFiltreStatut = useId()
 
   useEffect(() => {
     setChargement(true)
@@ -33,6 +79,27 @@ export default function Contrats({ chaineActive }) {
 
   const aujourdHui = aujourdHuiISO()
 
+  const classificationParId = useMemo(() => {
+    const map = new Map()
+    for (const p of programmes) map.set(p.id, classifierDroits(p, fenetresDroits, aujourdHui))
+    return map
+  }, [programmes, fenetresDroits, aujourdHui])
+
+  const compteurs = useMemo(() => {
+    const c = { OK: 0, ALERTE: 0, HORS_DROITS: 0, SANS_RESTRICTION: 0 }
+    for (const classification of classificationParId.values()) c[classification.categorie] += 1
+    return c
+  }, [classificationParId])
+
+  const programmesFiltres = useMemo(() => {
+    const q = recherche.trim().toLowerCase()
+    return programmes.filter((p) => {
+      if (filtreStatut !== 'TOUS' && classificationParId.get(p.id)?.categorie !== filtreStatut) return false
+      if (q && !p.titre.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [programmes, recherche, filtreStatut, classificationParId])
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
@@ -42,14 +109,61 @@ export default function Contrats({ chaineActive }) {
           Acquisitions (hors périmètre STM Next, cahier §1.5.2) — gérez les fenêtres de droits depuis la fiche du
           titre, dans l'écran Programmes.
         </p>
+
+        <div className="mt-4 flex flex-wrap items-end gap-4 border-t border-slate-100 pt-4">
+          <div>
+            <label htmlFor={idRecherche} className="mb-1 block text-sm font-medium text-slate-700">
+              Recherche
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                id={idRecherche}
+                type="text"
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                placeholder="Titre…"
+                className="w-64 rounded-md border border-slate-300 py-2 pl-8 pr-3 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label htmlFor={idFiltreStatut} className="mb-1 block text-sm font-medium text-slate-700">
+              Statut
+            </label>
+            <select
+              id={idFiltreStatut}
+              value={filtreStatut}
+              onChange={(e) => setFiltreStatut(e.target.value)}
+              className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              {STATUTS.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
+
+      {!chargement && programmes.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <CarteIndicateur libelle="Titres OK" valeur={compteurs.OK} />
+          <CarteIndicateur libelle="En alerte" valeur={compteurs.ALERTE} />
+          <CarteIndicateur libelle="Hors droits" valeur={compteurs.HORS_DROITS} />
+          <CarteIndicateur libelle="Sans restriction" valeur={compteurs.SANS_RESTRICTION} />
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         {chargement ? (
           <p className="text-sm text-slate-500">Chargement…</p>
         ) : programmes.length === 0 ? (
           <p className="text-sm text-slate-500">Aucun programme sur cette chaîne.</p>
+        ) : programmesFiltres.length === 0 ? (
+          <p className="text-sm text-slate-500">Aucun titre ne correspond aux filtres.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
@@ -62,28 +176,8 @@ export default function Contrats({ chaineActive }) {
               </tr>
             </thead>
             <tbody>
-              {programmes.map((p) => {
-                const fenetresDuTitre = fenetresDroits.filter((f) => f.programme_id === p.id)
-                const droits = estProgrammable(p.id, fenetresDroits, aujourdHui)
-                const alerte = droits.ok && fenetresProchesDeLaFermeture(fenetresDuTitre, aujourdHui).length > 0
-                const fenetre = fenetrePertinente(fenetresDuTitre, aujourdHui)
-
-                let Icone = ShieldCheck
-                let classeTexte = 'text-emerald-600'
-                let libelle = 'OK'
-                if (!droits.ok) {
-                  Icone = ShieldX
-                  classeTexte = 'text-red-600'
-                  libelle = droits.motif
-                } else if (alerte) {
-                  Icone = ShieldAlert
-                  classeTexte = 'text-amber-600'
-                  libelle = 'Ferme bientôt / peu de passages'
-                } else if (fenetresDuTitre.length === 0) {
-                  libelle = 'Sans restriction (aucune fenêtre)'
-                  classeTexte = 'text-slate-500'
-                }
-
+              {programmesFiltres.map((p) => {
+                const { Icone, classeTexte, libelle, fenetre } = classificationParId.get(p.id)
                 return (
                   <tr key={p.id} className="border-b border-slate-100">
                     <td className="py-2 pr-4 font-medium text-slate-800">{p.titre}</td>
