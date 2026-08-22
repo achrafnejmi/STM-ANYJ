@@ -5,21 +5,24 @@ import FicheProgramme from './FicheProgramme.jsx'
 export default function Programmes({ chaineActive, programmeCible }) {
   const [vue, setVue] = useState('LISTE')
   const [programmeId, setProgrammeId] = useState(null)
+  const [ongletCible, setOngletCible] = useState(undefined)
 
-  function ouvrir(id) {
+  function ouvrir(id, onglet) {
     setProgrammeId(id)
+    setOngletCible(onglet)
     setVue('FICHE')
   }
 
-  // Résultat de recherche globale (EXG-M10-04, App.jsx) : `programmeCible`
-  // change de référence à chaque sélection (même id inclus), donc cet effet
-  // se redéclenche systématiquement.
+  // Ouverture externe (recherche globale EXG-M10-04, ou Contrats & droits vers
+  // l'onglet Droits, App.jsx) : `programmeCible` change de référence à chaque
+  // sélection (même id inclus), donc cet effet se redéclenche systématiquement.
   useEffect(() => {
-    if (programmeCible?.id) ouvrir(programmeCible.id)
+    if (programmeCible?.id) ouvrir(programmeCible.id, programmeCible.onglet)
   }, [programmeCible])
 
   function nouveau() {
     setProgrammeId(null)
+    setOngletCible(undefined)
     setVue('FICHE')
   }
 
@@ -29,7 +32,15 @@ export default function Programmes({ chaineActive, programmeCible }) {
   }
 
   if (vue === 'FICHE') {
-    return <FicheProgramme programmeId={programmeId} chaineActive={chaineActive} onRetour={retourListe} />
+    return (
+      <FicheProgramme
+        key={`${programmeId ?? 'nouveau'}:${programmeCible?.cle ?? ''}`}
+        programmeId={programmeId}
+        chaineActive={chaineActive}
+        onRetour={retourListe}
+        ongletInitial={ongletCible ?? 'GENERAL'}
+      />
+    )
   }
 
   return <ListeProgrammes chaineActive={chaineActive} onOuvrir={ouvrir} onNouveau={nouveau} />

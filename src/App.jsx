@@ -96,11 +96,12 @@ function App() {
     setChaineActive(lireChaineActive())
   }
 
-  // Résultat de recherche globale (EXG-M10-04) : bascule sur Programmes et
-  // ouvre directement la fiche visée.
-  function ouvrirProgrammeDepuisRecherche(id) {
+  // Ouverture externe d'une fiche programme (recherche globale EXG-M10-04, ou
+  // Contrats & droits vers l'onglet Droits) : bascule sur Programmes et ouvre
+  // directement la fiche visée, sur l'onglet demandé (Général par défaut).
+  function ouvrirProgramme(id, onglet) {
     naviguer('PROGRAMMES')
-    setProgrammeCible({ id, cle: crypto.randomUUID() })
+    setProgrammeCible({ id, cle: crypto.randomUUID(), onglet })
   }
 
   const Ecran = ECRANS[section]
@@ -128,6 +129,7 @@ function App() {
             chaineActive={chaineActive}
             onAnomaliesBloquantes={setNbAnomaliesBloquantes}
             programmeCible={programmeCible}
+            onOuvrirProgramme={ouvrirProgramme}
           />
         </main>
       </div>
@@ -135,7 +137,7 @@ function App() {
         chaineActive={chaineActive}
         ouverte={rechercheOuverte}
         onFermer={() => setRechercheOuverte(false)}
-        onOuvrirProgramme={ouvrirProgrammeDepuisRecherche}
+        onOuvrirProgramme={ouvrirProgramme}
       />
     </div>
   )

@@ -71,12 +71,12 @@ function versFormulaire(programme) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL' }) {
   const [id, setId] = useState(idInitial)
   const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : { ...FORM_VIDE, chaine: chaineActive.nom }))
   const [programme, setProgramme] = useState(null)
   const [chargement, setChargement] = useState(Boolean(idInitial))
-  const [onglet, setOnglet] = useState('GENERAL')
+  const [onglet, setOnglet] = useState(ongletInitial)
   const [langueActive, setLangueActive] = useState('FR')
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)

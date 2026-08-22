@@ -7,11 +7,21 @@ import CarteIndicateur from '../components/CarteIndicateur.jsx'
 
 const STATUTS = [
   { code: 'TOUS', label: 'Tous' },
-  { code: 'OK', label: 'OK' },
+  { code: 'OK', label: 'Droits ouverts' },
   { code: 'ALERTE', label: 'Alerte (ferme bientôt)' },
   { code: 'HORS_DROITS', label: 'Hors droits' },
   { code: 'SANS_RESTRICTION', label: 'Sans restriction' },
 ]
+
+// Info-bulle (title=) par catégorie — explique précisément le critère derrière
+// chaque statut, sur les badges du tableau ET les cartes indicateurs.
+const DESCRIPTIONS_STATUT = {
+  OK: "Droits ouverts aujourd'hui : une fenêtre de droits couvre la date du jour avec des passages disponibles.",
+  ALERTE: 'Droits ouverts, mais fenêtre proche de la fermeture ou peu de passages restants — à surveiller.',
+  HORS_DROITS: 'Aucune fenêtre de droits valide aujourd\'hui (expirée, épuisée, ou hors période) — non programmable.',
+  SANS_RESTRICTION:
+    'Aucune fenêtre de droits définie pour ce titre — programmable par défaut, sans restriction (RG-03).',
+}
 
 // Fenêtre la plus pertinente à afficher pour un titre : celle qui couvre
 // aujourd'hui si elle existe, sinon la plus récente (date de fin la plus
@@ -52,10 +62,10 @@ function classifierDroits(programme, fenetresDroits, aujourdHui) {
       fenetre,
     }
   }
-  return { categorie: 'OK', Icone: ShieldCheck, classeTexte: 'text-emerald-600', libelle: 'OK', fenetre }
+  return { categorie: 'OK', Icone: ShieldCheck, classeTexte: 'text-emerald-600', libelle: 'Droits ouverts', fenetre }
 }
 
-export default function Contrats({ chaineActive }) {
+export default function Contrats({ chaineActive, onOuvrirProgramme }) {
   const [programmes, setProgrammes] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -95,7 +105,9 @@ export default function Contrats({ chaineActive }) {
     const q = recherche.trim().toLowerCase()
     return programmes.filter((p) => {
       if (filtreStatut !== 'TOUS' && classificationParId.get(p.id)?.categorie !== filtreStatut) return false
-      if (q && !p.titre.toLowerCase().includes(q)) return false
+      if (q && !p.titre.toLowerCase().includes(q) && !(p.reference_contrat ?? '').toLowerCase().includes(q)) {
+        return false
+      }
       return true
     })
   }, [programmes, recherche, filtreStatut, classificationParId])
@@ -122,7 +134,7 @@ export default function Contrats({ chaineActive }) {
                 type="text"
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
-                placeholder="Titre…"
+                placeholder="Titre ou référence contrat…"
                 className="w-64 rounded-md border border-slate-300 py-2 pl-8 pr-3 text-sm"
               />
             </div>
@@ -150,10 +162,18 @@ export default function Contrats({ chaineActive }) {
 
       {!chargement && programmes.length > 0 && (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <CarteIndicateur libelle="Titres OK" valeur={compteurs.OK} />
-          <CarteIndicateur libelle="En alerte" valeur={compteurs.ALERTE} />
-          <CarteIndicateur libelle="Hors droits" valeur={compteurs.HORS_DROITS} />
-          <CarteIndicateur libelle="Sans restriction" valeur={compteurs.SANS_RESTRICTION} />
+          <CarteIndicateur libelle="Droits ouverts" valeur={compteurs.OK} description={DESCRIPTIONS_STATUT.OK} />
+          <CarteIndicateur libelle="En alerte" valeur={compteurs.ALERTE} description={DESCRIPTIONS_STATUT.ALERTE} />
+          <CarteIndicateur
+            libelle="Hors droits"
+            valeur={compteurs.HORS_DROITS}
+            description={DESCRIPTIONS_STATUT.HORS_DROITS}
+          />
+          <CarteIndicateur
+            libelle="Sans restriction"
+            valeur={compteurs.SANS_RESTRICTION}
+            description={DESCRIPTIONS_STATUT.SANS_RESTRICTION}
+          />
         </div>
       )}
 
@@ -177,14 +197,19 @@ export default function Contrats({ chaineActive }) {
             </thead>
             <tbody>
               {programmesFiltres.map((p) => {
-                const { Icone, classeTexte, libelle, fenetre } = classificationParId.get(p.id)
+                const { categorie, Icone, classeTexte, libelle, fenetre } = classificationParId.get(p.id)
                 return (
-                  <tr key={p.id} className="border-b border-slate-100">
+                  <tr
+                    key={p.id}
+                    onClick={() => onOuvrirProgramme(p.id, 'DROITS')}
+                    title="Ouvrir la fiche — onglet Droits (contrat, fenêtres de droits)"
+                    className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                  >
                     <td className="py-2 pr-4 font-medium text-slate-800">{p.titre}</td>
                     <td className="py-2 pr-4 text-slate-600">{p.genre || '—'}</td>
                     <td className="py-2 pr-4 text-slate-600">{p.reference_contrat || '—'}</td>
                     <td className={`py-2 pr-4 ${classeTexte}`}>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5" title={DESCRIPTIONS_STATUT[categorie]}>
                         <Icone size={15} />
                         {libelle}
                       </span>
