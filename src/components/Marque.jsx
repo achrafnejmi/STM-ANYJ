@@ -19,8 +19,8 @@ export default function Marque({ variante = 'topbar' }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <img src={LOGO_SVG} alt="SNRT" className="h-9 w-auto" />
+    <div className="flex items-end gap-2">
+      <img src={LOGO_SVG} alt="SNRT" className="h-8 w-auto" />
       <div className="flex flex-col leading-tight">
         <span className="text-lg font-bold text-snrt-navy">{ABBR}</span>
         <span className="hidden text-[11px] tracking-wide text-slate-500 sm:inline">{NOM_COMPLET}</span>

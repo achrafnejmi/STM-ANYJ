@@ -15,6 +15,7 @@ export const CHAINES = [
     nomAr: 'الأولى',
     ligneEditoriale: 'Généraliste nationale',
     couleur: 'bg-snrt-red',
+    logo: '/brand/aw.png',
   },
   {
     id: '948307a6-2c6e-4c2e-a46c-da9ca7d75611',
@@ -23,6 +24,7 @@ export const CHAINES = [
     nomAr: 'الرياضية',
     ligneEditoriale: 'Sport',
     couleur: 'bg-snrt-green',
+    logo: '/brand/ar.png',
   },
   {
     id: '20fd7905-7f60-4d11-8c62-274aef1f5bb9',
@@ -31,6 +33,7 @@ export const CHAINES = [
     nomAr: 'الثقافية',
     ligneEditoriale: 'Culture et savoirs',
     couleur: 'bg-snrt-cyan',
+    logo: '/brand/at.png',
   },
   {
     id: 'bfdaf3eb-cd99-4517-b0fa-c299fe886087',
@@ -39,6 +42,7 @@ export const CHAINES = [
     nomAr: 'السادسة',
     ligneEditoriale: 'Religieux',
     couleur: 'bg-snrt-orange',
+    logo: '/brand/as.png',
   },
   {
     id: 'bcc05c72-880f-4b80-a9bc-b915637ff813',
@@ -47,6 +51,7 @@ export const CHAINES = [
     nomAr: 'تمازيغت',
     ligneEditoriale: 'Amazighe',
     couleur: 'bg-snrt-blue',
+    logo: '/brand/tm.png',
   },
 ]
 

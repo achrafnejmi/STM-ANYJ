@@ -33,11 +33,7 @@ export default function TopBar({
         </button>
 
         <div className="flex items-center gap-2">
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${chaineActive.couleur}`}
-          >
-            {chaineActive.code}
-          </span>
+          <img src={chaineActive.logo} alt={chaineActive.nom} className="h-9 w-9 shrink-0 object-contain" />
           <div className="flex flex-col">
             <select
               value={chaineActive.code}
