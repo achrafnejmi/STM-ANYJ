@@ -9,11 +9,12 @@ import {
   listerEpisodes,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
-import { CHAINES, chaineParNom } from '../lib/chaines.js'
+import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
+import Toggle from '../components/Toggle.jsx'
 import { useNotification, useGardeModifications, useSignalerModifications } from '../components/NotificationProvider.jsx'
 
 const TAILLE_MAX_ATTESTATION = 5 * 1024 * 1024 // 5 Mo
@@ -42,39 +43,48 @@ const FORM_VIDE = {
   titre_en: '',
   genre: '',
   sous_genre: '',
-  chaine: '',
   date_production: '',
   code: '',
   description: '',
   description_ar: '',
   description_en: '',
   auteur: '',
-  exclusivite: false,
+  // P22 — modèle d'exclusivité : chaine_id NULL = partagé toutes chaînes
+  // (par défaut). `exclusif` pilote l'interrupteur ; `chaineExclusiveId`
+  // reste renseigné même quand `exclusif` est faux (mémorise le dernier choix
+  // si l'utilisateur active/désactive l'interrupteur plusieurs fois).
+  exclusif: false,
+  chaineExclusiveId: '',
   reference_contrat: '',
 }
 
-function versFormulaire(programme) {
+// `chaineExclusiveId` garde toujours une valeur (jamais '') même pour un
+// programme partagé : le menu « Chaîne exclusive » reste masqué tant que
+// `exclusif` est faux, mais préremplir avec `chaineActive.id` (au lieu de '')
+// évite un faux « modifications non enregistrées » au chargement — sinon ce
+// champ divergerait de `valeurVide` (P22, cf. useGardeModifications).
+function versFormulaire(programme, chaineActive) {
   return {
     titre: programme.titre ?? '',
     titre_ar: programme.titre_ar ?? '',
     titre_en: programme.titre_en ?? '',
     genre: programme.genre ?? '',
     sous_genre: programme.sous_genre ?? '',
-    chaine: programme.chaine ?? '',
     date_production: programme.date_production ?? '',
     code: programme.code ?? '',
     description: programme.description ?? '',
     description_ar: programme.description_ar ?? '',
     description_en: programme.description_en ?? '',
     auteur: programme.auteur ?? '',
-    exclusivite: programme.exclusivite ?? false,
+    exclusif: programme.chaine_id != null,
+    chaineExclusiveId: programme.chaine_id ?? chaineActive.id,
     reference_contrat: programme.reference_contrat ?? '',
   }
 }
 
 export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange }) {
   const [id, setId] = useState(idInitial)
-  const valeurVide = { ...FORM_VIDE, chaine: chaineActive.nom }
+  const valeurVide = { ...FORM_VIDE, chaineExclusiveId: chaineActive.id }
   const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
   const [valeurInitiale, setValeurInitiale] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
   const [programme, setProgramme] = useState(null)
@@ -86,17 +96,18 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   const [nombreEpisodes, setNombreEpisodes] = useState(0)
   const [televersementEnCours, setTeleversementEnCours] = useState(false)
   const idDescription = useId()
-  const idExclusivite = useId()
+  const idExclusif = useId()
   const notifier = useNotification()
 
   useEffect(() => {
     if (!idInitial) return
     obtenirProgramme(idInitial).then((p) => {
       setProgramme(p)
-      setForm(versFormulaire(p))
-      setValeurInitiale(versFormulaire(p))
+      setForm(versFormulaire(p, chaineActive))
+      setValeurInitiale(versFormulaire(p, chaineActive))
       setChargement(false)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chaineActive sert juste de valeur par défaut pour un champ masqué (P22) ; un changement de chaîne active pendant l'édition ne doit pas relancer le chargement du programme
   }, [idInitial])
 
   useEffect(() => {
@@ -120,21 +131,25 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   async function enregistrer(e) {
     e.preventDefault()
     setErreur(null)
+    const chaineExclusive = form.exclusif ? CHAINES.find((c) => c.id === form.chaineExclusiveId) : null
+    if (form.exclusif && !chaineExclusive) {
+      setErreur('Sélectionnez la chaîne exclusive.')
+      return
+    }
     const champs = {
       titre: form.titre.trim(),
       titre_ar: form.titre_ar.trim() || null,
       titre_en: form.titre_en.trim() || null,
       genre: form.genre.trim() || null,
       sous_genre: form.sous_genre.trim() || null,
-      chaine: form.chaine.trim(),
-      chaine_id: chaineParNom(form.chaine.trim())?.id ?? null,
+      chaine: chaineExclusive?.nom ?? null,
+      chaine_id: chaineExclusive?.id ?? null,
       date_production: form.date_production || null,
       code: form.code.trim() || null,
       description: form.description.trim() || null,
       description_ar: form.description_ar.trim() || null,
       description_en: form.description_en.trim() || null,
       auteur: form.auteur.trim() || null,
-      exclusivite: form.exclusivite,
       reference_contrat: form.reference_contrat.trim() || null,
     }
     if (!champs.titre) {
@@ -150,18 +165,18 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       if (id) {
         const maj = await mettreAJourProgramme(id, champs)
         setProgramme(maj)
-        setValeurInitiale(versFormulaire(maj))
+        setValeurInitiale(versFormulaire(maj, chaineActive))
         notifier.succes('Programme modifié.')
       } else {
         const cree = await creerProgramme({ ...champs, cree_par: lireUtilisateur() })
         setProgramme(cree)
         setId(cree.id)
-        setValeurInitiale(versFormulaire(cree))
+        setValeurInitiale(versFormulaire(cree, chaineActive))
         notifier.succes('Programme créé.')
       }
     } catch (err) {
       if (err.code === '23505') {
-        setErreur('Un programme avec ce titre existe déjà sur cette chaîne (titre + chaîne doivent être uniques).')
+        setErreur('Un programme avec ce titre existe déjà (partagé, ou déjà exclusif à cette chaîne).')
       } else {
         setErreur(err.message)
       }
@@ -248,16 +263,6 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             </div>
             <div className="grid grid-cols-2 gap-4">
               <ChampSelect
-                label="Chaîne *"
-                required
-                value={form.chaine}
-                onChange={(v) => setForm({ ...form, chaine: v })}
-                options={CHAINES.map((c) => ({ valeur: c.nom, libelle: c.nom }))}
-              />
-              <Champ label="Date de production" type="date" value={form.date_production} onChange={(v) => setForm({ ...form, date_production: v })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <ChampSelect
                 label="Genre"
                 value={form.genre}
                 onChange={(v) => setForm({ ...form, genre: v })}
@@ -265,6 +270,9 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 vide="— Choisir un genre —"
               />
               <Champ label="Sous-genre" value={form.sous_genre} onChange={(v) => setForm({ ...form, sous_genre: v })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Champ label="Date de production" type="date" value={form.date_production} onChange={(v) => setForm({ ...form, date_production: v })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Champ label="Code" value={form.code} onChange={(v) => setForm({ ...form, code: v })} />
@@ -282,15 +290,49 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
-            <label htmlFor={idExclusivite} className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                id={idExclusivite}
-                type="checkbox"
-                checked={form.exclusivite}
-                onChange={(e) => setForm({ ...form, exclusivite: e.target.checked })}
-              />
-              Exclusivité
-            </label>
+            <div>
+              <div className="flex items-center gap-3">
+                <Toggle
+                  id={idExclusif}
+                  checked={form.exclusif}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      exclusif: v,
+                      chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
+                    })
+                  }
+                  label="Exclusif à cette chaîne"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      exclusif: !form.exclusif,
+                      chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
+                    })
+                  }
+                  className="text-sm font-medium text-slate-700"
+                >
+                  Exclusif à cette chaîne
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Programme partagé par toutes les chaînes par défaut ; activez pour le réserver à une chaîne.
+              </p>
+              {form.exclusif && (
+                <div className="mt-3 max-w-xs">
+                  <ChampSelect
+                    label="Chaîne exclusive"
+                    required
+                    value={form.chaineExclusiveId}
+                    onChange={(v) => setForm({ ...form, chaineExclusiveId: v })}
+                    options={CHAINES.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>

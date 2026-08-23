@@ -40,10 +40,15 @@ export async function supprimerProgramme(id) {
   verifie(await supabase.from('programme').delete().eq('id', id).select())
 }
 
-// Scoping par chaîne active (M1, P9) — filtre par chaine_id (FK, migration-p9),
-// pas par le texte libre chaine.
+// Scoping par chaîne active (M1, P9) — filtre par chaine_id (FK, migration-p9).
+// P22 : chaine_id NULL = programme partagé par toutes les chaînes, fusionné
+// avec les exclusifs à cette chaîne — même pattern .or() que
+// listerSpotsBibliotheque (P16b), un simple .eq() ne peut pas exprimer
+// « cette chaîne OU aucune chaîne » sur la même colonne.
 export async function listerProgrammesParChaine(chaineId) {
-  return verifie(await supabase.from('programme').select('*').eq('chaine_id', chaineId).order('titre'))
+  return verifie(
+    await supabase.from('programme').select('*').or(`chaine_id.eq.${chaineId},chaine_id.is.null`).order('titre')
+  )
 }
 
 // --- attestation (Supabase Storage, bucket "attestations" — migration-p7.sql) ---

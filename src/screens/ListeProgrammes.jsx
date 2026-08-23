@@ -119,7 +119,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
     try {
       const lignes = filtres.map((p) => ({
         Titre: p.titre,
-        Chaîne: p.chaine,
+        Chaîne: p.chaine_id == null ? 'Toutes chaînes' : p.chaine,
         Genre: p.genre ?? '',
         'Durée moyenne': formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id)),
         'Nb épisodes': nbEpisodesParProgramme.get(p.id) ?? 0,
@@ -217,7 +217,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                   className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
                 >
                   <td className="py-2 pr-4 text-slate-700">{p.titre}</td>
-                  <td className="py-2 pr-4 text-slate-700">{p.chaine}</td>
+                  <td className="py-2 pr-4 text-slate-700">{p.chaine_id == null ? 'Toutes chaînes' : p.chaine}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.genre || '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id))}</td>
                   <td className="py-2 pr-4 text-slate-700">{nbEpisodesParProgramme.get(p.id) ?? 0}</td>
