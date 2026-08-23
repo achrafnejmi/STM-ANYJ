@@ -130,7 +130,7 @@ function OngletBloc({ diffusion, programme, chaineActive, grilleId, onModifie, o
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
-        grilleId,
+        documentId: grilleId,
         libelle: `Modification horaire : ${diffusion.titre_cache}`,
         operations: [{ table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: maj }],
       })
@@ -306,7 +306,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
       const entree = await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
-        grilleId,
+        documentId: grilleId,
         libelle: `Répétition : ${diffusion.titre_cache} (${creees.length} occurrence${creees.length > 1 ? 's' : ''})`,
         operations: creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
       })
@@ -452,7 +452,7 @@ function OngletVecteur({ diffusion, chaineActive, grilleId, onModifie, onCreerPl
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
-        grilleId,
+        documentId: grilleId,
         libelle: `Scission vecteur : ${diffusion.titre_cache}`,
         operations: [
           { table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: original },

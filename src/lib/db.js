@@ -333,16 +333,68 @@ export async function supprimerCampagne(id) {
   verifie(await supabase.from('campagne').delete().eq('id', id).select())
 }
 
+// --- plan_media (P24) : plusieurs plans média nommés par chaîne, un seul live ---
+
+export async function listerPlanMediaParChaine(chaineId) {
+  return verifie(await supabase.from('plan_media').select('*').eq('chaine_id', chaineId).order('cree_le'))
+}
+
+export async function obtenirPlanMediaLiveParChaine(chaineId) {
+  return verifie(
+    await supabase.from('plan_media').select('*').eq('chaine_id', chaineId).eq('est_live', true).maybeSingle()
+  )
+}
+
+export async function creerPlanMedia(champs) {
+  return verifiePremiere(await supabase.from('plan_media').insert(champs).select())
+}
+
+export async function mettreAJourPlanMedia(id, champs) {
+  return verifiePremiere(await supabase.from('plan_media').update(champs).eq('id', id).select())
+}
+
+export async function supprimerPlanMedia(id) {
+  verifie(await supabase.from('plan_media').delete().eq('id', id).select())
+}
+
+// Bascule le plan média live d'une chaîne — même mécanique que
+// definirGrilleLive (P23) : 2 updates séquentiels, pas de transaction
+// atomique côté client Supabase, acceptable pour un PoC mono-utilisateur.
+export async function definirPlanMediaLive(chaineId, planMediaId) {
+  verifie(await supabase.from('plan_media').update({ est_live: false }).eq('chaine_id', chaineId).eq('est_live', true))
+  return verifiePremiere(await supabase.from('plan_media').update({ est_live: true }).eq('id', planMediaId).select())
+}
+
 // --- element_secondaire (M5, P16) ---
 
 // Bulk, non filtré par date : RG-M5-01/02/03 portent sur tout l'historique de
 // la chaîne (diffusion à venir, maximum journalier, séparation), jamais
 // seulement la fenêtre affichée à l'écran — même précédent que
 // listerDiffusionsLineairesParChaine, déjà utilisé ainsi par autoprog.js.
+// P24 : reste volontairement la vue "tous les plans média de la chaîne" —
+// c'est ce dont PlanMedia.jsx a besoin pour afficher plusieurs onglets à la
+// fois (filtrage par plan_media_id fait côté client).
 export async function listerElementsSecondairesParChaine(chaineId) {
   return verifie(
     await supabase.from('element_secondaire').select('*').eq('chaine_id', chaineId).order('date').order('heure_debut')
   )
+}
+
+// P24 : vue restreinte à UN plan média — utilisée par les écrans qui ne
+// doivent voir que le plan média live d'une chaîne (Conducteur, Accueil).
+export async function listerElementsSecondairesParPlanMedia(planMediaId) {
+  return verifie(
+    await supabase
+      .from('element_secondaire')
+      .select('*')
+      .eq('plan_media_id', planMediaId)
+      .order('date')
+      .order('heure_debut')
+  )
+}
+
+export async function obtenirElementSecondaire(id) {
+  return verifie(await supabase.from('element_secondaire').select('*').eq('id', id).maybeSingle())
 }
 
 export async function creerElementsSecondaires(lignes) {
@@ -355,6 +407,14 @@ export async function supprimerElementSecondaire(id) {
   verifie(await supabase.from('element_secondaire').delete().eq('id', id).select())
 }
 
+// P24 : ajoutée pour compléter la forme {obtenir, creer, mettreAJour,
+// supprimer} exigée par le TABLES map d'undoManager.js — aucune opération de
+// cette phase ne produit de type UPDATE sur cette table, mais la forme est
+// nécessaire pour l'intégrer au système d'annuler/rétablir.
+export async function mettreAJourElementSecondaire(id, champs) {
+  return verifiePremiere(await supabase.from('element_secondaire').update(champs).eq('id', id).select())
+}
+
 // EXG-M5-02/RG-16 (même mécanisme que M4) : annulation en une opération de
 // tout ce qu'un run a créé.
 export async function supprimerElementsSecondairesParRun(runId) {
@@ -363,13 +423,16 @@ export async function supprimerElementsSecondairesParRun(runId) {
 
 // RG-M5-06 : contrairement à son équivalent M4, cette suppression est
 // INCONDITIONNELLE — pas de case « Écraser », chaque génération recalcule
-// systématiquement les éléments AUTOMATIQUE de la période, jamais les MANUELLE.
-export async function supprimerElementsSecondairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin) {
+// systématiquement les éléments AUTOMATIQUE de la période, jamais les
+// MANUELLE. P24 : planMediaId ajouté — la génération cible le document
+// actuellement ouvert dans Plan média, pas systématiquement le live.
+export async function supprimerElementsSecondairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin, planMediaId) {
   return verifie(
     await supabase
       .from('element_secondaire')
       .delete()
       .eq('chaine_id', chaineId)
+      .eq('plan_media_id', planMediaId)
       .eq('origine', 'AUTOMATIQUE')
       .gte('date', dateDebut)
       .lte('date', dateFin)
@@ -469,15 +532,24 @@ export async function compterCampagnesParTranche(code) {
 
 // --- historique_action (Undo/Rollback ciblé, P19b) ---
 
+// P24 : deux écrans ont désormais leur propre colonne de document sur
+// historique_action (grille_id, plan_media_id) — GRILLE_TYPE n'en a aucune
+// (une seule pile par chaîne, comportement inchangé depuis P19b).
+const COLONNE_DOCUMENT_PAR_ECRAN = {
+  GRILLE_LINEAIRE: 'grille_id',
+  PLAN_MEDIA: 'plan_media_id',
+}
+
 // Table de taille PoC — une seule lecture par écran+chaîne, tri/filtrage
 // ACTIVE/ANNULEE fait côté undoManager.js (même précédent que
-// listerToutesLesFenetresDroits/listerTousLesEpisodes). P23 : grilleId
-// optionnel — filtre en plus par grille pour GRILLE_LINEAIRE (une pile
-// annuler/rétablir par grille ouverte) ; GRILLE_TYPE continue de l'omettre,
-// comportement inchangé.
-export async function listerHistoriqueActionsParChaineEcran(chaineId, ecran, grilleId = null) {
+// listerToutesLesFenetresDroits/listerTousLesEpisodes). documentId optionnel
+// — filtre en plus par grille/plan média pour les écrans qui ont plusieurs
+// documents ouverts en parallèle (une pile annuler/rétablir par document) ;
+// GRILLE_TYPE continue de l'omettre, comportement inchangé.
+export async function listerHistoriqueActionsParChaineEcran(chaineId, ecran, documentId = null) {
   let requete = supabase.from('historique_action').select('*').eq('chaine_id', chaineId).eq('ecran', ecran)
-  if (grilleId) requete = requete.eq('grille_id', grilleId)
+  const colonne = COLONNE_DOCUMENT_PAR_ECRAN[ecran]
+  if (documentId && colonne) requete = requete.eq(colonne, documentId)
   return verifie(await requete.order('cree_le', { ascending: false }))
 }
 
@@ -492,14 +564,15 @@ export async function mettreAJourHistoriqueAction(id, champs) {
 // Périme la pile de rétablissement d'un écran+chaîne — appelé avant toute
 // nouvelle action réelle (pas un Annuler/Rétablir), sémantique undo/redo
 // standard : une nouvelle branche d'historique invalide le redo en attente.
-// P23 : grilleId optionnel, même règle que listerHistoriqueActionsParChaineEcran.
-export async function perimerActionsAnnulees(chaineId, ecran, grilleId = null) {
+// documentId optionnel, même règle que listerHistoriqueActionsParChaineEcran.
+export async function perimerActionsAnnulees(chaineId, ecran, documentId = null) {
   let requete = supabase
     .from('historique_action')
     .update({ statut: 'PERIMEE' })
     .eq('chaine_id', chaineId)
     .eq('ecran', ecran)
     .eq('statut', 'ANNULEE')
-  if (grilleId) requete = requete.eq('grille_id', grilleId)
+  const colonne = COLONNE_DOCUMENT_PAR_ECRAN[ecran]
+  if (documentId && colonne) requete = requete.eq(colonne, documentId)
   return verifie(await requete.select())
 }

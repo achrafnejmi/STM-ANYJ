@@ -419,7 +419,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         enregistrerAction({
           chaineId: chaineActive.id,
           ecran: 'GRILLE_LINEAIRE',
-          grilleId: grilleActive.id,
+          documentId: grilleActive.id,
           libelle: `Dépôt : ${cree.titre_cache}`,
           operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
         }).then(() => appliquerCreation(cree))
@@ -554,7 +554,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     await enregistrerAction({
       chaineId: chaineActive.id,
       ecran: 'GRILLE_LINEAIRE',
-      grilleId: grilleActive.id,
+      documentId: grilleActive.id,
       libelle: `Collage (${creees.length} programme${creees.length > 1 ? 's' : ''})`,
       operations: creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
     })
@@ -1331,7 +1331,7 @@ function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibl
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
-        grilleId,
+        documentId: grilleId,
         libelle: `Création : ${cree.titre_cache}`,
         operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
       })

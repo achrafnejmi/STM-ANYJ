@@ -5,11 +5,13 @@ import {
   listerProgrammesParChaine,
   listerDiffusionsLineairesParGrille,
   obtenirGrilleLiveParChaine,
-  listerElementsSecondairesParChaine,
+  listerElementsSecondairesParPlanMedia,
+  obtenirPlanMediaLiveParChaine,
   listerCampagnesParChaine,
   listerSpotsBibliotheque,
   supprimerElementSecondaire,
 } from '../lib/db.js'
+import { enregistrerAction } from '../lib/undoManager.js'
 import { aujourdHuiISO, ajouterJours, lundiDeLaSemaine, joursDeLaSemaine, formaterDateLongue } from '../lib/semaine.js'
 import { construireDerouleJour, calculerSynthese, SEUIL_ECART_AFFICHE_SECONDES, SEUIL_ECART_SIGNALE_SECONDES } from '../lib/conducteur.js'
 import { secondesEnHeureHMS } from '../lib/planMedia.js'
@@ -113,6 +115,7 @@ export default function Conducteur({ chaineActive }) {
   const [programmes, setProgrammes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [elementsSecondaires, setElementsSecondaires] = useState([])
+  const [planMediaLive, setPlanMediaLive] = useState(null)
   const [campagnes, setCampagnes] = useState([])
   const [spots, setSpots] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -121,25 +124,28 @@ export default function Conducteur({ chaineActive }) {
 
   // P23 : le Conducteur (M7) pilote l'antenne réelle — lit uniquement la
   // grille LIVE de la chaîne, jamais les grilles parallèles (brouillons).
+  // P24 : idem pour le plan média — uniquement le document live.
   useEffect(() => {
     setChargement(true)
     setErreur(null)
-    obtenirGrilleLiveParChaine(chaineActive.id)
-      .then((grilleLive) =>
+    Promise.all([obtenirGrilleLiveParChaine(chaineActive.id), obtenirPlanMediaLiveParChaine(chaineActive.id)])
+      .then(([grilleLive, planMediaLiveTrouve]) =>
         Promise.all([
           listerProgrammesParChaine(chaineActive.id),
           grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
-          listerElementsSecondairesParChaine(chaineActive.id),
+          planMediaLiveTrouve ? listerElementsSecondairesParPlanMedia(planMediaLiveTrouve.id) : Promise.resolve([]),
           listerCampagnesParChaine(chaineActive.id),
           listerSpotsBibliotheque(chaineActive.id),
+          Promise.resolve(planMediaLiveTrouve),
         ])
       )
-      .then(([lignesProgrammes, lignesDiffusions, lignesElements, lignesCampagnes, lignesSpots]) => {
+      .then(([lignesProgrammes, lignesDiffusions, lignesElements, lignesCampagnes, lignesSpots, planMediaLiveTrouve]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)
         setElementsSecondaires(lignesElements)
         setCampagnes(lignesCampagnes)
         setSpots(lignesSpots)
+        setPlanMediaLive(planMediaLiveTrouve)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -174,8 +180,18 @@ export default function Conducteur({ chaineActive }) {
   const synthese = useMemo(() => calculerSynthese(lignes), [lignes])
 
   async function supprimerElement(id) {
+    const element = elementsSecondaires.find((e) => e.id === id)
     try {
       await supprimerElementSecondaire(id)
+      if (element && planMediaLive) {
+        await enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: 'PLAN_MEDIA',
+          documentId: planMediaLive.id,
+          libelle: `Suppression : ${element.libelle ?? element.type}`,
+          operations: [{ table: 'element_secondaire', type: 'DELETE', id, avant: element }],
+        })
+      }
       setElementsSecondaires((prev) => prev.filter((e) => e.id !== id))
     } catch (err) {
       setErreur(err.message)
@@ -314,9 +330,10 @@ export default function Conducteur({ chaineActive }) {
         </div>
       </div>
 
-      {insertion && (
+      {insertion && planMediaLive && (
         <PanneauInsertionManuelle
           chaineActive={chaineActive}
+          planMediaId={planMediaLive.id}
           dates={[dateReference]}
           diffusions={diffusionsDuJour}
           elementsSecondaires={elementsDuJour}

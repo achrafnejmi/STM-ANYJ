@@ -143,7 +143,7 @@ export default function AutoProgrammation({ chaineActive }) {
       const entree = await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
-        grilleId: grilleCibleId,
+        documentId: grilleCibleId,
         libelle: `Auto-programmation (${creees.length} diffusion${creees.length > 1 ? 's' : ''})`,
         operations: [
           ...supprimees.map((d) => ({ table: 'diffusion_lineaire', type: 'DELETE', id: d.id, avant: d })),

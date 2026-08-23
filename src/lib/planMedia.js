@@ -233,6 +233,7 @@ export function genererElementsSecondaires({
   opts,
   runId,
   chaineActive,
+  planMediaId,
 }) {
   const dateDebut = dates[0]
   const dateFin = dates[dates.length - 1]
@@ -271,6 +272,7 @@ export function genererElementsSecondaires({
     const placer = (type, dureeSecondes, campagneId, libelle) => {
       placements.push({
         chaine_id: chaineActive.id,
+        plan_media_id: planMediaId,
         date: intervalle.date,
         heure_debut: secondesEnHeureHMS(curseurSecondes),
         heure_fin: secondesEnHeureHMS(curseurSecondes + dureeSecondes),

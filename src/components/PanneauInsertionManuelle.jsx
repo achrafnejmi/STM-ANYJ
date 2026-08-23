@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { creerElementSecondaire } from '../lib/db.js'
+import { enregistrerAction } from '../lib/undoManager.js'
 import {
   calculerIntervalles,
   estPlacementValide,
@@ -25,6 +26,7 @@ import Modal from './Modal.jsx'
 // (ouverture depuis Plan média), le comportement est inchangé.
 export default function PanneauInsertionManuelle({
   chaineActive,
+  planMediaId,
   dates,
   diffusions,
   elementsSecondaires,
@@ -94,6 +96,7 @@ export default function PanneauInsertionManuelle({
     try {
       const champs = {
         chaine_id: chaineActive.id,
+        plan_media_id: planMediaId,
         date: dateChoisie,
         heure_debut: secondesEnHeureHMS(heureDebutSecondes),
         heure_fin: secondesEnHeureHMS(heureDebutSecondes + duree),
@@ -106,6 +109,13 @@ export default function PanneauInsertionManuelle({
         run_id: null,
       }
       const cree = await creerElementSecondaire(champs)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'PLAN_MEDIA',
+        documentId: planMediaId,
+        libelle: `Insertion manuelle : ${cree.libelle ?? cree.type}`,
+        operations: [{ table: 'element_secondaire', type: 'INSERT', id: cree.id, apres: cree }],
+      })
       onElementCree(cree)
       // Coupure pré-remplie (P17, Conducteur) : pas de sélecteur vers lequel
       // retomber, on la garde pour permettre d'enchaîner plusieurs insertions

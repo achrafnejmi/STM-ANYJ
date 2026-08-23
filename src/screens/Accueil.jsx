@@ -11,7 +11,8 @@ import {
   listerDiffusionsLineairesParGrille,
   obtenirGrilleLiveParChaine,
   listerCampagnesParChaine,
-  listerElementsSecondairesParChaine,
+  listerElementsSecondairesParPlanMedia,
+  obtenirPlanMediaLiveParChaine,
 } from '../lib/db.js'
 import { aujourdHuiISO, lundiDeLaSemaine, joursDeLaSemaine, formaterPlageSemaine } from '../lib/semaine.js'
 import { GENRES } from '../lib/genres.js'
@@ -115,18 +116,19 @@ export default function Accueil({ chaineActive }) {
 
   // P23 : « Non programmés sur la période » (M9) reflète l'antenne réelle —
   // seule la grille LIVE de la chaîne compte, pas les grilles parallèles.
+  // P24 : idem pour la couverture plan média — seul le document LIVE compte.
   useEffect(() => {
     setChargement(true)
     setErreur(null)
-    obtenirGrilleLiveParChaine(chaineActive.id)
-      .then((grilleLive) =>
+    Promise.all([obtenirGrilleLiveParChaine(chaineActive.id), obtenirPlanMediaLiveParChaine(chaineActive.id)])
+      .then(([grilleLive, planMediaLive]) =>
         Promise.all([
           listerProgrammesParChaine(chaineActive.id),
           listerTousLesEpisodes(),
           listerToutesLesFenetresDroits(),
           grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
           listerCampagnesParChaine(chaineActive.id),
-          listerElementsSecondairesParChaine(chaineActive.id),
+          planMediaLive ? listerElementsSecondairesParPlanMedia(planMediaLive.id) : Promise.resolve([]),
         ])
       )
       .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesCampagnes, lignesElements]) => {

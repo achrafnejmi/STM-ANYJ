@@ -20,7 +20,7 @@ export async function deprogrammerDiffusion(diffusion, { chaineActive, grilleId,
   await enregistrerAction({
     chaineId: chaineActive.id,
     ecran: 'GRILLE_LINEAIRE',
-    grilleId,
+    documentId: grilleId,
     libelle: `Déprogrammation : ${diffusion.titre_cache}`,
     operations: [{ table: 'diffusion_lineaire', type: 'DELETE', id: diffusion.id, avant: diffusion }],
   })
