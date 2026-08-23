@@ -20,6 +20,7 @@ export default function InspecteurBloc({
   diffusion,
   programme,
   chaineActive,
+  grilleId,
   onFermer,
   onModifie,
   onSupprime,
@@ -65,6 +66,7 @@ export default function InspecteurBloc({
           diffusion={diffusion}
           programme={programme}
           chaineActive={chaineActive}
+          grilleId={grilleId}
           onModifie={onModifie}
           onSupprime={onSupprime}
           onModifieChange={onModifieChange}
@@ -75,18 +77,25 @@ export default function InspecteurBloc({
           diffusion={diffusion}
           programme={programme}
           chaineActive={chaineActive}
+          grilleId={grilleId}
           onCreerPlusieurs={onCreerPlusieurs}
           onChangementsPile={onChangementsPile}
         />
       )}
       {onglet === 'VECTEUR' && (
-        <OngletVecteur diffusion={diffusion} chaineActive={chaineActive} onModifie={onModifie} onCreerPlusieurs={onCreerPlusieurs} />
+        <OngletVecteur
+          diffusion={diffusion}
+          chaineActive={chaineActive}
+          grilleId={grilleId}
+          onModifie={onModifie}
+          onCreerPlusieurs={onCreerPlusieurs}
+        />
       )}
     </div>
   )
 }
 
-function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime, onModifieChange }) {
+function OngletBloc({ diffusion, programme, chaineActive, grilleId, onModifie, onSupprime, onModifieChange }) {
   const [heureDebut, setHeureDebut] = useState(diffusion.heure_debut)
   const [heureFin, setHeureFin] = useState(diffusion.heure_fin)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -121,6 +130,7 @@ function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime,
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
+        grilleId,
         libelle: `Modification horaire : ${diffusion.titre_cache}`,
         operations: [{ table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: maj }],
       })
@@ -138,7 +148,7 @@ function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime,
   async function deprogrammer() {
     setErreur(null)
     try {
-      await deprogrammerDiffusion(diffusion, { chaineActive, onSupprime, confirmer })
+      await deprogrammerDiffusion(diffusion, { chaineActive, grilleId, onSupprime, confirmer })
     } catch (err) {
       setErreur(err.message)
     }
@@ -215,7 +225,7 @@ function OngletBloc({ diffusion, programme, chaineActive, onModifie, onSupprime,
   )
 }
 
-function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, onChangementsPile }) {
+function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPlusieurs, onChangementsPile }) {
   const [episodes, setEpisodes] = useState([])
   const [chargementEpisodes, setChargementEpisodes] = useState(true)
   const requeteId = useRef(0)
@@ -285,6 +295,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
         episode_numero: a.episode.numero,
         chaine: chaineActive.nom,
         chaine_id: chaineActive.id,
+        grille_id: grilleId,
         date: a.date,
         heure_debut: diffusion.heure_debut,
         heure_fin: diffusion.heure_fin,
@@ -295,6 +306,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
       const entree = await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
+        grilleId,
         libelle: `Répétition : ${diffusion.titre_cache} (${creees.length} occurrence${creees.length > 1 ? 's' : ''})`,
         operations: creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
       })
@@ -310,12 +322,12 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
 
   async function annulerViaPile() {
     if (!derniereActionId) return
-    const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE')
+    const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE', grilleId)
     if (entreeActiveId !== derniereActionId) {
       setErreur("Cette répétition n'est plus la dernière action sur la grille — utilisez Annuler dans la barre d'outils.")
       return
     }
-    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleId)
     if (!resultat.ok) {
       setErreur(resultat.motif)
       return
@@ -415,7 +427,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, onCreerPlusieurs, o
   )
 }
 
-function OngletVecteur({ diffusion, chaineActive, onModifie, onCreerPlusieurs }) {
+function OngletVecteur({ diffusion, chaineActive, grilleId, onModifie, onCreerPlusieurs }) {
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const estException = diffusion.vecteur != null
@@ -440,6 +452,7 @@ function OngletVecteur({ diffusion, chaineActive, onModifie, onCreerPlusieurs })
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
+        grilleId,
         libelle: `Scission vecteur : ${diffusion.titre_cache}`,
         operations: [
           { table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: original },

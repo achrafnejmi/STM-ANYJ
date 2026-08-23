@@ -1,5 +1,21 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleAlert, Layers3, Undo2, Redo2, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  Layers3,
+  Undo2,
+  Redo2,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Pencil,
+  Copy,
+  Trash2,
+  CheckSquare,
+  ClipboardPaste,
+} from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
@@ -8,7 +24,14 @@ import {
   listerToutesLesFenetresDroits,
   listerEpisodes,
   creerDiffusionLineaire,
+  listerGrillesParChaine,
+  creerGrille,
+  mettreAJourGrille,
+  supprimerGrille,
+  definirGrilleLive,
 } from '../lib/db.js'
+import { lireGrillesOuvertes, definirGrillesOuvertes, dupliquerGrille } from '../lib/grilles.js'
+import { lireUtilisateur } from '../lib/session.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
@@ -40,6 +63,10 @@ import { useNotification } from '../components/NotificationProvider.jsx'
 
 const DUREE_PAR_DEFAUT_MIN = 30
 const MARQUES_HEURES = genererMarquesHeures()
+// Champs copiés au presse-papier interne (P23) — jamais l'id (une nouvelle
+// ligne est toujours créée au collage) ni chaine/chaine_id/grille_id
+// (recalculés à partir de la grille cible au moment de coller).
+const CHAMPS_COPIABLES = ['programme_id', 'episode_id', 'episode_numero', 'date', 'heure_debut', 'heure_fin', 'genre', 'titre_cache', 'vecteur']
 
 export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) {
   const [vue, setVue] = useState('SEMAINE')
@@ -49,6 +76,13 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [episodes, setEpisodes] = useState([])
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
+  const [grilles, setGrilles] = useState([])
+  const [grillesOuvertesIds, setGrillesOuvertesIds] = useState([])
+  const [grilleActiveId, setGrilleActiveId] = useState(null)
+  const [modaleGrille, setModaleGrille] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
+  const [selectionActive, setSelectionActive] = useState(false)
+  const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
+  const [presseGaPapier, setPresseGaPapier] = useState([])
   const [afficherGrilleType, setAfficherGrilleType] = useState(true)
   const [pleinEcran, setPleinEcran] = useState(false)
   const [chargement, setChargement] = useState(true)
@@ -60,6 +94,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
+  const chargementIdRef = useRef(0)
   const { confirmer } = useNotification()
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
@@ -82,7 +117,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     return true
   }
 
+  // P23 : charge aussi les grilles de la chaîne — une seule requête
+  // supplémentaire dans le même Promise.all. Onglets ouverts = session
+  // (lireGrillesOuvertes), repli sur [grille live] si rien en session ou si
+  // des ids sauvegardés ne correspondent plus à une grille existante.
+  //
+  // `chargementIdRef` ignore la réponse d'un chargement dépassé par un plus
+  // récent (StrictMode double-invoque cet effet en dev, ou un changement
+  // rapide de chaîne) — même pattern que `requeteEpisodesId`
+  // (FormulaireCreneau) et `idAppel` (ListeProgrammes.jsx). Sans ça, une
+  // réponse arrivée en retard écrase silencieusement la grille/onglet que
+  // l'utilisateur vient de sélectionner entre-temps.
   useEffect(() => {
+    const idAppel = ++chargementIdRef.current
     setChargement(true)
     Promise.all([
       listerProgrammesParChaine(chaineActive.id),
@@ -90,24 +137,56 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       listerTousLesEpisodes(),
       listerBlocsGrilleTypeParChaine(chaineActive.id),
       listerToutesLesFenetresDroits(),
+      listerGrillesParChaine(chaineActive.id),
     ])
-      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs, lignesFenetres]) => {
+      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs, lignesFenetres, lignesGrilles]) => {
+        if (idAppel !== chargementIdRef.current) return
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)
         setEpisodes(lignesEpisodes)
         setBlocsGrilleType(lignesBlocs)
         setFenetresDroits(lignesFenetres)
+        setGrilles(lignesGrilles)
+        const live = lignesGrilles.find((g) => g.est_live)
+        const sauvegardees = lireGrillesOuvertes(chaineActive.code).filter((id) => lignesGrilles.some((g) => g.id === id))
+        const ouvertes = sauvegardees.length > 0 ? sauvegardees : [live?.id].filter(Boolean)
+        setGrillesOuvertesIds(ouvertes)
+        setGrilleActiveId(ouvertes[0] ?? null)
+        setSelectionActive(false)
+        setBlocsSelectionnesIds(new Set())
+        setPresseGaPapier([])
       })
-      .catch((err) => setErreur(err.message))
-      .finally(() => setChargement(false))
+      .catch((err) => {
+        if (idAppel === chargementIdRef.current) setErreur(err.message)
+      })
+      .finally(() => {
+        if (idAppel === chargementIdRef.current) setChargement(false)
+      })
   }, [chaineActive])
+
+  // Persiste la liste des onglets ouverts en session (par chaîne) à chaque
+  // changement — fermer un onglet ne supprime aucune donnée, juste retiré
+  // d'ici ; rouvrir recharge le même contenu depuis diffusions/grilles déjà
+  // en mémoire.
+  useEffect(() => {
+    if (grillesOuvertesIds.length > 0) definirGrillesOuvertes(chaineActive.code, grillesOuvertesIds)
+  }, [chaineActive.code, grillesOuvertesIds])
+
+  const grilleActive = useMemo(() => grilles.find((g) => g.id === grilleActiveId) ?? null, [grilles, grilleActiveId])
+  const grilleLive = useMemo(() => grilles.find((g) => g.est_live) ?? null, [grilles])
+  const grillesOuvertes = useMemo(
+    () => grillesOuvertesIds.map((id) => grilles.find((g) => g.id === id)).filter(Boolean),
+    [grillesOuvertesIds, grilles]
+  )
 
   // Rafraîchi après chaque écriture (diffusions change systématiquement
   // après une création/édition/suppression, y compris via undoManager) — pas
-  // de canal séparé à faire remonter depuis chaque site d'écriture.
+  // de canal séparé à faire remonter depuis chaque site d'écriture. P23 :
+  // pile scopée par grille ouverte, pas seulement par chaîne.
   useEffect(() => {
-    etatPile(chaineActive.id, 'GRILLE_LINEAIRE').then(setPile)
-  }, [chaineActive, diffusions])
+    if (!grilleActive) return
+    etatPile(chaineActive.id, 'GRILLE_LINEAIRE', grilleActive.id).then(setPile)
+  }, [chaineActive, grilleActive, diffusions])
 
   // Ctrl+Z/Ctrl+Y locaux à cet écran (pas globaux comme Ctrl+K de la
   // recherche) — jamais interceptés si le focus est dans un champ texte, pour
@@ -126,8 +205,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive par closure, seule dépendance réelle
-  }, [chaineActive])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/grilleActive par closure, seules dépendances réelles
+  }, [chaineActive, grilleActive])
 
   const lundi = lundiDeLaSemaine(dateReference)
   const jours = useMemo(
@@ -141,20 +220,30 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     [programmes]
   )
 
+  // Filtrées sur la grille actuellement OUVERTE (l'onglet affiché) — chaque
+  // grille de la chaîne a ses propres blocs, jamais mélangés à l'écran mais
+  // tous chargés en mémoire pour permettre plusieurs onglets sans aller-
+  // retour réseau à chaque bascule.
+  const diffusionsGrilleActive = useMemo(
+    () => (grilleActive ? diffusions.filter((d) => d.grille_id === grilleActive.id) : []),
+    [diffusions, grilleActive]
+  )
+
   const diffusionsParJour = useMemo(() => {
     const map = new Map()
     for (const j of jours) map.set(j, [])
-    for (const d of diffusions) {
+    for (const d of diffusionsGrilleActive) {
       if (map.has(d.date)) map.get(d.date).push(d)
     }
     return map
-  }, [diffusions, jours])
+  }, [diffusionsGrilleActive, jours])
 
   const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
 
-  // Anomalies calculées sur la période affichée (cahier §4.9.1), pas sur tout
-  // l'historique de la chaîne — se recalcule à chaque écriture sans action
-  // dédiée (EXG-M8-01), puisque `diffusions`/`jours` en dépendent déjà.
+  // Anomalies LOCALES (cahier §4.9.1) : calculées sur la grille actuellement
+  // ouverte, période affichée — feedback d'édition pendant qu'on construit un
+  // brouillon, quel qu'il soit. Alimentent le panneau et le surlignage des
+  // blocs dans CET écran uniquement.
   const diffusionsAffichees = useMemo(
     () => jours.flatMap((j) => diffusionsParJour.get(j) ?? []),
     [jours, diffusionsParJour]
@@ -169,9 +258,23 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   )
   const nbBloquantes = compterBloquantes(anomalies)
 
+  // Badge global du rail de navigation (P23) : UNIQUEMENT la grille LIVE de
+  // la chaîne, indépendamment de l'onglet affiché — c'est elle qui pilote
+  // réellement l'antenne (M8). Même fenêtre de dates que la vue courante
+  // (comportement de période déjà en place avant P23, inchangé).
+  const diffusionsLiveAffichees = useMemo(() => {
+    if (!grilleLive) return []
+    return jours.flatMap((j) => diffusions.filter((d) => d.grille_id === grilleLive.id && d.date === j))
+  }, [diffusions, grilleLive, jours])
+  const anomaliesLive = useMemo(
+    () => calculerAnomalies(diffusionsLiveAffichees, episodesParId, blocsGrilleType, fenetresDroits),
+    [diffusionsLiveAffichees, episodesParId, blocsGrilleType, fenetresDroits]
+  )
+  const nbBloquantesLive = compterBloquantes(anomaliesLive)
+
   useEffect(() => {
-    onAnomaliesBloquantes?.(nbBloquantes)
-  }, [nbBloquantes, onAnomaliesBloquantes])
+    onAnomaliesBloquantes?.(nbBloquantesLive)
+  }, [nbBloquantesLive, onAnomaliesBloquantes])
 
   const genresPresents = useMemo(() => {
     const set = new Set()
@@ -230,7 +333,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
 
   // Onglet Répéter de l'Inspecteur : ajout en bloc après un insert en 1 seule
   // requête (creerDiffusionsLineaires), et onglet Vecteur : ajout de la ligne
-  // SATELLITE créée par la scission (tableau à 1 élément).
+  // SATELLITE créée par la scission (tableau à 1 élément). Aussi utilisée par
+  // le collage (P23, plusieurs éléments d'un coup).
   function appliquerCreationMultiple(nouvelles) {
     setDiffusions((prev) => [...prev, ...nouvelles])
   }
@@ -250,7 +354,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   }
 
   async function gererAnnuler() {
-    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (!grilleActive) return
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
       return
@@ -259,7 +364,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   }
 
   async function gererRetablir() {
-    const resultat = await retablirAction(chaineActive.id, 'GRILLE_LINEAIRE')
+    if (!grilleActive) return
+    const resultat = await retablirAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
       return
@@ -278,6 +384,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   // place ailleurs) ; les droits du titre, eux, ne peuvent être vérifiés
   // qu'ici puisqu'ils dépendent du jour visé, connu seulement au dépôt.
   function deposerEpisode(jourAntenne, minuteDebut) {
+    if (!grilleActive) return
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
@@ -300,6 +407,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       episode_numero: payload.numero ?? null,
       chaine: chaineActive.nom,
       chaine_id: chaineActive.id,
+      grille_id: grilleActive.id,
       date: jourAntenne,
       heure_debut: heureDebut,
       heure_fin: heureFin,
@@ -311,6 +419,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         enregistrerAction({
           chaineId: chaineActive.id,
           ecran: 'GRILLE_LINEAIRE',
+          grilleId: grilleActive.id,
           libelle: `Dépôt : ${cree.titre_cache}`,
           operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
         }).then(() => appliquerCreation(cree))
@@ -318,9 +427,226 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       .catch((err) => setErreur(err.message))
   }
 
+  // --- Gestion des grilles (P23) ---
+
+  function selectionnerGrille(id) {
+    setGrilleActiveId(id)
+    setBlocSelectionne(null)
+    setAnomaliesOuvertes(false)
+    setSelectionActive(false)
+    setBlocsSelectionnesIds(new Set())
+  }
+
+  function ouvrirGrille(id) {
+    setGrillesOuvertesIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    selectionnerGrille(id)
+  }
+
+  function fermerOnglet(id) {
+    setGrillesOuvertesIds((prev) => {
+      if (prev.length <= 1) return prev
+      const next = prev.filter((x) => x !== id)
+      if (grilleActiveId === id) selectionnerGrille(next[0])
+      return next
+    })
+  }
+
+  async function creerEtOuvrirGrille(nom) {
+    const nouvelle = await creerGrille({ chaine_id: chaineActive.id, nom, est_live: false, cree_par: lireUtilisateur() })
+    setGrilles((prev) => [...prev, nouvelle])
+    ouvrirGrille(nouvelle.id)
+    setModaleGrille(null)
+  }
+
+  async function renommerGrilleActive(nom) {
+    const maj = await mettreAJourGrille(grilleActive.id, { nom })
+    setGrilles((prev) => prev.map((g) => (g.id === maj.id ? maj : g)))
+    setModaleGrille(null)
+  }
+
+  async function dupliquerGrilleActive(nom) {
+    const nouvelle = await dupliquerGrille(grilleActive, nom, lireUtilisateur())
+    const lignes = await listerDiffusionsLineairesParChaine(chaineActive.id)
+    setGrilles((prev) => [...prev, nouvelle])
+    setDiffusions(lignes)
+    ouvrirGrille(nouvelle.id)
+    setModaleGrille(null)
+  }
+
+  async function definirLive() {
+    if (!grilleActive || grilleActive.est_live) return
+    const confirme = await confirmer({
+      titre: 'Définir comme live',
+      message: `Définir « ${grilleActive.nom} » comme grille live de ${chaineActive.nom} ? Elle remplacera « ${grilleLive?.nom ?? '—'} » pour le Conducteur, les Anomalies et le Stock/bilans.`,
+      labelConfirmer: 'Définir comme live',
+    })
+    if (!confirme) return
+    await definirGrilleLive(chaineActive.id, grilleActive.id)
+    setGrilles(await listerGrillesParChaine(chaineActive.id))
+  }
+
+  async function supprimerGrilleActive() {
+    if (!grilleActive || grilleActive.est_live) return
+    const nb = diffusions.filter((d) => d.grille_id === grilleActive.id).length
+    const confirme = await confirmer({
+      titre: 'Supprimer la grille',
+      message: `Supprimer définitivement « ${grilleActive.nom} »${nb > 0 ? ` et ses ${nb} diffusion(s)` : ''} ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
+    const idSupprime = grilleActive.id
+    await supprimerGrille(idSupprime)
+    setGrilles((prev) => prev.filter((g) => g.id !== idSupprime))
+    setDiffusions((prev) => prev.filter((d) => d.grille_id !== idSupprime))
+    setGrillesOuvertesIds((prev) => {
+      const next = prev.filter((x) => x !== idSupprime)
+      const restante = next.length > 0 ? next : [grilleLive?.id].filter(Boolean)
+      setGrilleActiveId(restante[0] ?? null)
+      return restante
+    })
+  }
+
+  // --- Sélection multiple + copier/coller (P23) ---
+
+  function activerSelection() {
+    setSelectionActive(true)
+    setBlocsSelectionnesIds(new Set())
+  }
+
+  function annulerSelection() {
+    setSelectionActive(false)
+    setBlocsSelectionnesIds(new Set())
+  }
+
+  function copierSelection() {
+    const snapshots = diffusions
+      .filter((d) => blocsSelectionnesIds.has(d.id))
+      .map((d) => Object.fromEntries(CHAMPS_COPIABLES.map((c) => [c, d[c]])))
+    setPresseGaPapier(snapshots)
+    annulerSelection()
+  }
+
+  // Colle à la MÊME date/heure que la copie, dans la grille actuellement
+  // ouverte — mêmes contrôles PAD/droits qu'un dépôt manuel (principe 2 : le
+  // contrôle intervient au geste). Un élément refusé est silencieusement
+  // écarté, le nombre de refus est signalé après coup ; un conflit d'horaire
+  // n'est PAS bloquant, seulement signalé par le centre d'anomalies (comme le
+  // dépôt manuel actuel).
+  async function coller() {
+    if (!grilleActive || presseGaPapier.length === 0) return
+    const creees = []
+    for (const item of presseGaPapier) {
+      const episode = episodesParId.get(item.episode_id)
+      if (!estEpisodePret(episode)) continue
+      if (!estProgrammable(item.programme_id, fenetresDroits, item.date).ok) continue
+      const cree = await creerDiffusionLineaire({
+        ...item,
+        chaine: chaineActive.nom,
+        chaine_id: chaineActive.id,
+        grille_id: grilleActive.id,
+      })
+      creees.push(cree)
+    }
+    if (creees.length === 0) {
+      setErreur('Aucun élément collé — droits ou PAD invalides à la date cible.')
+      return
+    }
+    await enregistrerAction({
+      chaineId: chaineActive.id,
+      ecran: 'GRILLE_LINEAIRE',
+      grilleId: grilleActive.id,
+      libelle: `Collage (${creees.length} programme${creees.length > 1 ? 's' : ''})`,
+      operations: creees.map((d) => ({ table: 'diffusion_lineaire', type: 'INSERT', id: d.id, apres: d })),
+    })
+    appliquerCreationMultiple(creees)
+    const refuses = presseGaPapier.length - creees.length
+    setPresseGaPapier([])
+    if (refuses > 0) setErreur(`${refuses} élément(s) refusé(s) (droits/PAD) sur ${creees.length + refuses}.`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
+        {/* Barre d'onglets (P23) : grilles ouvertes de la chaîne active. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+          {grillesOuvertes.map((g) => (
+            <div
+              key={g.id}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+                g.id === grilleActiveId
+                  ? 'border-snrt-navy bg-snrt-navy/5 font-medium text-snrt-navy'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <button type="button" onClick={() => selectionnerGrille(g.id)} className="flex items-center gap-1.5">
+                {g.nom}
+                {g.est_live && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    LIVE
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => fermerOnglet(g.id)}
+                disabled={grillesOuvertes.length <= 1}
+                title={grillesOuvertes.length <= 1 ? 'Dernier onglet ouvert' : 'Fermer (la grille reste enregistrée)'}
+                className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setModaleGrille('OUVRIR')}
+            title="Ouvrir une grille"
+            className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
+          >
+            <Plus size={15} />
+          </button>
+
+          {grilleActive && (
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setModaleGrille('RENOMMER')}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                <Pencil size={12} />
+                Renommer
+              </button>
+              <button
+                type="button"
+                onClick={() => setModaleGrille('DUPLIQUER')}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                <Copy size={12} />
+                Dupliquer
+              </button>
+              {!grilleActive.est_live && (
+                <button
+                  type="button"
+                  onClick={definirLive}
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                >
+                  Définir comme live
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={supprimerGrilleActive}
+                disabled={grilleActive.est_live}
+                title={grilleActive.est_live ? 'Basculez une autre grille en live avant de supprimer celle-ci' : 'Supprimer'}
+                className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Trash2 size={12} />
+                Supprimer
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex rounded-md border border-slate-300 text-sm">
@@ -339,6 +665,47 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 Jour
               </button>
             </div>
+            {!selectionActive ? (
+              <button
+                type="button"
+                onClick={activerSelection}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <CheckSquare size={15} />
+                Sélectionner
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
+                <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
+                <button
+                  type="button"
+                  onClick={copierSelection}
+                  disabled={blocsSelectionnesIds.size === 0}
+                  className="font-medium underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Copier
+                </button>
+                <button type="button" onClick={annulerSelection} className="text-slate-500 hover:text-slate-700">
+                  Annuler
+                </button>
+              </div>
+            )}
+            {presseGaPapier.length > 0 && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+                <span>{presseGaPapier.length} copié(s)</span>
+                <button
+                  type="button"
+                  onClick={coller}
+                  className="flex items-center gap-1 font-medium underline hover:no-underline"
+                >
+                  <ClipboardPaste size={13} />
+                  Coller
+                </button>
+                <button type="button" onClick={() => setPresseGaPapier([])} className="text-amber-700/70 hover:text-amber-900">
+                  Vider
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -449,7 +816,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
         )}
 
-        {!chargement && (
+        {!chargement && grilleActive && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
             <div className="max-h-[70vh] overflow-y-auto">
               <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(140px, 1fr))` }}>
@@ -485,6 +852,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                       className="relative cursor-pointer border-l border-slate-100 hover:bg-slate-50/50"
                       style={{ gridRow: 2, gridColumn: i + 2, height: HAUTEUR_TOTALE }}
                       onClick={(e) => {
+                        if (selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
                         const minute = positionVersMinute(e.clientY - rect.top)
                         ouvrirCreation(j, minutesEnHeure(minute))
@@ -492,6 +860,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault()
+                        if (selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
                         const minute = positionVersMinute(e.clientY - rect.top)
                         deposerEpisode(j, minute)
@@ -541,9 +910,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         const etiquetteEpisode =
                           diffusion.episode_numero != null ? `ÉP.${String(diffusion.episode_numero).padStart(2, '0')} — ` : ''
                         const estSelectionne = blocSelectionne?.id === diffusion.id
+                        const estCoche = selectionActive && blocsSelectionnesIds.has(diffusion.id)
                         const enAnomalieBloquante = idsBloquants.has(diffusion.id)
                         const selectionner = async (e) => {
                           e.stopPropagation()
+                          if (selectionActive) {
+                            setBlocsSelectionnesIds((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(diffusion.id)) next.delete(diffusion.id)
+                              else next.add(diffusion.id)
+                              return next
+                            })
+                            return
+                          }
                           if (!(await changerBlocSelectionne(diffusion))) return
                           setModale(null)
                           setAnomaliesOuvertes(false)
@@ -559,11 +938,13 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                               if (e.key === 'Enter' || e.key === ' ') selectionner(e)
                             }}
                             className={`group absolute cursor-pointer overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
-                              estSelectionne
-                                ? 'ring-2 ring-offset-1 ring-snrt-navy'
-                                : enAnomalieBloquante
-                                  ? 'ring-2 ring-offset-1 ring-red-600'
-                                  : ''
+                              estCoche
+                                ? 'ring-2 ring-offset-1 ring-emerald-600'
+                                : estSelectionne
+                                  ? 'ring-2 ring-offset-1 ring-snrt-navy'
+                                  : enAnomalieBloquante
+                                    ? 'ring-2 ring-offset-1 ring-red-600'
+                                    : ''
                             }`}
                             style={{
                               top: `${top}px`,
@@ -572,21 +953,24 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                               width: `${100 / nbPistes}%`,
                             }}
                           >
-                            <button
-                              type="button"
-                              title="Déprogrammer"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                deprogrammerDiffusion(diffusion, {
-                                  chaineActive,
-                                  onSupprime: appliquerSuppression,
-                                  confirmer,
-                                }).catch((err) => setErreur(err.message))
-                              }}
-                              className="absolute top-0.5 right-0.5 z-10 flex h-3 w-3 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
-                            >
-                              <X size={8} strokeWidth={3} />
-                            </button>
+                            {!selectionActive && (
+                              <button
+                                type="button"
+                                title="Déprogrammer"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  deprogrammerDiffusion(diffusion, {
+                                    chaineActive,
+                                    grilleId: grilleActive.id,
+                                    onSupprime: appliquerSuppression,
+                                    confirmer,
+                                  }).catch((err) => setErreur(err.message))
+                                }}
+                                className="absolute top-0.5 right-0.5 z-10 flex h-3 w-3 items-center justify-center rounded-full bg-white text-red-600 opacity-0 shadow-sm ring-1 ring-red-200 hover:bg-red-50 focus-visible:opacity-100 group-hover:opacity-100"
+                              >
+                                <X size={8} strokeWidth={3} />
+                              </button>
+                            )}
                             <div className="font-medium">
                               {diffusion.heure_debut}–{diffusion.heure_fin}
                             </div>
@@ -607,11 +991,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         )}
       </div>
 
-      {modale && (
+      {modale && grilleActive && (
         <Modal titre="Ajouter un créneau" onFermer={() => setModale(null)}>
           <FormulaireCreneau
             modale={modale}
             chaineActive={chaineActive}
+            grilleId={grilleActive.id}
             programmesDisponibles={programmesDeLaChaine}
             programmesParId={programmesParId}
             fenetresDroits={fenetresDroits}
@@ -624,11 +1009,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         <PopoverHistorique programme={historiqueOuvert} onFermer={() => setHistoriqueOuvert(null)} />
       )}
 
-      {blocSelectionne && (
+      {blocSelectionne && grilleActive && (
         <InspecteurBloc
           diffusion={blocSelectionne}
           programme={programmesParId.get(blocSelectionne.programme_id)}
           chaineActive={chaineActive}
+          grilleId={grilleActive.id}
           onFermer={() => changerBlocSelectionne(null)}
           onModifie={appliquerEdition}
           onSupprime={appliquerSuppression}
@@ -645,11 +1031,167 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           onAller={allerVersAnomalie}
         />
       )}
+
+      {modaleGrille === 'OUVRIR' && (
+        <ModaleOuvrirGrille
+          grilles={grilles}
+          grillesOuvertesIds={grillesOuvertesIds}
+          onOuvrir={ouvrirGrille}
+          onCreer={creerEtOuvrirGrille}
+          onFermer={() => setModaleGrille(null)}
+        />
+      )}
+      {modaleGrille === 'RENOMMER' && grilleActive && (
+        <ModaleNomGrille
+          titre="Renommer la grille"
+          valeurInitiale={grilleActive.nom}
+          labelBouton="Renommer"
+          onValider={renommerGrilleActive}
+          onFermer={() => setModaleGrille(null)}
+        />
+      )}
+      {modaleGrille === 'DUPLIQUER' && grilleActive && (
+        <ModaleNomGrille
+          titre="Dupliquer la grille"
+          valeurInitiale={`${grilleActive.nom} (copie)`}
+          labelBouton="Dupliquer"
+          onValider={dupliquerGrilleActive}
+          onFermer={() => setModaleGrille(null)}
+        />
+      )}
     </div>
   )
 }
 
-function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, programmesParId, fenetresDroits, onCree }) {
+// Panneau "Ouvrir une grille" (P23) : liste des grilles de la chaîne pas
+// encore ouvertes + création d'une nouvelle grille, dans la même modale.
+function ModaleOuvrirGrille({ grilles, grillesOuvertesIds, onOuvrir, onCreer, onFermer }) {
+  const [nomNouvelle, setNomNouvelle] = useState('')
+  const [creation, setCreation] = useState(false)
+  const [erreur, setErreur] = useState(null)
+  const idNom = useId()
+  const fermees = grilles.filter((g) => !grillesOuvertesIds.includes(g.id))
+
+  async function creer(e) {
+    e.preventDefault()
+    if (!nomNouvelle.trim()) return
+    setCreation(true)
+    setErreur(null)
+    try {
+      await onCreer(nomNouvelle.trim())
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setCreation(false)
+    }
+  }
+
+  return (
+    <Modal titre="Ouvrir une grille" onFermer={onFermer}>
+      <div className="space-y-4">
+        {fermees.length > 0 ? (
+          <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200">
+            {fermees.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => onOuvrir(g.id)}
+                className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50"
+              >
+                {g.nom}
+                {g.est_live && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    LIVE
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Toutes les grilles de cette chaîne sont déjà ouvertes.</p>
+        )}
+        <form onSubmit={creer} className="flex items-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex-1">
+            <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
+              Nouvelle grille
+            </label>
+            <input
+              id={idNom}
+              type="text"
+              value={nomNouvelle}
+              onChange={(e) => setNomNouvelle(e.target.value)}
+              placeholder="ex. Grille Ramadan"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={creation || !nomNouvelle.trim()}
+            className="rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+          >
+            Créer
+          </button>
+        </form>
+        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+      </div>
+    </Modal>
+  )
+}
+
+// Modale nom unique (P23) : réutilisée par Renommer et Dupliquer.
+function ModaleNomGrille({ titre, valeurInitiale, labelBouton, onValider, onFermer }) {
+  const [nom, setNom] = useState(valeurInitiale)
+  const [enCours, setEnCours] = useState(false)
+  const [erreur, setErreur] = useState(null)
+  const idNom = useId()
+
+  async function soumettre(e) {
+    e.preventDefault()
+    if (!nom.trim()) return
+    setEnCours(true)
+    setErreur(null)
+    try {
+      await onValider(nom.trim())
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnCours(false)
+    }
+  }
+
+  return (
+    <Modal titre={titre} onFermer={onFermer}>
+      <form onSubmit={soumettre} className="space-y-4">
+        <div>
+          <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
+            Nom
+          </label>
+          <input
+            id={idNom}
+            type="text"
+            required
+            autoFocus
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={enCours}
+            className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+          >
+            {enCours ? 'Enregistrement…' : labelBouton}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibles, programmesParId, fenetresDroits, onCree }) {
   const [date, setDate] = useState(modale.date)
   // RG-03 : « non proposé » — les programmes hors droits À LA DATE COURANTE
   // DU FORMULAIRE (pas la date d'ouverture) sont exclus du select, recalculé
@@ -777,6 +1319,7 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
       episode_numero: episode?.numero ?? null,
       chaine: chaineActive.nom,
       chaine_id: chaineActive.id,
+      grille_id: grilleId,
       date,
       heure_debut: heureDebut,
       heure_fin: heureFin,
@@ -788,6 +1331,7 @@ function FormulaireCreneau({ modale, chaineActive, programmesDisponibles, progra
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
+        grilleId,
         libelle: `Création : ${cree.titre_cache}`,
         operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
       })

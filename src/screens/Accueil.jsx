@@ -8,7 +8,8 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes,
   listerToutesLesFenetresDroits,
-  listerDiffusionsLineairesParChaine,
+  listerDiffusionsLineairesParGrille,
+  obtenirGrilleLiveParChaine,
   listerCampagnesParChaine,
   listerElementsSecondairesParChaine,
 } from '../lib/db.js'
@@ -112,17 +113,22 @@ export default function Accueil({ chaineActive }) {
   const idFiltreGenre = useId()
   const idFiltreStatut = useId()
 
+  // P23 : « Non programmés sur la période » (M9) reflète l'antenne réelle —
+  // seule la grille LIVE de la chaîne compte, pas les grilles parallèles.
   useEffect(() => {
     setChargement(true)
     setErreur(null)
-    Promise.all([
-      listerProgrammesParChaine(chaineActive.id),
-      listerTousLesEpisodes(),
-      listerToutesLesFenetresDroits(),
-      listerDiffusionsLineairesParChaine(chaineActive.id),
-      listerCampagnesParChaine(chaineActive.id),
-      listerElementsSecondairesParChaine(chaineActive.id),
-    ])
+    obtenirGrilleLiveParChaine(chaineActive.id)
+      .then((grilleLive) =>
+        Promise.all([
+          listerProgrammesParChaine(chaineActive.id),
+          listerTousLesEpisodes(),
+          listerToutesLesFenetresDroits(),
+          grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
+          listerCampagnesParChaine(chaineActive.id),
+          listerElementsSecondairesParChaine(chaineActive.id),
+        ])
+      )
       .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesCampagnes, lignesElements]) => {
         setProgrammes(lignesProgrammes)
         setEpisodes(lignesEpisodes)

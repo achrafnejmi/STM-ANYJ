@@ -9,7 +9,7 @@ import { formaterDateLongue } from './semaine.js'
 // reste de l'app). `confirmer` = NotificationProvider.useNotification().confirmer
 // (P21 Lot G) — injecté plutôt qu'importé : ce fichier n'est pas un composant,
 // il ne peut pas appeler un hook lui-même.
-export async function deprogrammerDiffusion(diffusion, { chaineActive, onSupprime, confirmer }) {
+export async function deprogrammerDiffusion(diffusion, { chaineActive, grilleId, onSupprime, confirmer }) {
   const confirme = await confirmer({
     titre: 'Déprogrammer',
     message: `Déprogrammer « ${diffusion.titre_cache} » (${diffusion.heure_debut}) du ${formaterDateLongue(diffusion.date)} ?`,
@@ -20,6 +20,7 @@ export async function deprogrammerDiffusion(diffusion, { chaineActive, onSupprim
   await enregistrerAction({
     chaineId: chaineActive.id,
     ecran: 'GRILLE_LINEAIRE',
+    grilleId,
     libelle: `Déprogrammation : ${diffusion.titre_cache}`,
     operations: [{ table: 'diffusion_lineaire', type: 'DELETE', id: diffusion.id, avant: diffusion }],
   })

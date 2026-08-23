@@ -203,6 +203,7 @@ export function genererProposition({
   respecterGenre,
   runId,
   chaineActive,
+  grilleId,
 }) {
   const datesConnuesParTitre = new Map()
   const dernierePlacementParTitre = new Map()
@@ -304,6 +305,7 @@ export function genererProposition({
       episode_numero: episode.numero,
       chaine: chaineActive.nom,
       chaine_id: chaineActive.id,
+      grille_id: grilleId,
       date: occ.date,
       heure_debut: heureDebut,
       heure_fin: heureFin,

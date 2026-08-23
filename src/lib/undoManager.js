@@ -43,11 +43,15 @@ const TABLES = {
 // d'historique — périme d'abord la pile de rétablissement de cet écran+chaîne
 // (nouvelle branche = redo invalidé, sémantique undo/redo standard).
 // operations: [{ table, type:'INSERT'|'UPDATE'|'DELETE', id, avant?, apres? }]
-export async function enregistrerAction({ chaineId, ecran, libelle, operations }) {
-  await perimerActionsAnnulees(chaineId, ecran)
+// P23 : grilleId optionnel — GRILLE_LINEAIRE l'utilise pour donner à chaque
+// grille ouverte sa propre pile annuler/rétablir ; GRILLE_TYPE l'omet,
+// comportement inchangé (une seule pile par chaîne).
+export async function enregistrerAction({ chaineId, ecran, grilleId = null, libelle, operations }) {
+  await perimerActionsAnnulees(chaineId, ecran, grilleId)
   return creerHistoriqueAction({
     chaine_id: chaineId,
     ecran,
+    grille_id: grilleId,
     statut: 'ACTIVE',
     libelle,
     operations,
@@ -60,8 +64,8 @@ export async function enregistrerAction({ chaineId, ecran, libelle, operations }
 // L'entrée ANNULEE la plus récente est déterminée par `annule_le` (quand elle
 // a été défaite), PAS par `cree_le` (quand elle a été créée) : ces deux ordres
 // divergent dès le 2e Annuler consécutif — voir migration-p19b.sql.
-async function obtenirEtatPileInterne(chaineId, ecran) {
-  const lignes = await listerHistoriqueActionsParChaineEcran(chaineId, ecran)
+async function obtenirEtatPileInterne(chaineId, ecran, grilleId = null) {
+  const lignes = await listerHistoriqueActionsParChaineEcran(chaineId, ecran, grilleId)
   const active = lignes.find((l) => l.statut === 'ACTIVE') ?? null
   const annulees = lignes
     .filter((l) => l.statut === 'ANNULEE')
@@ -69,8 +73,8 @@ async function obtenirEtatPileInterne(chaineId, ecran) {
   return { active, annulee: annulees[0] ?? null }
 }
 
-export async function etatPile(chaineId, ecran) {
-  const { active, annulee } = await obtenirEtatPileInterne(chaineId, ecran)
+export async function etatPile(chaineId, ecran, grilleId = null) {
+  const { active, annulee } = await obtenirEtatPileInterne(chaineId, ecran, grilleId)
   return {
     peutAnnuler: !!active,
     libelleAnnuler: active?.libelle ?? null,
@@ -106,8 +110,8 @@ async function verifierEtatActuel(op, etatAttendu) {
 // divergé depuis, TOUTE l'entrée est refusée (une action composée s'annule en
 // bloc ou pas du tout — jamais la moitié d'une scission), sans propagation
 // vers d'autres entrées de la pile.
-export async function annulerDerniereAction(chaineId, ecran) {
-  const { active } = await obtenirEtatPileInterne(chaineId, ecran)
+export async function annulerDerniereAction(chaineId, ecran, grilleId = null) {
+  const { active } = await obtenirEtatPileInterne(chaineId, ecran, grilleId)
   if (!active) return { ok: false, motif: 'Rien à annuler.' }
 
   const operations = [...active.operations].reverse()
@@ -138,8 +142,8 @@ export async function annulerDerniereAction(chaineId, ecran) {
 
 // Rétablit l'entrée ANNULEE la plus récente (par annule_le). Même garde
 // tout-ou-rien que l'annulation.
-export async function retablirAction(chaineId, ecran) {
-  const { annulee } = await obtenirEtatPileInterne(chaineId, ecran)
+export async function retablirAction(chaineId, ecran, grilleId = null) {
+  const { annulee } = await obtenirEtatPileInterne(chaineId, ecran, grilleId)
   if (!annulee) return { ok: false, motif: 'Rien à rétablir.' }
 
   const operations = annulee.operations // ordre chronologique d'origine

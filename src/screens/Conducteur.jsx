@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx'
 import { ChevronLeft, ChevronRight, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
 import {
   listerProgrammesParChaine,
-  listerDiffusionsLineairesParChaine,
+  listerDiffusionsLineairesParGrille,
+  obtenirGrilleLiveParChaine,
   listerElementsSecondairesParChaine,
   listerCampagnesParChaine,
   listerSpotsBibliotheque,
@@ -118,16 +119,21 @@ export default function Conducteur({ chaineActive }) {
   const [erreur, setErreur] = useState(null)
   const [insertion, setInsertion] = useState(null) // { coupureId } | null
 
+  // P23 : le Conducteur (M7) pilote l'antenne réelle — lit uniquement la
+  // grille LIVE de la chaîne, jamais les grilles parallèles (brouillons).
   useEffect(() => {
     setChargement(true)
     setErreur(null)
-    Promise.all([
-      listerProgrammesParChaine(chaineActive.id),
-      listerDiffusionsLineairesParChaine(chaineActive.id),
-      listerElementsSecondairesParChaine(chaineActive.id),
-      listerCampagnesParChaine(chaineActive.id),
-      listerSpotsBibliotheque(chaineActive.id),
-    ])
+    obtenirGrilleLiveParChaine(chaineActive.id)
+      .then((grilleLive) =>
+        Promise.all([
+          listerProgrammesParChaine(chaineActive.id),
+          grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
+          listerElementsSecondairesParChaine(chaineActive.id),
+          listerCampagnesParChaine(chaineActive.id),
+          listerSpotsBibliotheque(chaineActive.id),
+        ])
+      )
       .then(([lignesProgrammes, lignesDiffusions, lignesElements, lignesCampagnes, lignesSpots]) => {
         setProgrammes(lignesProgrammes)
         setDiffusions(lignesDiffusions)

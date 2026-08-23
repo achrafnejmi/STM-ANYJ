@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, Play } from 'lucide-react'
 import {
   listerProgrammesParChaine,
   listerTousLesEpisodes,
-  listerDiffusionsLineairesParChaine,
+  listerDiffusionsLineairesParGrille,
+  listerGrillesParChaine,
   listerBlocsGrilleTypeParChaine,
   listerToutesLesFenetresDroits,
   creerDiffusionsLineaires,
@@ -24,6 +25,8 @@ export default function AutoProgrammation({ chaineActive }) {
   const [diffusions, setDiffusions] = useState([])
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
+  const [grilles, setGrilles] = useState([])
+  const [grilleCibleId, setGrilleCibleId] = useState(null)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -50,20 +53,31 @@ export default function AutoProgrammation({ chaineActive }) {
     Promise.all([
       listerProgrammesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
-      listerDiffusionsLineairesParChaine(chaineActive.id),
       listerBlocsGrilleTypeParChaine(chaineActive.id),
       listerToutesLesFenetresDroits(),
+      listerGrillesParChaine(chaineActive.id),
     ])
-      .then(([lignesProgrammes, lignesEpisodes, lignesDiffusions, lignesBlocs, lignesFenetres]) => {
+      .then(([lignesProgrammes, lignesEpisodes, lignesBlocs, lignesFenetres, lignesGrilles]) => {
         setProgrammes(lignesProgrammes)
         setEpisodes(lignesEpisodes)
-        setDiffusions(lignesDiffusions)
         setBlocsGrilleType(lignesBlocs)
         setFenetresDroits(lignesFenetres)
+        setGrilles(lignesGrilles)
+        const live = lignesGrilles.find((g) => g.est_live)
+        setGrilleCibleId(live?.id ?? lignesGrilles[0]?.id ?? null)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
   }, [chaineActive])
+
+  // P23 : grille cible au choix (pas figée sur la live) — se recharge à
+  // chaque changement de sélection dans le <select> Grille cible ci-dessous.
+  useEffect(() => {
+    if (!grilleCibleId) return
+    listerDiffusionsLineairesParGrille(grilleCibleId)
+      .then(setDiffusions)
+      .catch((err) => setErreur(err.message))
+  }, [grilleCibleId])
 
   const lundi = lundiDeLaSemaine(dateReference)
   const dates = useMemo(() => (vue === 'SEMAINE' ? joursDeLaSemaine(lundi) : [dateReference]), [vue, lundi, dateReference])
@@ -103,6 +117,7 @@ export default function AutoProgrammation({ chaineActive }) {
       respecterGenre,
       runId,
       chaineActive,
+      grilleId: grilleCibleId,
     })
     const nbAutomatiquesRemplacees = diffusions.filter(
       (d) => ecraser && d.origine === 'AUTOMATIQUE' && d.date >= dateDebut && d.date <= dateFin
@@ -119,7 +134,7 @@ export default function AutoProgrammation({ chaineActive }) {
       if (ecraser) {
         const dateDebut = dates[0]
         const dateFin = dates[dates.length - 1]
-        supprimees = await supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineActive.id, dateDebut, dateFin)
+        supprimees = await supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineActive.id, dateDebut, dateFin, grilleCibleId)
       }
       const creees = retenues.length > 0 ? await creerDiffusionsLineaires(retenues) : []
       // Action composée (delete "Écraser" + insert de la génération) : le
@@ -128,6 +143,7 @@ export default function AutoProgrammation({ chaineActive }) {
       const entree = await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
+        grilleId: grilleCibleId,
         libelle: `Auto-programmation (${creees.length} diffusion${creees.length > 1 ? 's' : ''})`,
         operations: [
           ...supprimees.map((d) => ({ table: 'diffusion_lineaire', type: 'DELETE', id: d.id, avant: d })),
@@ -161,12 +177,12 @@ export default function AutoProgrammation({ chaineActive }) {
     setAnnulation(true)
     setErreur(null)
     try {
-      const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE')
+      const { entreeActiveId } = await etatPile(chaineActive.id, 'GRILLE_LINEAIRE', grilleCibleId)
       if (entreeActiveId !== derniereActionId) {
         setErreur("Cette génération n'est plus la dernière action sur la grille — utilisez Annuler depuis Grille linéaire si besoin.")
         return
       }
-      const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE')
+      const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleCibleId)
       if (!resultat.ok) {
         setErreur(resultat.motif)
         return
@@ -222,6 +238,21 @@ export default function AutoProgrammation({ chaineActive }) {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-slate-100 pt-4 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            Grille cible
+            <select
+              value={grilleCibleId ?? ''}
+              onChange={(e) => setGrilleCibleId(e.target.value)}
+              className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              {grilles.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nom}
+                  {g.est_live ? ' (LIVE)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex items-center gap-2" title="RG-01/RG-05, EXG-M4-04 : contrôle des droits non négociable, jamais désactivable">
             <input type="checkbox" checked disabled />
             Uniquement les contrats valides

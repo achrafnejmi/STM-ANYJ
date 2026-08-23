@@ -102,15 +102,61 @@ export async function listerTousLesEpisodes() {
   )
 }
 
+// --- grille (P23) : plusieurs grilles nommées par chaîne, une seule live ---
+
+export async function listerGrillesParChaine(chaineId) {
+  return verifie(await supabase.from('grille').select('*').eq('chaine_id', chaineId).order('cree_le'))
+}
+
+export async function obtenirGrilleLiveParChaine(chaineId) {
+  return verifie(
+    await supabase.from('grille').select('*').eq('chaine_id', chaineId).eq('est_live', true).maybeSingle()
+  )
+}
+
+export async function creerGrille(champs) {
+  return verifiePremiere(await supabase.from('grille').insert(champs).select())
+}
+
+export async function mettreAJourGrille(id, champs) {
+  return verifiePremiere(await supabase.from('grille').update(champs).eq('id', id).select())
+}
+
+export async function supprimerGrille(id) {
+  verifie(await supabase.from('grille').delete().eq('id', id).select())
+}
+
+// Bascule la grille live d'une chaîne : désactive l'ancienne puis active la
+// cible (2 updates séquentiels, pas de transaction atomique côté client
+// Supabase — acceptable pour un PoC mono-utilisateur ; l'ordre évite de
+// violer l'index unique partiel grille_chaine_live_unique).
+export async function definirGrilleLive(chaineId, grilleId) {
+  verifie(await supabase.from('grille').update({ est_live: false }).eq('chaine_id', chaineId).eq('est_live', true))
+  return verifiePremiere(await supabase.from('grille').update({ est_live: true }).eq('id', grilleId).select())
+}
+
 // --- diffusion_lineaire ---
 
 export async function listerDiffusionsLineaires() {
   return verifie(await supabase.from('diffusion_lineaire').select('*').order('date').order('heure_debut'))
 }
 
+// P23 : reste volontairement la vue "toutes les grilles de la chaîne" — c'est
+// ce dont GrilleLineaire.jsx a besoin pour afficher plusieurs onglets à la
+// fois (filtrage par grille_id fait côté client, même pattern que le
+// filtrage par date déjà en place).
 export async function listerDiffusionsLineairesParChaine(chaineId) {
   return verifie(
     await supabase.from('diffusion_lineaire').select('*').eq('chaine_id', chaineId).order('date').order('heure_debut')
+  )
+}
+
+// P23 : vue restreinte à UNE grille — utilisée par les écrans qui ne doivent
+// voir que la grille live d'une chaîne (Conducteur, Accueil, Plan média,
+// Auto-programmation).
+export async function listerDiffusionsLineairesParGrille(grilleId) {
+  return verifie(
+    await supabase.from('diffusion_lineaire').select('*').eq('grille_id', grilleId).order('date').order('heure_debut')
   )
 }
 
@@ -162,14 +208,17 @@ export async function supprimerDiffusionsLineairesParRun(runId) {
 }
 
 // Mode « Écraser » : supprime les diffusions AUTOMATIQUE (jamais MANUELLE,
-// voir droits.js/autoprog.js) de la chaîne sur la période visée, avant
-// réinsertion des nouvelles propositions confirmées.
-export async function supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin) {
+// voir droits.js/autoprog.js) de la grille cible sur la période visée, avant
+// réinsertion des nouvelles propositions confirmées. P23 : grilleId ajouté
+// (la grille cible de l'auto-programmation est choisie par l'utilisateur,
+// pas figée sur la live — voir AutoProgrammation.jsx).
+export async function supprimerDiffusionsLineairesAutomatiquesParPeriode(chaineId, dateDebut, dateFin, grilleId) {
   return verifie(
     await supabase
       .from('diffusion_lineaire')
       .delete()
       .eq('chaine_id', chaineId)
+      .eq('grille_id', grilleId)
       .eq('origine', 'AUTOMATIQUE')
       .gte('date', dateDebut)
       .lte('date', dateFin)
@@ -422,16 +471,14 @@ export async function compterCampagnesParTranche(code) {
 
 // Table de taille PoC — une seule lecture par écran+chaîne, tri/filtrage
 // ACTIVE/ANNULEE fait côté undoManager.js (même précédent que
-// listerToutesLesFenetresDroits/listerTousLesEpisodes).
-export async function listerHistoriqueActionsParChaineEcran(chaineId, ecran) {
-  return verifie(
-    await supabase
-      .from('historique_action')
-      .select('*')
-      .eq('chaine_id', chaineId)
-      .eq('ecran', ecran)
-      .order('cree_le', { ascending: false })
-  )
+// listerToutesLesFenetresDroits/listerTousLesEpisodes). P23 : grilleId
+// optionnel — filtre en plus par grille pour GRILLE_LINEAIRE (une pile
+// annuler/rétablir par grille ouverte) ; GRILLE_TYPE continue de l'omettre,
+// comportement inchangé.
+export async function listerHistoriqueActionsParChaineEcran(chaineId, ecran, grilleId = null) {
+  let requete = supabase.from('historique_action').select('*').eq('chaine_id', chaineId).eq('ecran', ecran)
+  if (grilleId) requete = requete.eq('grille_id', grilleId)
+  return verifie(await requete.order('cree_le', { ascending: false }))
 }
 
 export async function creerHistoriqueAction(champs) {
@@ -445,14 +492,14 @@ export async function mettreAJourHistoriqueAction(id, champs) {
 // Périme la pile de rétablissement d'un écran+chaîne — appelé avant toute
 // nouvelle action réelle (pas un Annuler/Rétablir), sémantique undo/redo
 // standard : une nouvelle branche d'historique invalide le redo en attente.
-export async function perimerActionsAnnulees(chaineId, ecran) {
-  return verifie(
-    await supabase
-      .from('historique_action')
-      .update({ statut: 'PERIMEE' })
-      .eq('chaine_id', chaineId)
-      .eq('ecran', ecran)
-      .eq('statut', 'ANNULEE')
-      .select()
-  )
+// P23 : grilleId optionnel, même règle que listerHistoriqueActionsParChaineEcran.
+export async function perimerActionsAnnulees(chaineId, ecran, grilleId = null) {
+  let requete = supabase
+    .from('historique_action')
+    .update({ statut: 'PERIMEE' })
+    .eq('chaine_id', chaineId)
+    .eq('ecran', ecran)
+    .eq('statut', 'ANNULEE')
+  if (grilleId) requete = requete.eq('grille_id', grilleId)
+  return verifie(await requete.select())
 }

@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx'
 import { ChevronLeft, ChevronRight, Library, PlusSquare, FileSpreadsheet } from 'lucide-react'
 import {
   listerProgrammesParChaine,
-  listerDiffusionsLineairesParChaine,
+  listerDiffusionsLineairesParGrille,
+  obtenirGrilleLiveParChaine,
   listerCampagnesParChaine,
   listerElementsSecondairesParChaine,
   listerSpotsBibliotheque,
@@ -50,13 +51,17 @@ export default function PlanMedia({ chaineActive }) {
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
   const [insertionOuverte, setInsertionOuverte] = useState(false)
 
+  // P23 : le Plan média (M5) ne place ses éléments secondaires que sur la
+  // grille LIVE de la chaîne — mélanger des grilles parallèles fausserait le
+  // calcul des espaces publicitaires disponibles.
   async function chargerTout() {
     setChargement(true)
     setErreur(null)
     try {
+      const grilleLive = await obtenirGrilleLiveParChaine(chaineActive.id)
       const [lignesProgrammes, lignesDiffusions, lignesCampagnes, lignesElements, lignesSpots] = await Promise.all([
         listerProgrammesParChaine(chaineActive.id),
-        listerDiffusionsLineairesParChaine(chaineActive.id),
+        grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
         listerCampagnesParChaine(chaineActive.id),
         listerElementsSecondairesParChaine(chaineActive.id),
         listerSpotsBibliotheque(chaineActive.id),
