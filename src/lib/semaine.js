@@ -33,6 +33,86 @@ export function joursDeLaSemaine(lundiISO) {
   return Array.from({ length: 7 }, (_, i) => ajouterJours(lundiISO, i))
 }
 
+// --- Mois/Année (P25, vues calendrier de GrilleLineaire.jsx) ---
+
+export function premierJourMois(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+export function dernierJourMois(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  // Jour 0 du mois suivant = dernier jour du mois courant.
+  const dernier = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
+  return dernier.toISOString().slice(0, 10)
+}
+
+export function estMemeMois(dateISO, dateReferenceISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const r = new Date(`${dateReferenceISO}T00:00:00Z`)
+  return d.getUTCFullYear() === r.getUTCFullYear() && d.getUTCMonth() === r.getUTCMonth()
+}
+
+// Grille calendrier complète du mois de `dateISO` : semaines entières
+// (lundi→dimanche), débordant sur le mois précédent/suivant pour ne jamais
+// avoir de semaine incomplète — même esprit que joursDeLaSemaine.
+export function joursDuMoisAffiches(dateISO) {
+  const debut = lundiDeLaSemaine(premierJourMois(dateISO))
+  const finSemaineDuDernier = ajouterJours(lundiDeLaSemaine(dernierJourMois(dateISO)), 6)
+  const jours = []
+  for (let d = debut; d <= finSemaineDuDernier; d = ajouterJours(d, 1)) jours.push(d)
+  return jours
+}
+
+// Tous les jours (365/366) de l'année de `dateISO` — pour que le pipeline
+// diffusionsParJour/anomalies reste uniforme quelle que soit la vue (pas de
+// cas particulier à gérer côté anomalies pour la vue Année).
+export function joursDeLAnnee(dateISO) {
+  const annee = new Date(`${dateISO}T00:00:00Z`).getUTCFullYear()
+  const dernier = `${annee}-12-31`
+  const jours = []
+  for (let d = `${annee}-01-01`; d <= dernier; d = ajouterJours(d, 1)) jours.push(d)
+  return jours
+}
+
+// Ajoute n mois, en bornant le jour au dernier jour du mois cible (31 janvier
+// + 1 mois = 28/29 février, jamais un débordement sur mars).
+export function ajouterMois(dateISO, n) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const cible = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1))
+  const dernierJourCible = new Date(Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth() + 1, 0)).getUTCDate()
+  cible.setUTCDate(Math.min(d.getUTCDate(), dernierJourCible))
+  return cible.toISOString().slice(0, 10)
+}
+
+export function ajouterAnnees(dateISO, n) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  d.setUTCFullYear(d.getUTCFullYear() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+// "Août 2026" — période affichée en vue Mois.
+export function formaterMoisAnnee(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const nom = MOIS_LONGS[d.getUTCMonth()]
+  return `${nom.charAt(0).toUpperCase()}${nom.slice(1)} ${d.getUTCFullYear()}`
+}
+
+// "2026" — période affichée en vue Année.
+export function formaterAnnee(dateISO) {
+  return String(new Date(`${dateISO}T00:00:00Z`).getUTCFullYear())
+}
+
+// Les 12 mois de l'année de `dateISO`, pour les tuiles de la vue Année.
+export function moisDeLAnnee(dateISO) {
+  const annee = new Date(`${dateISO}T00:00:00Z`).getUTCFullYear()
+  return Array.from({ length: 12 }, (_, i) => ({
+    mois: i,
+    annee,
+    premierJour: `${annee}-${String(i + 1).padStart(2, '0')}-01`,
+  }))
+}
+
 // Jour de semaine d'une date ISO, 0=lundi..6=dimanche (convention utilisée
 // pour `jours` sur bloc_grille_type comme sur la répétition P11).
 export function jourAntenneLundi0(dateISO) {

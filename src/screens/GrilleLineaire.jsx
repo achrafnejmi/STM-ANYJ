@@ -39,16 +39,24 @@ import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
-import { PX_PAR_MINUTE, HAUTEUR_TOTALE, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
+import { PRESETS_ZOOM, INDEX_ZOOM_DEFAUT, calculerHauteurTotale, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
 import {
   aujourdHuiISO,
   ajouterJours,
   lundiDeLaSemaine,
   joursDeLaSemaine,
+  joursDuMoisAffiches,
+  joursDeLAnnee,
+  estMemeMois,
+  ajouterMois,
+  ajouterAnnees,
+  moisDeLAnnee,
   jourAntenneLundi0,
   formaterJourCourt,
   formaterPlageSemaine,
   formaterDateLongue,
+  formaterMoisAnnee,
+  formaterAnnee,
   heureEnMinutes,
   minutesEnHeure,
   DEBUT_JOURNEE_ANTENNE,
@@ -83,6 +91,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [selectionActive, setSelectionActive] = useState(false)
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
+  const [indexZoom, setIndexZoom] = useState(INDEX_ZOOM_DEFAUT)
   const [afficherGrilleType, setAfficherGrilleType] = useState(true)
   const [pleinEcran, setPleinEcran] = useState(false)
   const [chargement, setChargement] = useState(true)
@@ -208,11 +217,21 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/grilleActive par closure, seules dépendances réelles
   }, [chaineActive, grilleActive])
 
+  const presetZoom = PRESETS_ZOOM[indexZoom]
+  // Mois/Année = aperçu en lecture seule (drill-down uniquement) — le rendu
+  // continu à la minute, le zoom et la sélection/copier-coller n'existent
+  // qu'en Jour/Semaine.
+  const vueEditable = vue === 'JOUR' || vue === 'SEMAINE'
   const lundi = lundiDeLaSemaine(dateReference)
-  const jours = useMemo(
-    () => (vue === 'SEMAINE' ? joursDeLaSemaine(lundi) : [dateReference]),
-    [vue, lundi, dateReference]
-  )
+  // P25 : 4 vues, même pipeline diffusionsParJour/anomalies pour toutes —
+  // seul le rendu diffère (grille continue en Jour/Semaine, aperçu résumé en
+  // Mois/Année).
+  const jours = useMemo(() => {
+    if (vue === 'JOUR') return [dateReference]
+    if (vue === 'SEMAINE') return joursDeLaSemaine(lundi)
+    if (vue === 'MOIS') return joursDuMoisAffiches(dateReference)
+    return joursDeLAnnee(dateReference) // ANNEE
+  }, [vue, lundi, dateReference])
 
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
   const programmesDeLaChaine = useMemo(
@@ -287,8 +306,24 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   }, [diffusionsParJour, jours, programmesParId])
 
   function naviguer(delta) {
-    const pas = vue === 'SEMAINE' ? 7 * delta : delta
-    setDateReference((d) => ajouterJours(d, pas))
+    if (vue === 'SEMAINE') return setDateReference((d) => ajouterJours(d, 7 * delta))
+    if (vue === 'MOIS') return setDateReference((d) => ajouterMois(d, delta))
+    if (vue === 'ANNEE') return setDateReference((d) => ajouterAnnees(d, delta))
+    setDateReference((d) => ajouterJours(d, delta)) // JOUR
+  }
+
+  // Drill-down (P25) : clic sur une cellule de la vue Mois → vue Jour à cette
+  // date ; clic sur une tuile de la vue Année → vue Mois à ce mois. Aucune
+  // édition directe en Mois/Année (RG confirmée) — ces vues ne font que
+  // naviguer.
+  function ouvrirJourDepuisApercu(date) {
+    setDateReference(date)
+    setVue('JOUR')
+  }
+
+  function ouvrirMoisDepuisApercu(premierJour) {
+    setDateReference(premierJour)
+    setVue('MOIS')
   }
 
   async function ouvrirCreation(date, heureDebut) {
@@ -650,22 +685,37 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex rounded-md border border-slate-300 text-sm">
-              <button
-                type="button"
-                onClick={() => setVue('SEMAINE')}
-                className={`px-3 py-2 ${vue === 'SEMAINE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Semaine
-              </button>
-              <button
-                type="button"
-                onClick={() => setVue('JOUR')}
-                className={`px-3 py-2 ${vue === 'JOUR' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Jour
-              </button>
+              {[
+                ['JOUR', 'Jour'],
+                ['SEMAINE', 'Semaine'],
+                ['MOIS', 'Mois'],
+                ['ANNEE', 'Année'],
+              ].map(([code, label]) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setVue(code)}
+                  className={`px-3 py-2 ${vue === code ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            {!selectionActive ? (
+            {vueEditable && (
+              <div className="flex rounded-md border border-slate-300 text-sm" title="Précision de programmation">
+                {PRESETS_ZOOM.map((preset, i) => (
+                  <button
+                    key={preset.code}
+                    type="button"
+                    onClick={() => setIndexZoom(i)}
+                    className={`px-3 py-2 ${i === indexZoom ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {vueEditable && !selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
@@ -674,7 +724,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <CheckSquare size={15} />
                 Sélectionner
               </button>
-            ) : (
+            )}
+            {vueEditable && selectionActive && (
               <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
                 <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
                 <button
@@ -690,7 +741,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 </button>
               </div>
             )}
-            {presseGaPapier.length > 0 && (
+            {vueEditable && presseGaPapier.length > 0 && (
               <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button
@@ -716,7 +767,10 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               <ChevronLeft size={16} />
             </button>
             <span className="min-w-[12rem] text-center text-sm font-medium text-slate-700">
-              {vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)}
+              {vue === 'SEMAINE' && formaterPlageSemaine(lundi)}
+              {vue === 'JOUR' && formaterDateLongue(dateReference)}
+              {vue === 'MOIS' && formaterMoisAnnee(dateReference)}
+              {vue === 'ANNEE' && formaterAnnee(dateReference)}
             </span>
             <button
               type="button"
@@ -816,7 +870,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
         )}
 
-        {!chargement && grilleActive && (
+        {!chargement && grilleActive && vueEditable && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
             <div className="max-h-[70vh] overflow-y-auto">
               <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(140px, 1fr))` }}>
@@ -831,11 +885,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                   </div>
                 ))}
 
-                <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: HAUTEUR_TOTALE }}>
+                <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: calculerHauteurTotale(presetZoom) }}>
                   {MARQUES_HEURES.map((m) => (
                     <div
                       key={m}
-                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE - 6, right: 8 }}
+                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute - 6, right: 8 }}
                       className="text-[11px] text-slate-400"
                     >
                       {minutesEnHeure(m)}
@@ -850,11 +904,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                     <div
                       key={j}
                       className="relative cursor-pointer border-l border-slate-100 hover:bg-slate-50/50"
-                      style={{ gridRow: 2, gridColumn: i + 2, height: HAUTEUR_TOTALE }}
+                      style={{ gridRow: 2, gridColumn: i + 2, height: calculerHauteurTotale(presetZoom) }}
                       onClick={(e) => {
                         if (selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
-                        const minute = positionVersMinute(e.clientY - rect.top)
+                        const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
                         ouvrirCreation(j, minutesEnHeure(minute))
                       }}
                       onDragOver={(e) => e.preventDefault()}
@@ -862,7 +916,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         e.preventDefault()
                         if (selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
-                        const minute = positionVersMinute(e.clientY - rect.top)
+                        const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
                         deposerEpisode(j, minute)
                       }}
                     >
@@ -870,7 +924,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         <div
                           key={m}
                           className="absolute left-0 right-0 border-t border-slate-100"
-                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE }}
+                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute }}
                         />
                       ))}
                       {/* Bandes de grille type (EXG-M3-04) : purement visuelles,
@@ -886,10 +940,10 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         const { fondClair, bordure } = bloc.type_bloc
                           ? couleurType(bloc.type_bloc)
                           : couleurGenre(bloc.genre_attendu)
-                        const topBande = (minutesDepuisDebutAntenne(bloc.heure_debut) - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
+                        const topBande = (minutesDepuisDebutAntenne(bloc.heure_debut) - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute
                         const hauteurBande =
                           (minutesDepuisDebutAntenne(bloc.heure_fin) - minutesDepuisDebutAntenne(bloc.heure_debut)) *
-                          PX_PAR_MINUTE
+                          presetZoom.pxParMinute
                         return (
                           <div
                             key={bloc.id}
@@ -903,8 +957,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         )
                       })}
                       {pistees.map(({ item: diffusion, debut, fin, piste, nbPistes }) => {
-                        const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
-                        const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
+                        const top = (debut - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute
+                        const hauteur = Math.max(14, (fin - debut) * presetZoom.pxParMinute - 2)
                         const genre = programmesParId.get(diffusion.programme_id)?.genre
                         const { fond, texte } = couleurGenre(genre)
                         const etiquetteEpisode =
@@ -989,6 +1043,24 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             </div>
           </div>
         )}
+
+        {!chargement && grilleActive && vue === 'MOIS' && (
+          <VueCalendrierMois
+            dateReference={dateReference}
+            jours={jours}
+            diffusionsParJour={diffusionsParJour}
+            programmesParId={programmesParId}
+            onOuvrirJour={ouvrirJourDepuisApercu}
+          />
+        )}
+
+        {!chargement && grilleActive && vue === 'ANNEE' && (
+          <VueAnnee
+            moisListe={moisDeLAnnee(dateReference)}
+            diffusionsGrilleActive={diffusionsGrilleActive}
+            onOuvrirMois={ouvrirMoisDepuisApercu}
+          />
+        )}
       </div>
 
       {modale && grilleActive && (
@@ -1059,6 +1131,95 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           onFermer={() => setModaleGrille(null)}
         />
       )}
+    </div>
+  )
+}
+
+// Vue Mois (P25) : aperçu en lecture seule — calendrier 7 colonnes, une
+// cellule par jour de `jours` (déjà la grille calendrier complète, jours
+// hors-mois inclus pour ne jamais avoir de semaine incomplète). Résumé par
+// cellule = puces de couleur par genre présent + nombre de diffusions.
+// Aucune création/édition ici (RG confirmée) — seul le clic sur une cellule
+// bascule en vue Jour à cette date pour éditer normalement.
+const JOURS_SEMAINE_ABBR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+
+function VueCalendrierMois({ dateReference, jours, diffusionsParJour, programmesParId, onOuvrirJour }) {
+  const aujourdHui = aujourdHuiISO()
+  return (
+    <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200">
+        {JOURS_SEMAINE_ABBR.map((label) => (
+          <div key={label} className="bg-slate-50 px-2 py-1.5 text-center text-xs font-medium text-slate-600">
+            {label}
+          </div>
+        ))}
+        {jours.map((jour) => {
+          const diffusionsJour = diffusionsParJour.get(jour) ?? []
+          const horsMois = !estMemeMois(jour, dateReference)
+          const estAujourdHui = jour === aujourdHui
+          const genresPresents = [...new Set(diffusionsJour.map((d) => programmesParId.get(d.programme_id)?.genre || ''))]
+          return (
+            <button
+              key={jour}
+              type="button"
+              onClick={() => onOuvrirJour(jour)}
+              className={`flex min-h-[84px] flex-col items-start gap-1.5 bg-white p-2 text-left hover:bg-slate-50 ${
+                horsMois ? 'opacity-40' : ''
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                  estAujourdHui ? 'bg-snrt-navy text-white' : 'text-slate-700'
+                }`}
+              >
+                {Number(jour.slice(8, 10))}
+              </span>
+              {diffusionsJour.length > 0 && (
+                <>
+                  <div className="flex flex-wrap gap-0.5">
+                    {genresPresents.slice(0, 8).map((g) => (
+                      <span key={g} className={`h-1.5 w-1.5 rounded-full ${couleurGenre(g).fond}`} />
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {diffusionsJour.length} diffusion{diffusionsJour.length > 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Vue Année (P25) : aperçu en lecture seule — 12 tuiles mensuelles, résumé
+// léger (nombre total de diffusions ce mois, filtre simple sur les
+// diffusions déjà chargées en mémoire, pas de détail jour par jour). Clic
+// sur une tuile bascule en vue Mois à ce mois.
+function VueAnnee({ moisListe, diffusionsGrilleActive, onOuvrirMois }) {
+  return (
+    <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {moisListe.map(({ mois, annee, premierJour }) => {
+          const prefixe = premierJour.slice(0, 7) // "AAAA-MM"
+          const nb = diffusionsGrilleActive.filter((d) => d.date.startsWith(prefixe)).length
+          return (
+            <button
+              key={`${annee}-${mois}`}
+              type="button"
+              onClick={() => onOuvrirMois(premierJour)}
+              className="flex flex-col items-start gap-1 rounded-md border border-slate-200 p-4 text-left hover:border-snrt-navy hover:bg-snrt-navy/5"
+            >
+              <span className="text-sm font-medium text-slate-800">{formaterMoisAnnee(premierJour)}</span>
+              <span className="text-xs text-slate-500">
+                {nb} diffusion{nb > 1 ? 's' : ''}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

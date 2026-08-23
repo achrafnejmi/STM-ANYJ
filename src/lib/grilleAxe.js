@@ -8,18 +8,43 @@ export const PX_PAR_MINUTE = 1 // 1440px pour la journée d'antenne complète
 export const HAUTEUR_TOTALE = (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
 export const PAS_ARRONDI_MIN = 5
 
+// Paliers de zoom (P25, GrilleLineaire.jsx uniquement — GrilleType.jsx garde
+// les constantes ci-dessus, inchangées). « Config prédéfinie » au sens de la
+// roadmap : une liste fermée et nommée, pas un curseur continu ni une table
+// administrable. STANDARD reprend exactement PX_PAR_MINUTE/PAS_ARRONDI_MIN
+// ci-dessus — c'est le palier par défaut, donc le comportement d'avant P25
+// reste identique tant que l'utilisateur ne change pas de palier. Pas de
+// palier à la seconde (EXG-M2-01/02 : la grille programme à la minute ; la
+// précision seconde reste l'apanage du plan média/conducteur, mécanisme
+// séparé — heureHMSEnSecondes, planMedia.js).
+export const PRESETS_ZOOM = [
+  { code: 'ENSEMBLE', label: "Vue d'ensemble", pxParMinute: 0.4, pasArrondiMin: 30 },
+  { code: 'STANDARD', label: 'Standard', pxParMinute: PX_PAR_MINUTE, pasArrondiMin: PAS_ARRONDI_MIN },
+  { code: 'PRECIS', label: 'Précis', pxParMinute: 2, pasArrondiMin: 1 },
+]
+export const INDEX_ZOOM_DEFAUT = 1 // STANDARD
+
 export function genererMarquesHeures() {
   const marques = []
   for (let m = DEBUT_JOURNEE_ANTENNE; m <= FIN_JOURNEE_ANTENNE; m += 60) marques.push(m)
   return marques
 }
 
+// Hauteur totale de l'axe pour un palier de zoom donné — GrilleLineaire.jsx
+// l'utilise avec son palier courant ; GrilleType.jsx garde HAUTEUR_TOTALE
+// (constante, inchangée).
+export function calculerHauteurTotale(preset) {
+  return (FIN_JOURNEE_ANTENNE - DEBUT_JOURNEE_ANTENNE) * preset.pxParMinute
+}
+
 // Position Y (px, relative au haut de la colonne du jour) → minute de la
-// journée d'antenne, arrondie au pas de 5 min (dépôt ou clic sur la grille).
-export function positionVersMinute(offsetY) {
-  const brut = DEBUT_JOURNEE_ANTENNE + offsetY / PX_PAR_MINUTE
-  const arrondi = Math.round(brut / PAS_ARRONDI_MIN) * PAS_ARRONDI_MIN
-  return Math.max(DEBUT_JOURNEE_ANTENNE, Math.min(FIN_JOURNEE_ANTENNE - PAS_ARRONDI_MIN, arrondi))
+// journée d'antenne, arrondie au pas du palier de zoom (dépôt ou clic sur la
+// grille). `preset` optionnel : GrilleType.jsx continue d'appeler cette
+// fonction à 1 argument (comportement inchangé, palier STANDARD implicite).
+export function positionVersMinute(offsetY, preset = PRESETS_ZOOM[INDEX_ZOOM_DEFAUT]) {
+  const brut = DEBUT_JOURNEE_ANTENNE + offsetY / preset.pxParMinute
+  const arrondi = Math.round(brut / preset.pasArrondiMin) * preset.pasArrondiMin
+  return Math.max(DEBUT_JOURNEE_ANTENNE, Math.min(FIN_JOURNEE_ANTENNE - preset.pasArrondiMin, arrondi))
 }
 
 // Répartit des items qui se chevauchent (pas de contrainte d'unicité en base,
