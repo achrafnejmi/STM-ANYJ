@@ -10,7 +10,6 @@ import {
   listerToutesLesFenetresDroits,
   listerDiffusionsLineairesParGrille,
   obtenirGrilleLiveParChaine,
-  listerCampagnesParChaine,
   listerElementsSecondairesParPlanMedia,
   obtenirPlanMediaLiveParChaine,
 } from '../lib/db.js'
@@ -25,7 +24,6 @@ import {
   estProgrammeNonProgramme,
   formaterVolumeHeures,
 } from '../lib/bilans.js'
-import { calculerCouverture, resumerCouverture } from '../lib/couverture.js'
 import { construireDonneesBilan, construireLignesExcelBilan, construireNomFichierBilan } from '../lib/exportBilan.js'
 import CarteIndicateur from '../components/CarteIndicateur.jsx'
 
@@ -104,7 +102,6 @@ export default function Accueil({ chaineActive }) {
   const [episodes, setEpisodes] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [diffusions, setDiffusions] = useState([])
-  const [campagnes, setCampagnes] = useState([])
   const [elementsSecondaires, setElementsSecondaires] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
@@ -116,7 +113,7 @@ export default function Accueil({ chaineActive }) {
 
   // P23 : « Non programmés sur la période » (M9) reflète l'antenne réelle —
   // seule la grille LIVE de la chaîne compte, pas les grilles parallèles.
-  // P24 : idem pour la couverture plan média — seul le document LIVE compte.
+  // P24 : idem pour les éléments plan média — seul le document LIVE compte.
   useEffect(() => {
     setChargement(true)
     setErreur(null)
@@ -127,16 +124,14 @@ export default function Accueil({ chaineActive }) {
           listerTousLesEpisodes(),
           listerToutesLesFenetresDroits(),
           grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
-          listerCampagnesParChaine(chaineActive.id),
           planMediaLive ? listerElementsSecondairesParPlanMedia(planMediaLive.id) : Promise.resolve([]),
         ])
       )
-      .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesCampagnes, lignesElements]) => {
+      .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesElements]) => {
         setProgrammes(lignesProgrammes)
         setEpisodes(lignesEpisodes)
         setFenetresDroits(lignesFenetres)
         setDiffusions(lignesDiffusions)
-        setCampagnes(lignesCampagnes)
         setElementsSecondaires(lignesElements)
       })
       .catch((err) => setErreur(err.message))
@@ -196,12 +191,6 @@ export default function Accueil({ chaineActive }) {
   const volumeMaxGenre = Math.max(1, ...repartition.map((r) => r.volumeMinutes))
   const volumeTotalRepartition = useMemo(() => repartition.reduce((acc, r) => acc + r.volumeMinutes, 0), [repartition])
   const graduationsAxe = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(volumeMaxGenre * f))
-
-  // Bonus (hors périmètre littéral du cahier M9) : couverture plan média,
-  // peu coûteuse et toujours fraîche — pas le compteur d'anomalies (valeur
-  // figée hors Grille linéaire, écartée).
-  const couvertureMap = useMemo(() => calculerCouverture(campagnes, elementsSecondaires), [campagnes, elementsSecondaires])
-  const couvertureResume = useMemo(() => resumerCouverture(couvertureMap), [couvertureMap])
 
   function donneesExport() {
     return construireDonneesBilan({ chaineNom: chaineActive.nom, dateReference, filtreGenre, filtreStatut, indicateurs, repartition, finsDeDroits })
@@ -348,14 +337,12 @@ export default function Accueil({ chaineActive }) {
             <CarteIndicateur libelle="Titres hors droits" valeur={indicateurs.nbTitresHorsDroits} />
           </div>
 
-          {couvertureResume.nbCampagnes > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="text-xs font-medium text-slate-500">Couverture plan média (campagnes actives)</div>
-              <div className="mt-1 text-sm text-slate-700">
-                {couvertureResume.nbCampagnes} campagne(s) · taux moyen de couverture : <span className="font-semibold">{couvertureResume.tauxMoyenPct}%</span>
-              </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="text-xs font-medium text-slate-500">Éléments plan média placés</div>
+            <div className="mt-1 text-sm text-slate-700">
+              <span className="font-semibold">{elementsSecondaires.length}</span> élément{elementsSecondaires.length > 1 ? 's' : ''} dans le plan média live
             </div>
-          )}
+          </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Répartition par genre (stock disponible)</h2>

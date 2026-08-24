@@ -24,6 +24,11 @@ import Modal from './Modal.jsx'
 // laissent place à un simple rappel) — insertion « en place » depuis un point
 // d'insertion du déroulé (EXG-M7-04), sans changement d'écran. Absentes
 // (ouverture depuis Plan média), le comportement est inchangé.
+//
+// `spotIdInitial` (P26bis, raccourci « + » de BibliothequeSpots.jsx) : ne
+// préremplit QUE le spot — date/coupure/heure restent à choisir normalement
+// (mêmes sélecteurs, même validation estPlacementValide) ; pas de placement
+// silencieux.
 export default function PanneauInsertionManuelle({
   chaineActive,
   planMediaId,
@@ -35,13 +40,14 @@ export default function PanneauInsertionManuelle({
   programmesParId,
   dateInitiale,
   coupureIdInitiale,
+  spotIdInitial,
   onFermer,
   onElementCree,
 }) {
   const [dateChoisie, setDateChoisie] = useState(dateInitiale ?? dates[0])
   const [coupureId, setCoupureId] = useState(coupureIdInitiale ?? '')
   const [sourceType, setSourceType] = useState('SPOT')
-  const [spotId, setSpotId] = useState('')
+  const [spotId, setSpotId] = useState(spotIdInitial ?? '')
   const [campagneId, setCampagneId] = useState('')
   const [heureDebutSaisie, setHeureDebutSaisie] = useState('')
   const [enregistrement, setEnregistrement] = useState(false)

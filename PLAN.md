@@ -141,6 +141,11 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   la minute, précision via config prédéfinie.
 - **P26 — Exports & imports** : export de la grille en Excel/Word/PDF ; import d'un plan média
   Excel (format fourni par l'utilisateur).
+- **P26bis — Réorganisation Plan média** : onglets Composition (éditeur manuel, par défaut :
+  tableau des éléments placés, bibliothèque de spots, insertion manuelle, export Excel) /
+  Génération auto (secondaire : campagnes, règles d'habillage, aperçu propose→confirme —
+  moteur déplacé sans changement de logique) ; remplace l'indicateur « couverture plan média »
+  du dashboard (M9) par un compteur d'éléments placés dans le plan média live de la chaîne.
 - **P27 — Rediffusion avancée + vecteur TNT⇄SAT** : rediffusion — cocher tous les jours d'un
   coup, définir un pas, sauter des jours ; vecteur — une exception TNT vide le créneau SAT et
   prévient clairement l'utilisateur (et inversement).

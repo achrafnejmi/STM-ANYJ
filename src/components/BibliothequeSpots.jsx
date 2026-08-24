@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, CirclePlus, Trash2 } from 'lucide-react'
 import { creerSpotBibliotheque, mettreAJourSpotBibliotheque, supprimerSpotBibliotheque } from '../lib/db.js'
 import { CHAINES } from '../lib/chaines.js'
 import Modal from './Modal.jsx'
@@ -18,7 +18,13 @@ const SPOT_VIDE = { libelle: '', type: 'SPOT', duree_secondes: 30, chaine_id: ''
 // placés (element_secondaire) : ici, des DÉFINITIONS (libellé, type, durée)
 // réutilisables à volonté depuis l'insertion manuelle. chaine_id vide dans le
 // formulaire = spot global (dispo sur toutes les chaînes).
-export default function BibliothequeSpots({ spots, onFermer, onRafraichir }) {
+//
+// `onAjouterAuPlan` (P26bis, optionnel) : raccourci « + » par ligne — ne fait
+// AUCUNE écriture ici (pas de chemin parallèle à l'insertion manuelle) ; se
+// contente de signaler au parent (PlanMedia.jsx) « ouvre l'insertion manuelle
+// avec ce spot présélectionné », qui reste seule responsable de la date/
+// coupure/validation/écriture.
+export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjouterAuPlan }) {
   const [form, setForm] = useState(SPOT_VIDE)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -166,9 +172,21 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir }) {
                     </td>
                     <td className="py-1.5 pr-3 text-slate-500">{chaine ? chaine.nom : 'Global'}</td>
                     <td className="py-1.5 pr-3">
-                      <button type="button" onClick={() => supprimer(s.id)} className="text-red-500 hover:text-red-700" title="Supprimer">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {onAjouterAuPlan && (
+                          <button
+                            type="button"
+                            onClick={() => onAjouterAuPlan(s)}
+                            className="text-snrt-navy hover:text-snrt-navy-hover"
+                            title="Ajouter au plan média"
+                          >
+                            <CirclePlus size={14} />
+                          </button>
+                        )}
+                        <button type="button" onClick={() => supprimer(s.id)} className="text-red-500 hover:text-red-700" title="Supprimer">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

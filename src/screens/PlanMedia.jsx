@@ -108,6 +108,10 @@ export default function PlanMedia({ chaineActive }) {
   const [planMediaOuvertsIds, setPlanMediaOuvertsIds] = useState([])
   const [planMediaActifId, setPlanMediaActifId] = useState(null)
   const [modaleDocument, setModaleDocument] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
+  // P26bis : Composition (éditeur manuel, par défaut) / Génération auto
+  // (secondaire) — pure réorganisation d'affichage, aucune donnée/logique
+  // n'en dépend.
+  const [ongletPanneau, setOngletPanneau] = useState('COMPOSITION')
   const [selectionActive, setSelectionActive] = useState(false)
   const [elementsSelectionnesIds, setElementsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
@@ -123,6 +127,7 @@ export default function PlanMedia({ chaineActive }) {
   const [annulation, setAnnulation] = useState(false)
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
   const [insertionOuverte, setInsertionOuverte] = useState(false)
+  const [spotPreselectionne, setSpotPreselectionne] = useState(null) // P26bis : raccourci "+" bibliothèque
   const chargementIdRef = useRef(0)
   const { confirmer } = useNotification()
 
@@ -331,6 +336,21 @@ export default function PlanMedia({ chaineActive }) {
 
   function ajouterElementLocal(nouveau) {
     setElementsSecondaires((prev) => [...prev, nouveau])
+  }
+
+  // Raccourci "+" de la bibliothèque (P26bis) : ferme la bibliothèque, ouvre
+  // l'insertion manuelle avec ce spot présélectionné — même formulaire, même
+  // validation, même écriture que l'insertion manuelle normale (aucun chemin
+  // parallèle).
+  function ouvrirInsertionDepuisBibliotheque(spot) {
+    setBibliothequeOuverte(false)
+    setSpotPreselectionne(spot.id)
+    setInsertionOuverte(true)
+  }
+
+  function fermerInsertion() {
+    setInsertionOuverte(false)
+    setSpotPreselectionne(null)
   }
 
   function appliquerChangementsPile(changements) {
@@ -607,6 +627,25 @@ export default function PlanMedia({ chaineActive }) {
           )}
         </div>
 
+        {/* Onglets Composition / Génération auto (P26bis) — pure réorganisation
+            d'affichage, partagent le même document/dates/undo ci-dessous. */}
+        <div className="mb-4 flex rounded-md border border-slate-300 text-sm">
+          <button
+            type="button"
+            onClick={() => setOngletPanneau('COMPOSITION')}
+            className={`flex-1 px-3 py-2 font-medium ${ongletPanneau === 'COMPOSITION' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            Composition
+          </button>
+          <button
+            type="button"
+            onClick={() => setOngletPanneau('GENERATION')}
+            className={`flex-1 px-3 py-2 font-medium ${ongletPanneau === 'GENERATION' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            Génération auto
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex rounded-md border border-slate-300 text-sm">
@@ -625,7 +664,7 @@ export default function PlanMedia({ chaineActive }) {
                 Jour
               </button>
             </div>
-            {!selectionActive ? (
+            {ongletPanneau === 'COMPOSITION' && !selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
@@ -634,7 +673,8 @@ export default function PlanMedia({ chaineActive }) {
                 <CheckSquare size={15} />
                 Sélectionner
               </button>
-            ) : (
+            )}
+            {ongletPanneau === 'COMPOSITION' && selectionActive && (
               <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
                 <span>{elementsSelectionnesIds.size} sélectionné(s)</span>
                 <button
@@ -650,7 +690,7 @@ export default function PlanMedia({ chaineActive }) {
                 </button>
               </div>
             )}
-            {presseGaPapier.length > 0 && (
+            {ongletPanneau === 'COMPOSITION' && presseGaPapier.length > 0 && (
               <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button type="button" onClick={coller} className="flex items-center gap-1 font-medium underline hover:no-underline">
@@ -703,37 +743,39 @@ export default function PlanMedia({ chaineActive }) {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={() => setBibliothequeOuverte(true)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            <Library size={15} />
-            Bibliothèque de spots
-          </button>
-          <button
-            type="button"
-            onClick={() => setInsertionOuverte(true)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            <PlusSquare size={15} />
-            Insertion manuelle
-          </button>
-          <button
-            type="button"
-            onClick={exporterPlanMedia}
-            className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"
-          >
-            <FileSpreadsheet size={15} />
-            Exporter (Excel)
-          </button>
-        </div>
+        {ongletPanneau === 'COMPOSITION' && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setBibliothequeOuverte(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <Library size={15} />
+              Bibliothèque de spots
+            </button>
+            <button
+              type="button"
+              onClick={() => setInsertionOuverte(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <PlusSquare size={15} />
+              Insertion manuelle
+            </button>
+            <button
+              type="button"
+              onClick={exporterPlanMedia}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"
+            >
+              <FileSpreadsheet size={15} />
+              Exporter (Excel)
+            </button>
+          </div>
+        )}
 
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_1fr]">
+      {ongletPanneau === 'COMPOSITION' && (
         <div className="space-y-6">
           {!chargement && planMediaActif && (
             <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -784,50 +826,61 @@ export default function PlanMedia({ chaineActive }) {
               )}
             </div>
           )}
+        </div>
+      )}
 
-          <TableauCampagnes
-            chaineActive={chaineActive}
-            campagnes={campagnes}
-            programmes={programmes}
-            couverture={couverture}
-            onRafraichir={chargerTout}
-          />
-
-          {proposition && (
-            <PanneauApercuPlanMedia
-              proposition={proposition}
-              nbAutomatiquesRemplaces={proposition.nbAutomatiquesRemplaces}
-              onConfirmer={confirmerGeneration}
-              onAnnuler={() => setProposition(null)}
-              enregistrement={enregistrement}
-            />
-          )}
-
-          {rapportEcrit && (
-            <PanneauCouvertureCampagnes
+      {ongletPanneau === 'GENERATION' && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_1fr]">
+          <div className="space-y-6">
+            <TableauCampagnes
+              chaineActive={chaineActive}
               campagnes={campagnes}
-              programmesParId={programmesParId}
+              programmes={programmes}
               couverture={couverture}
-              causesNonCouvertes={rapportEcrit.causesNonCouvertes}
-              onAnnulerGeneration={annulerGeneration}
-              annulation={annulation}
+              onRafraichir={chargerTout}
             />
-          )}
-        </div>
 
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <PanneauReglesHabillage
-            periodeLabel={vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)}
-            opts={opts}
-            onChangerOpts={setOpts}
-            onGenerer={generer}
-            chargement={chargement}
-          />
+            {proposition && (
+              <PanneauApercuPlanMedia
+                proposition={proposition}
+                nbAutomatiquesRemplaces={proposition.nbAutomatiquesRemplaces}
+                onConfirmer={confirmerGeneration}
+                onAnnuler={() => setProposition(null)}
+                enregistrement={enregistrement}
+              />
+            )}
+
+            {rapportEcrit && (
+              <PanneauCouvertureCampagnes
+                campagnes={campagnes}
+                programmesParId={programmesParId}
+                couverture={couverture}
+                causesNonCouvertes={rapportEcrit.causesNonCouvertes}
+                onAnnulerGeneration={annulerGeneration}
+                annulation={annulation}
+              />
+            )}
+          </div>
+
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <PanneauReglesHabillage
+              periodeLabel={vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)}
+              opts={opts}
+              onChangerOpts={setOpts}
+              onGenerer={generer}
+              chargement={chargement}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {bibliothequeOuverte && (
-        <BibliothequeSpots spots={spots} onFermer={() => setBibliothequeOuverte(false)} onRafraichir={chargerTout} />
+        <BibliothequeSpots
+          spots={spots}
+          onFermer={() => setBibliothequeOuverte(false)}
+          onRafraichir={chargerTout}
+          onAjouterAuPlan={ouvrirInsertionDepuisBibliotheque}
+        />
       )}
 
       {insertionOuverte && planMediaActif && (
@@ -840,7 +893,8 @@ export default function PlanMedia({ chaineActive }) {
           campagnes={campagnes}
           spots={spots}
           programmesParId={programmesParId}
-          onFermer={() => setInsertionOuverte(false)}
+          spotIdInitial={spotPreselectionne}
+          onFermer={fermerInsertion}
           onElementCree={ajouterElementLocal}
         />
       )}
