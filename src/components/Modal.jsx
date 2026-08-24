@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 
-export default function Modal({ titre, onFermer, children }) {
+// `large` (P26, aperçu d'import Plan média) : élargit la modale pour un
+// tableau à plusieurs colonnes — absent partout ailleurs, comportement par
+// défaut inchangé (max-w-lg).
+export default function Modal({ titre, onFermer, children, large = false }) {
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key === 'Escape') onFermer()
@@ -12,7 +15,7 @@ export default function Modal({ titre, onFermer, children }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={onFermer}>
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[85vh] w-full ${large ? 'max-w-4xl' : 'max-w-lg'} overflow-y-auto rounded-lg bg-white shadow-xl`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <h2 className="text-base font-semibold text-slate-900">{titre}</h2>
           <button type="button" onClick={onFermer} className="text-slate-400 hover:text-slate-600">

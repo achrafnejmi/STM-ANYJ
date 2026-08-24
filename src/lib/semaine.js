@@ -6,8 +6,10 @@
 
 const JOURS_COURTS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
 const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
-const JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
-const MOIS_LONGS = [
+// Exportés (P26) : réutilisés par importPlanMedia.js pour reconnaître la date
+// en toutes lettres du titre d'un fichier Plan média importé.
+export const JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+export const MOIS_LONGS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ]
@@ -219,6 +221,23 @@ export function joursEntre(dateA, dateB) {
   const a = new Date(`${dateA}T00:00:00Z`)
   const b = new Date(`${dateB}T00:00:00Z`)
   return Math.round((b - a) / 86400000)
+}
+
+// Reconnaît une date "JJ MOIS AAAA" (mois en toutes lettres, FR, insensible à
+// la casse/aux accents) n'importe où dans un texte libre — ex. le titre d'un
+// fichier Plan média importé ("Plan Média Autopromotion Al Aoula MARDI 07
+// JUILLET 2026" → "2026-07-07", P26). Renvoie null si aucune date reconnue
+// (l'appelant retombe alors sur une valeur par défaut, jamais un import
+// silencieusement daté au hasard).
+export function parserDateFrancaiseLongue(texte) {
+  if (!texte) return null
+  const normaliser = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+  const correspondance = texte.match(/(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/)
+  if (!correspondance) return null
+  const jour = Number(correspondance[1])
+  const indexMois = MOIS_LONGS.findIndex((m) => normaliser(m) === normaliser(correspondance[2]))
+  if (indexMois === -1 || jour < 1 || jour > 31) return null
+  return `${correspondance[3]}-${String(indexMois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`
 }
 
 // Dates ISO entre deux bornes (incluses) dont le jour de semaine figure dans

@@ -1,4 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,6 +19,10 @@ import {
   Trash2,
   CheckSquare,
   ClipboardPaste,
+  ListOrdered,
+  FileSpreadsheet,
+  FileText,
+  File,
 } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
@@ -39,6 +47,7 @@ import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
+import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
 import {
   PRESETS_ZOOM,
   INDEX_ZOOM_DEFAUT,
@@ -109,6 +118,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [blocModifie, setBlocModifie] = useState(false)
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
+  const [listeTransmissionsOuverte, setListeTransmissionsOuverte] = useState(false)
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
   const chargementIdRef = useRef(0)
@@ -313,6 +323,99 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
     }
     return [...set]
   }, [diffusionsParJour, jours, programmesParId])
+
+  // Libellé de période, même logique que la barre de navigation (span
+  // affiché juste en dessous) — réutilisé comme titre/nom de fichier de
+  // l'export « Liste des transmissions » (P26).
+  const periodeLabel =
+    vue === 'SEMAINE'
+      ? formaterPlageSemaine(lundi)
+      : vue === 'JOUR'
+        ? formaterDateLongue(dateReference)
+        : vue === 'MOIS'
+          ? formaterMoisAnnee(dateReference)
+          : formaterAnnee(dateReference)
+
+  // Export « Liste des transmissions » (EXG-M2-11, P26) — grille active (P23)
+  // + période/vue affichées (P25) : reprend exactement diffusionsAffichees,
+  // déjà scopée pour les anomalies locales de cet écran. Même découpage que
+  // Accueil.jsx : la fonction pure construit un bundle unique, chaque format
+  // le met en forme.
+  function donneesExportTransmissions() {
+    return construireDonneesListeTransmissions({
+      chaineNom: chaineActive.nom,
+      periodeLabel,
+      diffusions: diffusionsAffichees,
+      programmesParId,
+      fenetresDroits,
+    })
+  }
+
+  function exporterTransmissionsExcel() {
+    try {
+      const donnees = donneesExportTransmissions()
+      const feuille = XLSX.utils.aoa_to_sheet(construireLignesExcelListeTransmissions(donnees))
+      const classeur = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(classeur, feuille, 'Transmissions')
+      XLSX.writeFile(classeur, construireNomFichierListeTransmissions(chaineActive.nom, periodeLabel, 'xlsx'))
+    } catch (err) {
+      setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
+  }
+
+  function exporterTransmissionsPdf() {
+    try {
+      const donnees = donneesExportTransmissions()
+      const doc = new jsPDF({ orientation: 'landscape' })
+      doc.setFontSize(14)
+      doc.text(donnees.titre, 14, 16)
+      doc.setFontSize(9)
+      doc.text(donnees.periodeLabel, 14, 22)
+      autoTable(doc, {
+        startY: 28,
+        head: [ENTETE_LISTE_TRANSMISSIONS],
+        body: donnees.lignes.map((l) => [l.date, l.debut, l.fin, l.titre, l.episode, l.genre, l.duree, l.vecteur, l.support, l.statutDroits]),
+        styles: { fontSize: 8 },
+      })
+      doc.save(construireNomFichierListeTransmissions(chaineActive.nom, periodeLabel, 'pdf'))
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    }
+  }
+
+  async function exporterTransmissionsWord() {
+    try {
+      const donnees = donneesExportTransmissions()
+      const ligneEntete = (libelles) =>
+        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
+      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+
+      const doc = new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({ text: donnees.titre, heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: donnees.periodeLabel }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [ligneEntete(ENTETE_LISTE_TRANSMISSIONS), ...donnees.lignes.map((l) => ligne([l.date, l.debut, l.fin, l.titre, l.episode, l.genre, l.duree, l.vecteur, l.support, l.statutDroits]))],
+              }),
+            ],
+          },
+        ],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = construireNomFichierListeTransmissions(chaineActive.nom, periodeLabel, 'docx')
+      lien.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setErreur(`Échec de l'export Word : ${err.message}`)
+    }
+  }
 
   function naviguer(delta) {
     if (vue === 'SEMAINE') return setDateReference((d) => ajouterJours(d, 7 * delta))
@@ -834,6 +937,15 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <span className="rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{nbBloquantes}</span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setListeTransmissionsOuverte(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              title="Liste des transmissions (export Excel/Word/PDF)"
+            >
+              <ListOrdered size={15} />
+              Liste des transmissions
+            </button>
             <div className="flex rounded-md border border-slate-300">
               <button
                 type="button"
@@ -1132,6 +1244,64 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           onFermer={() => setAnomaliesOuvertes(false)}
           onAller={allerVersAnomalie}
         />
+      )}
+
+      {listeTransmissionsOuverte && (
+        <Modal titre="Liste des transmissions" onFermer={() => setListeTransmissionsOuverte(false)} large>
+          <div className="space-y-4 text-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                {grilleActive?.nom} — {periodeLabel} ({diffusionsAffichees.length} transmission{diffusionsAffichees.length > 1 ? 's' : ''})
+              </p>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={exporterTransmissionsExcel} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50">
+                  <FileSpreadsheet size={13} />
+                  Excel
+                </button>
+                <button type="button" onClick={exporterTransmissionsWord} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-blue-700 hover:bg-blue-50">
+                  <FileText size={13} />
+                  Word
+                </button>
+                <button type="button" onClick={exporterTransmissionsPdf} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50">
+                  <File size={13} />
+                  PDF
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-x-auto overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    {ENTETE_LISTE_TRANSMISSIONS.map((h) => (
+                      <th key={h} className="whitespace-nowrap py-1.5 pr-3 font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {donneesExportTransmissions().lignes.map((l, i) => (
+                    <tr key={i} className="border-b border-slate-100 text-slate-700">
+                      <td className="whitespace-nowrap py-1 pr-3">{l.date}</td>
+                      <td className="whitespace-nowrap py-1 pr-3 font-mono">{l.debut}</td>
+                      <td className="whitespace-nowrap py-1 pr-3 font-mono">{l.fin}</td>
+                      <td className="py-1 pr-3">{l.titre}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.episode}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.genre}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.duree}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.vecteur}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.support}</td>
+                      <td className="whitespace-nowrap py-1 pr-3">{l.statutDroits}</td>
+                    </tr>
+                  ))}
+                  {diffusionsAffichees.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="py-3 text-sm text-slate-500">Aucune transmission sur cette période.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {modaleGrille === 'OUVRIR' && (

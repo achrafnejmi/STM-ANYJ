@@ -6,6 +6,7 @@ import {
   Library,
   PlusSquare,
   FileSpreadsheet,
+  Upload,
   Plus,
   Pencil,
   Copy,
@@ -60,6 +61,7 @@ import PanneauApercuPlanMedia from '../components/PanneauApercuPlanMedia.jsx'
 import PanneauCouvertureCampagnes from '../components/PanneauCouvertureCampagnes.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
 import PanneauInsertionManuelle from '../components/PanneauInsertionManuelle.jsx'
+import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const OPTS_DEFAUT = {
@@ -127,6 +129,7 @@ export default function PlanMedia({ chaineActive }) {
   const [annulation, setAnnulation] = useState(false)
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
   const [insertionOuverte, setInsertionOuverte] = useState(false)
+  const [importOuvert, setImportOuvert] = useState(false)
   const [spotPreselectionne, setSpotPreselectionne] = useState(null) // P26bis : raccourci "+" bibliothèque
   const chargementIdRef = useRef(0)
   const { confirmer } = useNotification()
@@ -351,6 +354,17 @@ export default function PlanMedia({ chaineActive }) {
   function fermerInsertion() {
     setInsertionOuverte(false)
     setSpotPreselectionne(null)
+  }
+
+  // Import Plan média (P26) : le document créé n'est jamais live par défaut
+  // — ouvert comme un nouvel onglet, l'utilisateur choisit ensuite
+  // explicitement « Définir comme live » s'il le souhaite (même geste que
+  // pour tout autre document, aucun raccourci silencieux ici).
+  function documentImporte(nouveauDocument, elementsCrees) {
+    setPlanMedias((prev) => [...prev, nouveauDocument])
+    setElementsSecondaires((prev) => [...prev, ...elementsCrees])
+    ouvrirDocument(nouveauDocument.id)
+    setImportOuvert(false)
   }
 
   function appliquerChangementsPile(changements) {
@@ -769,6 +783,14 @@ export default function PlanMedia({ chaineActive }) {
               <FileSpreadsheet size={15} />
               Exporter (Excel)
             </button>
+            <button
+              type="button"
+              onClick={() => setImportOuvert(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <Upload size={15} />
+              Importer
+            </button>
           </div>
         )}
 
@@ -896,6 +918,17 @@ export default function PlanMedia({ chaineActive }) {
           spotIdInitial={spotPreselectionne}
           onFermer={fermerInsertion}
           onElementCree={ajouterElementLocal}
+        />
+      )}
+
+      {importOuvert && (
+        <PanneauImportPlanMedia
+          chaineActive={chaineActive}
+          diffusions={diffusions}
+          campagnes={campagnes}
+          programmesParId={programmesParId}
+          onFermer={() => setImportOuvert(false)}
+          onImporte={documentImporte}
         />
       )}
 
