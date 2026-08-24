@@ -39,7 +39,15 @@ import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
-import { PRESETS_ZOOM, INDEX_ZOOM_DEFAUT, calculerHauteurTotale, genererMarquesHeures, positionVersMinute, disposerEnPistes } from '../lib/grilleAxe.js'
+import {
+  PRESETS_ZOOM,
+  INDEX_ZOOM_DEFAUT,
+  calculerHauteurTotale,
+  genererMarquesHeures,
+  genererGraduationsMineures,
+  positionVersMinute,
+  disposerEnPistes,
+} from '../lib/grilleAxe.js'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -218,6 +226,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   }, [chaineActive, grilleActive])
 
   const presetZoom = PRESETS_ZOOM[indexZoom]
+  const graduationsMineures = useMemo(() => genererGraduationsMineures(presetZoom.pasGraduationMin), [presetZoom])
   // Mois/Année = aperçu en lecture seule (drill-down uniquement) — le rendu
   // continu à la minute, le zoom et la sélection/copier-coller n'existent
   // qu'en Jour/Semaine.
@@ -895,6 +904,17 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                       {minutesEnHeure(m)}
                     </div>
                   ))}
+                  {/* Graduations mineures (P25) : trait court sans heure
+                      écrite — le pas dépend du palier de zoom (10 min en
+                      Standard, 5 min en Précis), juste un repère visuel pour
+                      aligner un dépôt/clic précisément. */}
+                  {graduationsMineures.map((m) => (
+                    <div
+                      key={m}
+                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute, right: 8, width: 6 }}
+                      className="border-t border-slate-300"
+                    />
+                  ))}
                 </div>
 
                 {jours.map((j, i) => {
@@ -924,6 +944,16 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                         <div
                           key={m}
                           className="absolute left-0 right-0 border-t border-slate-100"
+                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute }}
+                        />
+                      ))}
+                      {/* Graduations mineures (P25) : mêmes pas que l'axe,
+                          trait plus discret que les marques horaires pour ne
+                          pas rivaliser visuellement avec elles. */}
+                      {graduationsMineures.map((m) => (
+                        <div
+                          key={m}
+                          className="absolute left-0 right-0 border-t border-dashed border-slate-100"
                           style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute }}
                         />
                       ))}

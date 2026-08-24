@@ -17,16 +17,36 @@ export const PAS_ARRONDI_MIN = 5
 // palier à la seconde (EXG-M2-01/02 : la grille programme à la minute ; la
 // précision seconde reste l'apanage du plan média/conducteur, mécanisme
 // séparé — heureHMSEnSecondes, planMedia.js).
+// `pasGraduationMin` : pas des graduations mineures (traits courts, sans
+// heure écrite — seules les marques horaires pleines, genererMarquesHeures,
+// portent un libellé, sinon les chiffres s'empileraient de façon illisible
+// au pas de 5 min). `null` = pas de graduation mineure (Vue d'ensemble :
+// l'espacement en pixels serait de toute façon trop serré pour être utile).
+// Le pas est choisi pour garder un espacement à l'écran comparable d'un
+// palier à l'autre (~10px entre graduations).
 export const PRESETS_ZOOM = [
-  { code: 'ENSEMBLE', label: "Vue d'ensemble", pxParMinute: 0.4, pasArrondiMin: 30 },
-  { code: 'STANDARD', label: 'Standard', pxParMinute: PX_PAR_MINUTE, pasArrondiMin: PAS_ARRONDI_MIN },
-  { code: 'PRECIS', label: 'Précis', pxParMinute: 2, pasArrondiMin: 1 },
+  { code: 'ENSEMBLE', label: "Vue d'ensemble", pxParMinute: 0.4, pasArrondiMin: 30, pasGraduationMin: null },
+  { code: 'STANDARD', label: 'Standard', pxParMinute: PX_PAR_MINUTE, pasArrondiMin: PAS_ARRONDI_MIN, pasGraduationMin: 10 },
+  { code: 'PRECIS', label: 'Précis', pxParMinute: 2, pasArrondiMin: 1, pasGraduationMin: 5 },
 ]
 export const INDEX_ZOOM_DEFAUT = 1 // STANDARD
 
 export function genererMarquesHeures() {
   const marques = []
   for (let m = DEBUT_JOURNEE_ANTENNE; m <= FIN_JOURNEE_ANTENNE; m += 60) marques.push(m)
+  return marques
+}
+
+// Graduations mineures (sans libellé) entre deux marques horaires — traits
+// courts sur l'axe pour repérer une position au pas du palier de zoom
+// courant. Exclut les multiples de 60 (déjà couverts par une marque horaire
+// pleine) pour ne jamais dessiner deux traits au même endroit.
+export function genererGraduationsMineures(pasMinutes) {
+  if (!pasMinutes) return []
+  const marques = []
+  for (let m = DEBUT_JOURNEE_ANTENNE; m <= FIN_JOURNEE_ANTENNE; m += pasMinutes) {
+    if (m % 60 !== 0) marques.push(m)
+  }
   return marques
 }
 
