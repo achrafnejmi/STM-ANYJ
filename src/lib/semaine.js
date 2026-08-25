@@ -240,16 +240,16 @@ export function parserDateFrancaiseLongue(texte) {
   return `${correspondance[3]}-${String(indexMois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`
 }
 
-// Dates ISO entre deux bornes (incluses) dont le jour de semaine figure dans
-// `joursCoches` (0=lundi..6=dimanche) — pour l'onglet Répéter de l'Inspecteur.
-export function joursSelonJoursSemaine(debutISO, finISO, joursCoches) {
-  const coches = new Set(joursCoches)
-  const resultat = []
+// Dates ISO entre deux bornes (incluses), en partant de `debutISO` et en
+// avançant de `pas` jours à chaque tour (P27, onglet Répéter de l'Inspecteur —
+// remplace l'ancien mode par jours de semaine cochés, joursSelonJoursSemaine,
+// retiré car il n'avait aucun autre appelant).
+export function datesParPas(debutISO, finISO, pas) {
+  const dates = []
   let d = debutISO
   while (d <= finISO) {
-    const jourLundi0 = (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7 // 0=lundi..6=dimanche
-    if (coches.has(jourLundi0)) resultat.push(d)
-    d = ajouterJours(d, 1)
+    dates.push(d)
+    d = ajouterJours(d, pas)
   }
-  return resultat
+  return dates
 }

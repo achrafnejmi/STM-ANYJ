@@ -119,6 +119,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [listeTransmissionsOuverte, setListeTransmissionsOuverte] = useState(false)
+  const [vueVecteur, setVueVecteur] = useState('UNIFIE') // P27 : 'UNIFIE' | 'TNT' | 'SATELLITE'
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
   const chargementIdRef = useRef(0)
@@ -261,20 +262,32 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   // Filtrées sur la grille actuellement OUVERTE (l'onglet affiché) — chaque
   // grille de la chaîne a ses propres blocs, jamais mélangés à l'écran mais
   // tous chargés en mémoire pour permettre plusieurs onglets sans aller-
-  // retour réseau à chaque bascule.
+  // retour réseau à chaque bascule. NON filtrée par vueVecteur (P27) — reste
+  // la source complète transmise à l'Inspecteur, qui doit pouvoir retrouver
+  // une ligne sœur même masquée par la vue courante (Retirer d'un vecteur).
   const diffusionsGrilleActive = useMemo(
     () => (grilleActive ? diffusions.filter((d) => d.grille_id === grilleActive.id) : []),
     [diffusions, grilleActive]
   )
 
+  // Bascule d'affichage Unifié/TNT/Satellite (P27, RG-13) : un pur filtre de
+  // rendu — le drag-drop et la création restent inchangés quelle que soit la
+  // vue. Unifié et TNT partagent le même prédicat (RG-13 : la vue Unifié
+  // n'affiche que les versions communes et TNT, une exception satellite
+  // existe mais n'y est pas dupliquée) — même logique que Conducteur.jsx.
+  const diffusionsGrilleActiveVue = useMemo(() => {
+    if (vueVecteur === 'SATELLITE') return diffusionsGrilleActive.filter((d) => d.vecteur == null || d.vecteur === 'SATELLITE')
+    return diffusionsGrilleActive.filter((d) => d.vecteur == null || d.vecteur === 'TNT')
+  }, [diffusionsGrilleActive, vueVecteur])
+
   const diffusionsParJour = useMemo(() => {
     const map = new Map()
     for (const j of jours) map.set(j, [])
-    for (const d of diffusionsGrilleActive) {
+    for (const d of diffusionsGrilleActiveVue) {
       if (map.has(d.date)) map.get(d.date).push(d)
     }
     return map
-  }, [diffusionsGrilleActive, jours])
+  }, [diffusionsGrilleActiveVue, jours])
 
   const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
 
@@ -360,6 +373,37 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       XLSX.writeFile(classeur, construireNomFichierListeTransmissions(chaineActive.nom, periodeLabel, 'xlsx'))
     } catch (err) {
       setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
+  }
+
+  // Export « 2 feuilles TNT/SAT » (P27) — montre toujours les 2 vecteurs côte
+  // à côte, indépendamment de la bascule d'affichage Unifié/TNT/Satellite
+  // (Partie C) : reconstruit sa propre liste depuis diffusionsGrilleActive
+  // (non filtrée), jamais depuis diffusionsAffichees. Même prédicat RG-13 que
+  // la bascule et Conducteur.jsx.
+  function exporterTransmissionsExcelTNTSat() {
+    try {
+      const diffusionsPeriodeToutVecteur = jours.flatMap((j) => diffusionsGrilleActive.filter((d) => d.date === j))
+      const donneesTNT = construireDonneesListeTransmissions({
+        chaineNom: chaineActive.nom,
+        periodeLabel,
+        diffusions: diffusionsPeriodeToutVecteur.filter((d) => d.vecteur == null || d.vecteur === 'TNT'),
+        programmesParId,
+        fenetresDroits,
+      })
+      const donneesSAT = construireDonneesListeTransmissions({
+        chaineNom: chaineActive.nom,
+        periodeLabel,
+        diffusions: diffusionsPeriodeToutVecteur.filter((d) => d.vecteur == null || d.vecteur === 'SATELLITE'),
+        programmesParId,
+        fenetresDroits,
+      })
+      const classeur = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(classeur, XLSX.utils.aoa_to_sheet(construireLignesExcelListeTransmissions(donneesTNT)), 'TNT')
+      XLSX.utils.book_append_sheet(classeur, XLSX.utils.aoa_to_sheet(construireLignesExcelListeTransmissions(donneesSAT)), 'SAT')
+      XLSX.writeFile(classeur, `Liste des transmissions — ${chaineActive.nom} — ${periodeLabel} (TNT+SAT).xlsx`)
+    } catch (err) {
+      setErreur(`Échec de l'export Excel TNT/SAT : ${err.message}`)
     }
   }
 
@@ -813,6 +857,22 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 </button>
               ))}
             </div>
+            <div className="flex rounded-md border border-slate-300 text-sm" title="Bascule d'affichage par vecteur (RG-13) — filtre visuel uniquement">
+              {[
+                ['UNIFIE', 'Unifié'],
+                ['TNT', 'TNT'],
+                ['SATELLITE', 'Satellite'],
+              ].map(([code, label]) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setVueVecteur(code)}
+                  className={`px-3 py-2 ${vueVecteur === code ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {vueEditable && (
               <div className="flex rounded-md border border-slate-300 text-sm" title="Précision de programmation">
                 {PRESETS_ZOOM.map((preset, i) => (
@@ -1199,7 +1259,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         {!chargement && grilleActive && vue === 'ANNEE' && (
           <VueAnnee
             moisListe={moisDeLAnnee(dateReference)}
-            diffusionsGrilleActive={diffusionsGrilleActive}
+            diffusionsGrilleActive={diffusionsGrilleActiveVue}
             onOuvrirMois={ouvrirMoisDepuisApercu}
           />
         )}
@@ -1229,6 +1289,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           programme={programmesParId.get(blocSelectionne.programme_id)}
           chaineActive={chaineActive}
           grilleId={grilleActive.id}
+          diffusionsGrilleActive={diffusionsGrilleActive}
           onFermer={() => changerBlocSelectionne(null)}
           onModifie={appliquerEdition}
           onSupprime={appliquerSuppression}
@@ -1265,6 +1326,15 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <button type="button" onClick={exporterTransmissionsPdf} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50">
                   <File size={13} />
                   PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={exporterTransmissionsExcelTNTSat}
+                  title="Feuilles TNT + Satellite séparées, indépendamment de la bascule d'affichage"
+                  className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"
+                >
+                  <FileSpreadsheet size={13} />
+                  Excel (TNT + SAT)
                 </button>
               </div>
             </div>

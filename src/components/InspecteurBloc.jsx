@@ -5,14 +5,13 @@ import {
   mettreAJourDiffusionLineaire,
   creerDiffusionLineaire,
   creerDiffusionsLineaires,
+  supprimerDiffusionLineaire,
 } from '../lib/db.js'
 import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoManager.js'
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
-import { ajouterJours, formaterJourCourt, formaterDateLongue, joursSelonJoursSemaine } from '../lib/semaine.js'
+import { ajouterJours, formaterJourCourt, formaterDateLongue, datesParPas } from '../lib/semaine.js'
 import { useNotification, useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
-
-const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
 
 // Panneau flottant (pas une 3e colonne) : ancré au viewport pour ne jamais
 // comprimer la grille en dessous, quelle que soit la largeur d'écran.
@@ -21,6 +20,7 @@ export default function InspecteurBloc({
   programme,
   chaineActive,
   grilleId,
+  diffusionsGrilleActive,
   onFermer,
   onModifie,
   onSupprime,
@@ -87,7 +87,9 @@ export default function InspecteurBloc({
           diffusion={diffusion}
           chaineActive={chaineActive}
           grilleId={grilleId}
+          diffusionsGrilleActive={diffusionsGrilleActive}
           onModifie={onModifie}
+          onSupprime={onSupprime}
           onCreerPlusieurs={onCreerPlusieurs}
         />
       )}
@@ -230,10 +232,13 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   const [chargementEpisodes, setChargementEpisodes] = useState(true)
   const requeteId = useRef(0)
 
-  const jourOrigineIndex = useMemo(() => (new Date(`${diffusion.date}T00:00:00Z`).getUTCDay() + 6) % 7, [diffusion.date])
   const [dateDebut, setDateDebut] = useState(diffusion.date)
   const [dateFin, setDateFin] = useState(ajouterJours(diffusion.date, 6))
-  const [joursCoches, setJoursCoches] = useState(() => [jourOrigineIndex])
+  const [pas, setPas] = useState(1)
+  // Dates exclues manuellement dans l'aperçu (P27, "sauter des jours") — remis
+  // à zéro dès que la plage/le pas change, une exclusion n'a de sens que pour
+  // la série qui l'a proposée.
+  const [exclusions, setExclusions] = useState(() => new Set())
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   // Id de l'entrée d'historique créée par le dernier "Appliquer" — le bandeau
@@ -262,14 +267,23 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
       })
   }, [programme.id])
 
-  function toggleJour(i) {
-    if (i === jourOrigineIndex) return
-    setJoursCoches((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]))
+  useEffect(() => {
+    setExclusions(new Set())
+  }, [dateDebut, dateFin, pas])
+
+  function toggleException(date) {
+    setExclusions((s) => {
+      const next = new Set(s)
+      if (next.has(date)) next.delete(date)
+      else next.add(date)
+      return next
+    })
   }
 
   const apercu = useMemo(() => {
     if (chargementEpisodes || episodes.length === 0) return []
-    const dates = joursSelonJoursSemaine(dateDebut, dateFin, joursCoches)
+    const pasValide = Number(pas) > 0 ? Number(pas) : 1
+    const dates = datesParPas(dateDebut, dateFin, pasValide)
       .filter((d) => d !== diffusion.date)
       .sort()
     const indexOrigine = episodes.findIndex((ep) => ep.id === diffusion.episode_id)
@@ -281,9 +295,9 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
       }
       return { date, eligible: true, episode: episodes[indexCible] }
     })
-  }, [dateDebut, dateFin, joursCoches, episodes, chargementEpisodes, diffusion.date, diffusion.episode_id])
+  }, [dateDebut, dateFin, pas, episodes, chargementEpisodes, diffusion.date, diffusion.episode_id])
 
-  const retenues = apercu.filter((a) => a.eligible)
+  const retenues = apercu.filter((a) => a.eligible && !exclusions.has(a.date))
 
   async function appliquer() {
     setEnregistrement(true)
@@ -301,6 +315,11 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
         heure_fin: diffusion.heure_fin,
         genre: diffusion.genre,
         titre_cache: diffusion.titre_cache,
+        // P27 : préserve l'exception vecteur du bloc d'origine sur chaque
+        // occurrence répétée — auparavant omis du payload, une répétition
+        // d'un bloc déjà scindé TNT/Satellite perdait silencieusement
+        // l'exception sur les copies.
+        vecteur: diffusion.vecteur ?? null,
       }))
       const creees = await creerDiffusionsLineaires(lignes)
       const entree = await enregistrerAction({
@@ -312,7 +331,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
       })
       onCreerPlusieurs(creees)
       setDerniereActionId(entree.id)
-      setJoursCoches([jourOrigineIndex])
+      setExclusions(new Set())
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -339,10 +358,11 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   return (
     <div className="space-y-4 text-sm">
       <p className="text-xs text-slate-500">
-        La répétition part de la date du bloc sélectionné, incrémente les épisodes et écarte les dates au-delà du
-        nombre d'épisodes disponibles.
+        La répétition part de la date du bloc sélectionné, avance d'un pas fixe (en jours), incrémente les épisodes
+        et écarte les dates au-delà du nombre d'épisodes disponibles. Décochez une ligne de l'aperçu pour sauter
+        cette date précise.
       </p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-700">Du</label>
           <input
@@ -361,22 +381,16 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           />
         </div>
-      </div>
-      <div className="flex gap-1">
-        {JOURS_ABBR.map((label, i) => (
-          <button
-            key={i}
-            type="button"
-            disabled={i === jourOrigineIndex}
-            onClick={() => toggleJour(i)}
-            title={i === jourOrigineIndex ? 'Jour du bloc d\'origine' : undefined}
-            className={`flex-1 rounded-md border py-1.5 text-xs font-semibold ${
-              joursCoches.includes(i) ? 'border-snrt-navy bg-snrt-navy text-white' : 'border-slate-300 text-slate-600'
-            } ${i === jourOrigineIndex ? 'opacity-50' : 'hover:bg-slate-50'}`}
-          >
-            {label}
-          </button>
-        ))}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">Pas (jours)</label>
+          <input
+            type="number"
+            min="1"
+            value={pas}
+            onChange={(e) => setPas(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          />
+        </div>
       </div>
 
       {chargementEpisodes ? (
@@ -385,7 +399,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
         <p className="text-xs text-amber-600">Ce programme n'a aucun épisode.</p>
       ) : (
         <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200">
-          {apercu.length === 0 && <p className="p-2 text-xs text-slate-500">Aucune date sélectionnée.</p>}
+          {apercu.length === 0 && <p className="p-2 text-xs text-slate-500">Aucune date dans cette plage.</p>}
           {apercu.map((a) => (
             <div
               key={a.date}
@@ -393,7 +407,15 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
                 a.eligible ? 'text-slate-700' : 'text-slate-400'
               }`}
             >
-              <span>{formaterJourCourt(a.date)}</span>
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={a.eligible && !exclusions.has(a.date)}
+                  disabled={!a.eligible}
+                  onChange={() => toggleException(a.date)}
+                />
+                {formaterJourCourt(a.date)}
+              </span>
               {a.eligible ? (
                 <span className="font-mono">ÉP.{String(a.episode.numero).padStart(2, '0')}</span>
               ) : (
@@ -427,10 +449,13 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   )
 }
 
-function OngletVecteur({ diffusion, chaineActive, grilleId, onModifie, onCreerPlusieurs }) {
+const LIBELLES_VECTEUR = { TNT: 'TNT', SATELLITE: 'Satellite' }
+
+function OngletVecteur({ diffusion, chaineActive, grilleId, diffusionsGrilleActive, onModifie, onSupprime, onCreerPlusieurs }) {
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const estException = diffusion.vecteur != null
+  const { confirmer } = useNotification()
 
   // Scission (RG-10..14) : l'original garde son id et reçoit le vecteur
   // complémentaire, une nouvelle ligne est créée avec TOUS les champs de
@@ -461,6 +486,93 @@ function OngletVecteur({ diffusion, chaineActive, grilleId, onModifie, onCreerPl
       })
       onModifie(original)
       onCreerPlusieurs([nouvelle])
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnregistrement(false)
+    }
+  }
+
+  // "Retirer du Satellite/du TNT" (P27) : à la différence de creerException
+  // (qui duplique toujours en 2 versions, RG-12), cette action vide vraiment
+  // le vecteur ciblé sur ce créneau — 3 cas selon l'état actuel de la ligne
+  // inspectée :
+  //  1. Unifiée : bascule cette ligne UNIQUE vers le vecteur restant (aucune
+  //     ligne créée/supprimée) — elle disparaît des vues filtrées sur
+  //     `vecteurACible` (GrilleLineaire.jsx, bascule Unifié/TNT/Satellite).
+  //  2. La ligne inspectée EST déjà le côté ciblé : suppression directe
+  //     (même primitive que Déprogrammer) — le panneau se ferme.
+  //  3. La ligne inspectée est l'exception opposée : cherche la ligne sœur
+  //     exacte sur ce créneau (même date/heure — pas de colonne de liaison
+  //     entre les 2 lignes scindées, limite assumée RG-14 depuis P11) et la
+  //     supprime ; si introuvable (déplacée depuis), message clair plutôt
+  //     qu'une suppression silencieuse d'une autre ligne.
+  // Toujours 1 seul enregistrerAction (1 UPDATE ou 1 DELETE) — annulable.
+  async function retirerDuVecteur(vecteurACible) {
+    setErreur(null)
+    const libelle = LIBELLES_VECTEUR[vecteurACible]
+
+    if (diffusion.vecteur == null) {
+      const vecteurRestant = vecteurACible === 'TNT' ? 'SATELLITE' : 'TNT'
+      const confirme = await confirmer({
+        titre: `Retirer du ${libelle}`,
+        message: `« ${diffusion.titre_cache} » ne sera plus diffusé sur ${libelle} à cet horaire (${diffusion.heure_debut}, ${formaterDateLongue(diffusion.date)}) — il restera diffusé sur ${LIBELLES_VECTEUR[vecteurRestant]} uniquement. Cette action est annulable.`,
+        labelConfirmer: `Retirer du ${libelle}`,
+      })
+      if (!confirme) return
+      setEnregistrement(true)
+      try {
+        const maj = await mettreAJourDiffusionLineaire(diffusion.id, { vecteur: vecteurRestant })
+        await enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: 'GRILLE_LINEAIRE',
+          documentId: grilleId,
+          libelle: `Retrait du ${libelle} : ${diffusion.titre_cache}`,
+          operations: [{ table: 'diffusion_lineaire', type: 'UPDATE', id: diffusion.id, avant: diffusion, apres: maj }],
+        })
+        onModifie(maj)
+      } catch (err) {
+        setErreur(err.message)
+      } finally {
+        setEnregistrement(false)
+      }
+      return
+    }
+
+    const cible =
+      diffusion.vecteur === vecteurACible
+        ? diffusion
+        : (diffusionsGrilleActive ?? []).find(
+            (d) =>
+              d.id !== diffusion.id &&
+              d.date === diffusion.date &&
+              d.heure_debut === diffusion.heure_debut &&
+              d.heure_fin === diffusion.heure_fin &&
+              d.vecteur === vecteurACible
+          )
+    if (!cible) {
+      setErreur(
+        `Aucune version ${libelle} trouvée sur ce créneau exact — si elle a été déplacée, supprimez-la depuis son propre Inspecteur.`
+      )
+      return
+    }
+    const confirme = await confirmer({
+      titre: `Retirer du ${libelle}`,
+      message: `La version ${libelle} de « ${cible.titre_cache} » sur ce créneau (${cible.heure_debut}, ${formaterDateLongue(cible.date)}) sera supprimée. Cette action est annulable.`,
+      labelConfirmer: `Retirer du ${libelle}`,
+    })
+    if (!confirme) return
+    setEnregistrement(true)
+    try {
+      await supprimerDiffusionLineaire(cible.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        documentId: grilleId,
+        libelle: `Retrait du ${libelle} : ${cible.titre_cache}`,
+        operations: [{ table: 'diffusion_lineaire', type: 'DELETE', id: cible.id, avant: cible }],
+      })
+      onSupprime(cible.id)
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -520,6 +632,33 @@ function OngletVecteur({ diffusion, chaineActive, grilleId, onModifie, onCreerPl
             déprogrammer cette ligne puis remettre l'autre à Unifié (prévu P19).
           </p>
         )}
+      </div>
+
+      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+        <div className="mb-1.5 flex items-center gap-1.5 font-semibold">
+          <SplitSquareHorizontal size={13} />
+          Retirer un vecteur
+        </div>
+        Vide vraiment ce créneau côté vecteur choisi (à l'inverse d'une exception, rien ne s'y diffuse plus) — le
+        contenu restant, s'il existe, n'est pas touché.
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            disabled={enregistrement}
+            onClick={() => retirerDuVecteur('SATELLITE')}
+            className="flex-1 rounded-md border border-red-300 bg-white px-2 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+          >
+            Retirer du Satellite
+          </button>
+          <button
+            type="button"
+            disabled={enregistrement}
+            onClick={() => retirerDuVecteur('TNT')}
+            className="flex-1 rounded-md border border-red-300 bg-white px-2 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+          >
+            Retirer du TNT
+          </button>
+        </div>
       </div>
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}
     </div>
