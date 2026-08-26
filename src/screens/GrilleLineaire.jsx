@@ -19,7 +19,8 @@ import {
   Trash2,
   CheckSquare,
   ClipboardPaste,
-  ListOrdered,
+  Download,
+  Save,
   FileSpreadsheet,
   FileText,
   File,
@@ -119,11 +120,13 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [listeTransmissionsOuverte, setListeTransmissionsOuverte] = useState(false)
-  const [vueVecteur, setVueVecteur] = useState('UNIFIE') // P27 : 'UNIFIE' | 'TNT' | 'SATELLITE'
+  // P27b : 2 positions seulement ('TNT' | 'SATELLITE', pas de vue "Unifié") —
+  // défaut Satellite, la vue où se fait l'édition au quotidien.
+  const [vueVecteur, setVueVecteur] = useState('SATELLITE')
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
   const chargementIdRef = useRef(0)
-  const { confirmer } = useNotification()
+  const { confirmer, succes } = useNotification()
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
   // pour changer/fermer le bloc inspecté — bloc_Modifie est reporté par
@@ -859,9 +862,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             </div>
             <div className="flex rounded-md border border-slate-300 text-sm" title="Bascule d'affichage par vecteur (RG-13) — filtre visuel uniquement">
               {[
-                ['UNIFIE', 'Unifié'],
-                ['TNT', 'TNT'],
                 ['SATELLITE', 'Satellite'],
+                ['TNT', 'TNT'],
               ].map(([code, label]) => (
                 <button
                   key={code}
@@ -1001,10 +1003,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               type="button"
               onClick={() => setListeTransmissionsOuverte(true)}
               className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              title="Liste des transmissions (export Excel/Word/PDF)"
+              title="Exporter la grille (Excel/Word/PDF/TNT+SAT)"
             >
-              <ListOrdered size={15} />
-              Liste des transmissions
+              <Download size={15} />
+              Exporter
+            </button>
+            <button
+              type="button"
+              onClick={() => succes('Grille enregistrée ✓')}
+              title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+            >
+              <Save size={15} />
+              Enregistrer
             </button>
             <div className="flex rounded-md border border-slate-300">
               <button
@@ -1308,68 +1319,32 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       )}
 
       {listeTransmissionsOuverte && (
-        <Modal titre="Liste des transmissions" onFermer={() => setListeTransmissionsOuverte(false)} large>
-          <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                {grilleActive?.nom} — {periodeLabel} ({diffusionsAffichees.length} transmission{diffusionsAffichees.length > 1 ? 's' : ''})
-              </p>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={exporterTransmissionsExcel} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50">
-                  <FileSpreadsheet size={13} />
-                  Excel
-                </button>
-                <button type="button" onClick={exporterTransmissionsWord} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-blue-700 hover:bg-blue-50">
-                  <FileText size={13} />
-                  Word
-                </button>
-                <button type="button" onClick={exporterTransmissionsPdf} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50">
-                  <File size={13} />
-                  PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={exporterTransmissionsExcelTNTSat}
-                  title="Feuilles TNT + Satellite séparées, indépendamment de la bascule d'affichage"
-                  className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"
-                >
-                  <FileSpreadsheet size={13} />
-                  Excel (TNT + SAT)
-                </button>
-              </div>
-            </div>
-            <div className="max-h-[60vh] overflow-x-auto overflow-y-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
-                    {ENTETE_LISTE_TRANSMISSIONS.map((h) => (
-                      <th key={h} className="whitespace-nowrap py-1.5 pr-3 font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {donneesExportTransmissions().lignes.map((l, i) => (
-                    <tr key={i} className="border-b border-slate-100 text-slate-700">
-                      <td className="whitespace-nowrap py-1 pr-3">{l.date}</td>
-                      <td className="whitespace-nowrap py-1 pr-3 font-mono">{l.debut}</td>
-                      <td className="whitespace-nowrap py-1 pr-3 font-mono">{l.fin}</td>
-                      <td className="py-1 pr-3">{l.titre}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.episode}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.genre}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.duree}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.vecteur}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.support}</td>
-                      <td className="whitespace-nowrap py-1 pr-3">{l.statutDroits}</td>
-                    </tr>
-                  ))}
-                  {diffusionsAffichees.length === 0 && (
-                    <tr>
-                      <td colSpan={10} className="py-3 text-sm text-slate-500">Aucune transmission sur cette période.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+        <Modal titre="Exporter la grille" onFermer={() => setListeTransmissionsOuverte(false)}>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-slate-500">
+              {grilleActive?.nom} — {periodeLabel} ({diffusionsAffichees.length} transmission{diffusionsAffichees.length > 1 ? 's' : ''})
+            </p>
+            <button type="button" onClick={exporterTransmissionsExcel} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
+              <FileSpreadsheet size={16} />
+              Excel
+            </button>
+            <button type="button" onClick={exporterTransmissionsWord} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">
+              <FileText size={16} />
+              Word
+            </button>
+            <button type="button" onClick={exporterTransmissionsPdf} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+              <File size={16} />
+              PDF
+            </button>
+            <button
+              type="button"
+              onClick={exporterTransmissionsExcelTNTSat}
+              title="Feuilles TNT + Satellite séparées, indépendamment de la bascule d'affichage"
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+            >
+              <FileSpreadsheet size={16} />
+              Excel (TNT + SAT)
+            </button>
           </div>
         </Modal>
       )}

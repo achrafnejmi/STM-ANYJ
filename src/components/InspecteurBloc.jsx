@@ -10,8 +10,18 @@ import {
 import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoManager.js'
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
-import { ajouterJours, formaterJourCourt, formaterDateLongue, datesParPas } from '../lib/semaine.js'
+import {
+  ajouterJours,
+  formaterJourCourt,
+  formaterDateLongue,
+  datesParPas,
+  jourAntenneLundi0,
+  heureEnMinutes,
+  minutesEnHeure,
+} from '../lib/semaine.js'
 import { useNotification, useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
+
+const JOURS_ABBR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] // 0=lundi..6=dimanche
 
 // Panneau flottant (pas une 3e colonne) : ancré au viewport pour ne jamais
 // comprimer la grille en dessous, quelle que soit la largeur d'écran.
@@ -235,9 +245,17 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   const [dateDebut, setDateDebut] = useState(diffusion.date)
   const [dateFin, setDateFin] = useState(ajouterJours(diffusion.date, 6))
   const [pas, setPas] = useState(1)
+  // Jours de semaine (P27b) : second filtre, appliqué APRÈS le pas — un
+  // complément, pas un remplacement (P27 les avait retirés à tort). Tous
+  // cochés par défaut : le pas seul reproduit alors le comportement P27.
+  const [joursCoches, setJoursCoches] = useState(() => [0, 1, 2, 3, 4, 5, 6])
+  // Heure de reprogrammation (P27b) — par défaut celle du bloc d'origine ;
+  // la durée d'origine est préservée (heure_fin recalculée, jamais saisie
+  // séparément : une rediffusion garde la même durée, juste un autre départ).
+  const [heureDebut, setHeureDebut] = useState(diffusion.heure_debut)
   // Dates exclues manuellement dans l'aperçu (P27, "sauter des jours") — remis
-  // à zéro dès que la plage/le pas change, une exclusion n'a de sens que pour
-  // la série qui l'a proposée.
+  // à zéro dès que la plage/le pas/les jours changent, une exclusion n'a de
+  // sens que pour la série qui l'a proposée.
   const [exclusions, setExclusions] = useState(() => new Set())
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -269,7 +287,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
 
   useEffect(() => {
     setExclusions(new Set())
-  }, [dateDebut, dateFin, pas])
+  }, [dateDebut, dateFin, pas, joursCoches])
 
   function toggleException(date) {
     setExclusions((s) => {
@@ -280,11 +298,20 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
     })
   }
 
+  function toggleJour(i) {
+    setJoursCoches((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]))
+  }
+
+  function toggleTousLesJours() {
+    setJoursCoches((s) => (s.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6]))
+  }
+
   const apercu = useMemo(() => {
     if (chargementEpisodes || episodes.length === 0) return []
     const pasValide = Number(pas) > 0 ? Number(pas) : 1
     const dates = datesParPas(dateDebut, dateFin, pasValide)
       .filter((d) => d !== diffusion.date)
+      .filter((d) => joursCoches.includes(jourAntenneLundi0(d)))
       .sort()
     const indexOrigine = episodes.findIndex((ep) => ep.id === diffusion.episode_id)
     const base = indexOrigine === -1 ? 0 : indexOrigine
@@ -295,14 +322,18 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
       }
       return { date, eligible: true, episode: episodes[indexCible] }
     })
-  }, [dateDebut, dateFin, pas, episodes, chargementEpisodes, diffusion.date, diffusion.episode_id])
+  }, [dateDebut, dateFin, pas, joursCoches, episodes, chargementEpisodes, diffusion.date, diffusion.episode_id])
 
   const retenues = apercu.filter((a) => a.eligible && !exclusions.has(a.date))
+  // Durée du bloc d'origine, préservée pour chaque occurrence répétée quelle
+  // que soit l'heure de reprogrammation choisie.
+  const dureeOriginaleMinutes = heureEnMinutes(diffusion.heure_fin) - heureEnMinutes(diffusion.heure_debut)
 
   async function appliquer() {
     setEnregistrement(true)
     setErreur(null)
     try {
+      const heureFinCalculee = minutesEnHeure(heureEnMinutes(heureDebut) + dureeOriginaleMinutes)
       const lignes = retenues.map((a) => ({
         programme_id: diffusion.programme_id,
         episode_id: a.episode.id,
@@ -311,8 +342,8 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
         chaine_id: chaineActive.id,
         grille_id: grilleId,
         date: a.date,
-        heure_debut: diffusion.heure_debut,
-        heure_fin: diffusion.heure_fin,
+        heure_debut: heureDebut,
+        heure_fin: heureFinCalculee,
         genre: diffusion.genre,
         titre_cache: diffusion.titre_cache,
         // P27 : préserve l'exception vecteur du bloc d'origine sur chaque
@@ -358,11 +389,11 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   return (
     <div className="space-y-4 text-sm">
       <p className="text-xs text-slate-500">
-        La répétition part de la date du bloc sélectionné, avance d'un pas fixe (en jours), incrémente les épisodes
-        et écarte les dates au-delà du nombre d'épisodes disponibles. Décochez une ligne de l'aperçu pour sauter
-        cette date précise.
+        La répétition part de la date du bloc sélectionné, avance d'un pas fixe (en jours), garde uniquement les
+        jours de semaine cochés, incrémente les épisodes et écarte les dates au-delà du nombre d'épisodes
+        disponibles. Décochez une ligne de l'aperçu pour sauter cette date précise.
       </p>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-700">Du</label>
           <input
@@ -390,6 +421,39 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
             onChange={(e) => setPas(e.target.value)}
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">Heure de reprogrammation</label>
+          <input
+            type="time"
+            value={heureDebut}
+            onChange={(e) => setHeureDebut(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          />
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs font-medium text-slate-700">Jours de semaine</label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" checked={joursCoches.length === 7} onChange={toggleTousLesJours} />
+            Tous les jours
+          </label>
+        </div>
+        <div className="flex gap-1">
+          {JOURS_ABBR.map((label, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => toggleJour(i)}
+              className={`flex-1 rounded-md border py-1.5 text-xs font-semibold ${
+                joursCoches.includes(i) ? 'border-snrt-navy bg-snrt-navy text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
