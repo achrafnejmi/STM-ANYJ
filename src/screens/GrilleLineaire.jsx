@@ -818,6 +818,15 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <Copy size={12} />
                 Dupliquer
               </button>
+              <button
+                type="button"
+                onClick={() => setListeTransmissionsOuverte(true)}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                title="Exporter la grille (Excel/Word/PDF/TNT+SAT)"
+              >
+                <Download size={12} />
+                Exporter
+              </button>
               {!grilleActive.est_live && (
                 <button
                   type="button"
@@ -960,6 +969,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             >
               Aujourd'hui
             </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setPleinEcran((v) => !v)}
@@ -999,15 +1013,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 <span className="rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{nbBloquantes}</span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => setListeTransmissionsOuverte(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              title="Exporter la grille (Excel/Word/PDF/TNT+SAT)"
-            >
-              <Download size={15} />
-              Exporter
-            </button>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => succes('Grille enregistrée ✓')}
