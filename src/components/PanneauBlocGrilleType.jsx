@@ -18,7 +18,7 @@ function formaterDuree(heureDebut, heureFin) {
 // bloc déjà persisté : la création (glisser-déposer ou bouton « Ajouter »)
 // écrit directement en base côté GrilleType.jsx avant d'ouvrir ce panneau, pas
 // de mode « brouillon non enregistré » ici.
-export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, onModifie, onSupprime, onModifieChange }) {
+export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId, onFermer, onModifie, onSupprime, onModifieChange }) {
   const [form, setForm] = useState(null)
   const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -74,6 +74,7 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, on
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
+        documentId: grilleTypeId,
         libelle: `Édition : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: bloc.id, avant: bloc, apres: maj }],
       })
@@ -91,6 +92,7 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, onFermer, on
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
+        documentId: grilleTypeId,
         libelle: `Suppression : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'DELETE', id: bloc.id, avant: bloc }],
       })

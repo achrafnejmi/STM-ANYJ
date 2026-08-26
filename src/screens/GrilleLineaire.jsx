@@ -29,7 +29,8 @@ import {
   listerDiffusionsLineairesParChaine,
   listerProgrammesParChaine,
   listerTousLesEpisodes,
-  listerBlocsGrilleTypeParChaine,
+  obtenirGrilleTypeLiveParChaine,
+  listerBlocsGrilleTypeParGrilleType,
   listerToutesLesFenetresDroits,
   listerEpisodes,
   creerDiffusionLineaire,
@@ -166,27 +167,32 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       listerProgrammesParChaine(chaineActive.id),
       listerDiffusionsLineairesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
-      listerBlocsGrilleTypeParChaine(chaineActive.id),
+      obtenirGrilleTypeLiveParChaine(chaineActive.id),
       listerToutesLesFenetresDroits(),
       listerGrillesParChaine(chaineActive.id),
     ])
-      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, lignesBlocs, lignesFenetres, lignesGrilles]) => {
-        if (idAppel !== chargementIdRef.current) return
-        setProgrammes(lignesProgrammes)
-        setDiffusions(lignesDiffusions)
-        setEpisodes(lignesEpisodes)
-        setBlocsGrilleType(lignesBlocs)
-        setFenetresDroits(lignesFenetres)
-        setGrilles(lignesGrilles)
-        const live = lignesGrilles.find((g) => g.est_live)
-        const sauvegardees = lireGrillesOuvertes(chaineActive.code).filter((id) => lignesGrilles.some((g) => g.id === id))
-        const ouvertes = sauvegardees.length > 0 ? sauvegardees : [live?.id].filter(Boolean)
-        setGrillesOuvertesIds(ouvertes)
-        setGrilleActiveId(ouvertes[0] ?? null)
-        setSelectionActive(false)
-        setBlocsSelectionnesIds(new Set())
-        setPresseGaPapier([])
-      })
+      // P28 : les bandes de fond/anomalies ne suivent que la grille type LIVE
+      // (jamais "tous les blocs de la chaîne") — dépend du résultat ci-dessus,
+      // d'où ce second Promise.all imbriqué plutôt qu'un 7e élément du premier.
+      .then(([lignesProgrammes, lignesDiffusions, lignesEpisodes, grilleTypeLive, lignesFenetres, lignesGrilles]) =>
+        (grilleTypeLive ? listerBlocsGrilleTypeParGrilleType(grilleTypeLive.id) : Promise.resolve([])).then((lignesBlocs) => {
+          if (idAppel !== chargementIdRef.current) return
+          setProgrammes(lignesProgrammes)
+          setDiffusions(lignesDiffusions)
+          setEpisodes(lignesEpisodes)
+          setBlocsGrilleType(lignesBlocs)
+          setFenetresDroits(lignesFenetres)
+          setGrilles(lignesGrilles)
+          const live = lignesGrilles.find((g) => g.est_live)
+          const sauvegardees = lireGrillesOuvertes(chaineActive.code).filter((id) => lignesGrilles.some((g) => g.id === id))
+          const ouvertes = sauvegardees.length > 0 ? sauvegardees : [live?.id].filter(Boolean)
+          setGrillesOuvertesIds(ouvertes)
+          setGrilleActiveId(ouvertes[0] ?? null)
+          setSelectionActive(false)
+          setBlocsSelectionnesIds(new Set())
+          setPresseGaPapier([])
+        })
+      )
       .catch((err) => {
         if (idAppel === chargementIdRef.current) setErreur(err.message)
       })

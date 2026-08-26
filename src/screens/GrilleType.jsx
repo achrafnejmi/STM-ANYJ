@@ -1,10 +1,21 @@
-import { useRef, useEffect, useState } from 'react'
-import { Plus, Undo2, Redo2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { listerBlocsGrilleTypeParChaine, creerBlocGrilleType, mettreAJourBlocGrilleType } from '../lib/db.js'
+import { useId, useMemo, useRef, useEffect, useState } from 'react'
+import { Plus, Pencil, Copy, Trash2, X, Undo2, Redo2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import {
+  listerGrillesTypeParChaine,
+  listerBlocsGrilleTypeParChaine,
+  creerBlocGrilleType,
+  mettreAJourBlocGrilleType,
+  creerGrilleType,
+  mettreAJourGrilleType,
+  supprimerGrilleType,
+  definirGrilleTypeLive,
+} from '../lib/db.js'
+import { lireGrillesTypeOuvertes, definirGrillesTypeOuvertes, dupliquerGrilleType } from '../lib/grillesType.js'
+import { lireUtilisateur } from '../lib/session.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { couleurType } from '../lib/couleursType.js'
-import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE } from '../lib/semaine.js'
+import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE, aujourdHuiISO, formaterDateJJMMAAAA } from '../lib/semaine.js'
 import {
   PX_PAR_MINUTE,
   HAUTEUR_TOTALE,
@@ -13,6 +24,7 @@ import {
   positionVersMinute,
   disposerEnPistes,
 } from '../lib/grilleAxe.js'
+import Modal from '../components/Modal.jsx'
 import PaletteTypes from '../components/PaletteTypes.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
@@ -97,7 +109,15 @@ function calculerNouveauxJours(joursOriginaux, jourOccurrence, mode, jourPointeu
 }
 
 export default function GrilleType({ chaineActive }) {
-  const [blocs, setBlocs] = useState([])
+  // Tous les blocs de la chaîne (toutes grilles type confondues), même
+  // pattern que `diffusions`/`diffusionsGrilleActive` en Grille linéaire
+  // (P23) : un seul chargement par chaîne, filtrage en mémoire par document
+  // actif — bascule d'onglet instantanée, pas d'aller-retour réseau.
+  const [blocsChaine, setBlocsChaine] = useState([])
+  const [grillesType, setGrillesType] = useState([])
+  const [grillesTypeOuvertesIds, setGrillesTypeOuvertesIds] = useState([])
+  const [grilleTypeActiveId, setGrilleTypeActiveId] = useState(null)
+  const [modaleGrilleType, setModaleGrilleType] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
@@ -110,22 +130,74 @@ export default function GrilleType({ chaineActive }) {
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
   const previsualisationRef = useRef(null)
   const dernierRedimTermineRef = useRef(0)
+  const chargementIdRef = useRef(0)
   const { confirmer } = useNotification()
 
+  // `chargementIdRef` ignore une réponse dépassée par un chargement plus
+  // récent (StrictMode double-invoque cet effet en dev — même garde que
+  // GrilleLineaire.jsx/P23).
   useEffect(() => {
+    const idAppel = ++chargementIdRef.current
     setChargement(true)
+    setErreur(null)
     setBlocSelectionne(null)
-    listerBlocsGrilleTypeParChaine(chaineActive.id)
-      .then(setBlocs)
-      .catch((err) => setErreur(err.message))
-      .finally(() => setChargement(false))
+    Promise.all([listerGrillesTypeParChaine(chaineActive.id), listerBlocsGrilleTypeParChaine(chaineActive.id)])
+      .then(([lignesGrillesType, lignesBlocs]) => {
+        if (idAppel !== chargementIdRef.current) return
+        setGrillesType(lignesGrillesType)
+        setBlocsChaine(lignesBlocs)
+        const live = lignesGrillesType.find((g) => g.est_live)
+        const sauvegardees = lireGrillesTypeOuvertes(chaineActive.code).filter((id) => lignesGrillesType.some((g) => g.id === id))
+        const ouvertes = sauvegardees.length > 0 ? sauvegardees : [live?.id].filter(Boolean)
+        setGrillesTypeOuvertesIds(ouvertes)
+        setGrilleTypeActiveId(ouvertes[0] ?? null)
+      })
+      .catch((err) => {
+        if (idAppel === chargementIdRef.current) setErreur(err.message)
+      })
+      .finally(() => {
+        if (idAppel === chargementIdRef.current) setChargement(false)
+      })
   }, [chaineActive])
 
-  // Rafraîchi après chaque écriture (blocs change systématiquement après une
-  // création/édition/suppression, y compris via undoManager).
+  // Persiste la liste des onglets ouverts en session (par chaîne) — même
+  // pattern que GrilleLineaire.jsx (P23).
   useEffect(() => {
-    etatPile(chaineActive.id, 'GRILLE_TYPE').then(setPile)
-  }, [chaineActive, blocs])
+    if (grillesTypeOuvertesIds.length > 0) definirGrillesTypeOuvertes(chaineActive.code, grillesTypeOuvertesIds)
+  }, [chaineActive.code, grillesTypeOuvertesIds])
+
+  const grilleTypeActive = useMemo(() => grillesType.find((g) => g.id === grilleTypeActiveId) ?? null, [grillesType, grilleTypeActiveId])
+  const grillesTypeOuvertes = useMemo(
+    () => grillesTypeOuvertesIds.map((id) => grillesType.find((g) => g.id === id)).filter(Boolean),
+    [grillesTypeOuvertesIds, grillesType]
+  )
+
+  // Blocs du document actuellement OUVERT — chaque grille type a ses propres
+  // blocs, jamais mélangés à l'écran.
+  const blocs = useMemo(
+    () => (grilleTypeActiveId ? blocsChaine.filter((b) => b.grille_type_id === grilleTypeActiveId) : []),
+    [blocsChaine, grilleTypeActiveId]
+  )
+
+  // Suggestion saisonnière (P28) : jamais de bascule automatique — juste un
+  // bandeau proposant de définir comme live la grille type dont la fenêtre de
+  // dates couvre aujourd'hui, si elle ne l'est pas déjà.
+  const aujourdHui = aujourdHuiISO()
+  const suggestionSaisonniere = useMemo(
+    () =>
+      grillesType.find(
+        (g) => !g.est_live && g.date_debut && g.date_fin && aujourdHui >= g.date_debut && aujourdHui <= g.date_fin
+      ) ?? null,
+    [grillesType, aujourdHui]
+  )
+
+  // Rafraîchi après chaque écriture (blocs change systématiquement après une
+  // création/édition/suppression, y compris via undoManager) — pile scopée
+  // par document ouvert (comme GRILLE_LINEAIRE/PLAN_MEDIA en P23/P24).
+  useEffect(() => {
+    if (!grilleTypeActive) return
+    etatPile(chaineActive.id, 'GRILLE_TYPE', grilleTypeActive.id).then(setPile)
+  }, [chaineActive, grilleTypeActive, blocsChaine])
 
   // Ctrl+Z/Ctrl+Y locaux à cet écran, jamais interceptés si le focus est dans
   // un champ texte (même garde que GrilleLineaire.jsx).
@@ -143,8 +215,8 @@ export default function GrilleType({ chaineActive }) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive par closure, seule dépendance réelle
-  }, [chaineActive])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/grilleTypeActive par closure, seules dépendances réelles
+  }, [chaineActive, grilleTypeActive])
 
   const typesPresents = [...new Set(blocs.map((b) => b.type_bloc).filter(Boolean))]
 
@@ -152,16 +224,18 @@ export default function GrilleType({ chaineActive }) {
   // panneau s'ouvre ensuite sur le bloc fraîchement créé — même logique que
   // deposerEpisode dans GrilleLineaire.jsx (P10/P11).
   function creerEtSelectionner(champs) {
+    if (!grilleTypeActive) return
     setErreur(null)
-    creerBlocGrilleType({ ...champs, chaine_id: chaineActive.id })
+    creerBlocGrilleType({ ...champs, chaine_id: chaineActive.id, grille_type_id: grilleTypeActive.id })
       .then((cree) =>
         enregistrerAction({
           chaineId: chaineActive.id,
           ecran: 'GRILLE_TYPE',
+          documentId: grilleTypeActive.id,
           libelle: `Création : ${cree.nom || cree.type_bloc || 'bloc'}`,
           operations: [{ table: 'bloc_grille_type', type: 'INSERT', id: cree.id, apres: cree }],
         }).then(() => {
-          setBlocs((prev) => [...prev, cree])
+          setBlocsChaine((prev) => [...prev, cree])
           setBlocSelectionne(cree)
         })
       )
@@ -171,7 +245,7 @@ export default function GrilleType({ chaineActive }) {
   // Applique le résultat d'un Annuler/Rétablir à l'état local — même
   // mécanique que appliquerModification/appliquerSuppression.
   function appliquerChangementsPile(changements) {
-    setBlocs((prev) => fusionnerChangements(prev, changements))
+    setBlocsChaine((prev) => fusionnerChangements(prev, changements))
     setBlocSelectionne((actuel) => {
       if (!actuel) return actuel
       const c = changements.find((c) => c.id === actuel.id)
@@ -180,7 +254,8 @@ export default function GrilleType({ chaineActive }) {
   }
 
   async function gererAnnuler() {
-    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_TYPE')
+    if (!grilleTypeActive) return
+    const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_TYPE', grilleTypeActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
       return
@@ -189,7 +264,8 @@ export default function GrilleType({ chaineActive }) {
   }
 
   async function gererRetablir() {
-    const resultat = await retablirAction(chaineActive.id, 'GRILLE_TYPE')
+    if (!grilleTypeActive) return
+    const resultat = await retablirAction(chaineActive.id, 'GRILLE_TYPE', grilleTypeActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
       return
@@ -240,12 +316,12 @@ export default function GrilleType({ chaineActive }) {
   }
 
   function appliquerModification(maj) {
-    setBlocs((prev) => prev.map((b) => (b.id === maj.id ? maj : b)))
+    setBlocsChaine((prev) => prev.map((b) => (b.id === maj.id ? maj : b)))
     setBlocSelectionne((actuel) => (actuel && actuel.id === maj.id ? maj : actuel))
   }
 
   function appliquerSuppression(id) {
-    setBlocs((prev) => prev.filter((b) => b.id !== id))
+    setBlocsChaine((prev) => prev.filter((b) => b.id !== id))
     setBlocSelectionne(null)
   }
 
@@ -325,6 +401,7 @@ export default function GrilleType({ chaineActive }) {
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
+        documentId: grilleTypeActive?.id,
         libelle: `Déplacement/étirement : ${etat.bloc.nom || etat.bloc.type_bloc || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: etat.bloc.id, avant: etat.bloc, apres: maj }],
       })
@@ -332,6 +409,91 @@ export default function GrilleType({ chaineActive }) {
     } catch (err) {
       setErreur(err.message)
     }
+  }
+
+  // --- Gestion des grilles type (P28, même pattern que GrilleLineaire.jsx/P23) ---
+
+  function selectionnerGrilleType(id) {
+    setGrilleTypeActiveId(id)
+    setBlocSelectionne(null)
+  }
+
+  function ouvrirGrilleType(id) {
+    setGrillesTypeOuvertesIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+    selectionnerGrilleType(id)
+  }
+
+  function fermerOnglet(id) {
+    setGrillesTypeOuvertesIds((prev) => {
+      if (prev.length <= 1) return prev
+      const next = prev.filter((x) => x !== id)
+      if (grilleTypeActiveId === id) selectionnerGrilleType(next[0])
+      return next
+    })
+  }
+
+  async function creerEtOuvrirGrilleType(nom, dateDebut, dateFin) {
+    const nouvelle = await creerGrilleType({
+      chaine_id: chaineActive.id,
+      nom,
+      est_live: false,
+      date_debut: dateDebut || null,
+      date_fin: dateFin || null,
+      cree_par: lireUtilisateur(),
+    })
+    setGrillesType((prev) => [...prev, nouvelle])
+    ouvrirGrilleType(nouvelle.id)
+    setModaleGrilleType(null)
+  }
+
+  async function renommerGrilleTypeActive(nom, dateDebut, dateFin) {
+    const maj = await mettreAJourGrilleType(grilleTypeActive.id, { nom, date_debut: dateDebut || null, date_fin: dateFin || null })
+    setGrillesType((prev) => prev.map((g) => (g.id === maj.id ? maj : g)))
+    setModaleGrilleType(null)
+  }
+
+  async function dupliquerGrilleTypeActive(nom, dateDebut, dateFin) {
+    const nouvelle = await dupliquerGrilleType(grilleTypeActive, nom, lireUtilisateur())
+    const avecDates = dateDebut || dateFin ? await mettreAJourGrilleType(nouvelle.id, { date_debut: dateDebut || null, date_fin: dateFin || null }) : nouvelle
+    const lignesBlocs = await listerBlocsGrilleTypeParChaine(chaineActive.id)
+    setGrillesType((prev) => [...prev, avecDates])
+    setBlocsChaine(lignesBlocs)
+    ouvrirGrilleType(avecDates.id)
+    setModaleGrilleType(null)
+  }
+
+  async function definirLiveGrilleType() {
+    if (!grilleTypeActive || grilleTypeActive.est_live) return
+    const liveActuelle = grillesType.find((g) => g.est_live)
+    const confirme = await confirmer({
+      titre: 'Définir comme live',
+      message: `Définir « ${grilleTypeActive.nom} » comme grille type live de ${chaineActive.nom} ? Elle remplacera « ${liveActuelle?.nom ?? '—'} » pour la Grille linéaire, les Anomalies et l'Auto-programmation.`,
+      labelConfirmer: 'Définir comme live',
+    })
+    if (!confirme) return
+    await definirGrilleTypeLive(chaineActive.id, grilleTypeActive.id)
+    setGrillesType(await listerGrillesTypeParChaine(chaineActive.id))
+  }
+
+  async function supprimerGrilleTypeActive() {
+    if (!grilleTypeActive || grilleTypeActive.est_live) return
+    const nb = blocsChaine.filter((b) => b.grille_type_id === grilleTypeActive.id).length
+    const confirme = await confirmer({
+      titre: 'Supprimer la grille type',
+      message: `Supprimer définitivement « ${grilleTypeActive.nom} »${nb > 0 ? ` et ses ${nb} bloc(s)` : ''} ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
+    const idSupprime = grilleTypeActive.id
+    await supprimerGrilleType(idSupprime)
+    setGrillesType((prev) => prev.filter((g) => g.id !== idSupprime))
+    setBlocsChaine((prev) => prev.filter((b) => b.grille_type_id !== idSupprime))
+    setGrillesTypeOuvertesIds((prev) => {
+      const next = prev.filter((x) => x !== idSupprime)
+      const restante = next.length > 0 ? next : [grillesType.find((g) => g.est_live)?.id].filter(Boolean)
+      setGrilleTypeActiveId(restante[0] ?? null)
+      return restante
+    })
   }
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
@@ -354,7 +516,108 @@ export default function GrilleType({ chaineActive }) {
 
   return (
     <div className="space-y-6">
+      {suggestionSaisonniere && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>
+            Période « {suggestionSaisonniere.nom} » en cours ({formaterDateJJMMAAAA(suggestionSaisonniere.date_debut)}–
+            {formaterDateJJMMAAAA(suggestionSaisonniere.date_fin)}) — définir cette grille type comme active ?
+          </span>
+          <button
+            type="button"
+            onClick={() => ouvrirGrilleType(suggestionSaisonniere.id)}
+            className="shrink-0 rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          >
+            Ouvrir « {suggestionSaisonniere.nom} »
+          </button>
+        </div>
+      )}
+
       <div className="rounded-lg border border-slate-200 bg-white p-6">
+        {/* Barre d'onglets (P28) : grilles type ouvertes de la chaîne active. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+          {grillesTypeOuvertes.map((g) => (
+            <div
+              key={g.id}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+                g.id === grilleTypeActiveId
+                  ? 'border-snrt-navy bg-snrt-navy/5 font-medium text-snrt-navy'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <button type="button" onClick={() => selectionnerGrilleType(g.id)} className="flex items-center gap-1.5">
+                {g.nom}
+                {g.est_live && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    LIVE
+                  </span>
+                )}
+                {g.date_debut && g.date_fin && (
+                  <span className="text-[10px] text-slate-400">
+                    {formaterDateJJMMAAAA(g.date_debut)}–{formaterDateJJMMAAAA(g.date_fin)}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => fermerOnglet(g.id)}
+                disabled={grillesTypeOuvertes.length <= 1}
+                title={grillesTypeOuvertes.length <= 1 ? 'Dernier onglet ouvert' : 'Fermer (la grille type reste enregistrée)'}
+                className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setModaleGrilleType('OUVRIR')}
+            title="Ouvrir une grille type"
+            className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
+          >
+            <Plus size={15} />
+          </button>
+
+          {grilleTypeActive && (
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setModaleGrilleType('RENOMMER')}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                <Pencil size={12} />
+                Renommer
+              </button>
+              <button
+                type="button"
+                onClick={() => setModaleGrilleType('DUPLIQUER')}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                <Copy size={12} />
+                Dupliquer
+              </button>
+              {!grilleTypeActive.est_live && (
+                <button
+                  type="button"
+                  onClick={definirLiveGrilleType}
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                >
+                  Définir comme live
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={supprimerGrilleTypeActive}
+                disabled={grilleTypeActive.est_live}
+                title={grilleTypeActive.est_live ? 'Basculez une autre grille type en live avant de supprimer celle-ci' : 'Supprimer'}
+                className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Trash2 size={12} />
+                Supprimer
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Grille type — {chaineActive.nom}</h2>
@@ -395,7 +658,8 @@ export default function GrilleType({ chaineActive }) {
             <button
               type="button"
               onClick={nouveauBlocGenerique}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              disabled={!grilleTypeActive}
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
             >
               <Plus size={16} />
               Ajouter un bloc
@@ -539,12 +803,243 @@ export default function GrilleType({ chaineActive }) {
         <PanneauBlocGrilleType
           bloc={blocSelectionne}
           chaineActive={chaineActive}
+          grilleTypeId={grilleTypeActive?.id}
           onFermer={() => selectionnerBloc(null)}
           onModifie={appliquerModification}
           onSupprime={appliquerSuppression}
           onModifieChange={setBlocModifie}
         />
       )}
+
+      {modaleGrilleType === 'OUVRIR' && (
+        <ModaleOuvrirGrilleType
+          grillesType={grillesType}
+          grillesTypeOuvertesIds={grillesTypeOuvertesIds}
+          onOuvrir={ouvrirGrilleType}
+          onCreer={creerEtOuvrirGrilleType}
+          onFermer={() => setModaleGrilleType(null)}
+        />
+      )}
+      {modaleGrilleType === 'RENOMMER' && grilleTypeActive && (
+        <ModaleNomGrilleType
+          titre="Renommer la grille type"
+          valeurInitiale={grilleTypeActive.nom}
+          dateDebutInitiale={grilleTypeActive.date_debut ?? ''}
+          dateFinInitiale={grilleTypeActive.date_fin ?? ''}
+          labelBouton="Renommer"
+          onValider={renommerGrilleTypeActive}
+          onFermer={() => setModaleGrilleType(null)}
+        />
+      )}
+      {modaleGrilleType === 'DUPLIQUER' && grilleTypeActive && (
+        <ModaleNomGrilleType
+          titre="Dupliquer la grille type"
+          valeurInitiale={`${grilleTypeActive.nom} (copie)`}
+          dateDebutInitiale={grilleTypeActive.date_debut ?? ''}
+          dateFinInitiale={grilleTypeActive.date_fin ?? ''}
+          labelBouton="Dupliquer"
+          onValider={dupliquerGrilleTypeActive}
+          onFermer={() => setModaleGrilleType(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// Panneau "Ouvrir une grille type" (P28, miroir GrilleLineaire.jsx/P23) :
+// liste des documents de la chaîne pas encore ouverts + création d'un
+// nouveau (nom + fenêtre de dates optionnelle), dans la même modale.
+function ModaleOuvrirGrilleType({ grillesType, grillesTypeOuvertesIds, onOuvrir, onCreer, onFermer }) {
+  const [nomNouvelle, setNomNouvelle] = useState('')
+  const [dateDebut, setDateDebut] = useState('')
+  const [dateFin, setDateFin] = useState('')
+  const [creation, setCreation] = useState(false)
+  const [erreur, setErreur] = useState(null)
+  const idNom = useId()
+  const idDebut = useId()
+  const idFin = useId()
+  const fermees = grillesType.filter((g) => !grillesTypeOuvertesIds.includes(g.id))
+
+  async function creer(e) {
+    e.preventDefault()
+    if (!nomNouvelle.trim()) return
+    setCreation(true)
+    setErreur(null)
+    try {
+      await onCreer(nomNouvelle.trim(), dateDebut, dateFin)
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setCreation(false)
+    }
+  }
+
+  return (
+    <Modal titre="Ouvrir une grille type" onFermer={onFermer}>
+      <div className="space-y-4">
+        {fermees.length > 0 ? (
+          <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200">
+            {fermees.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => onOuvrir(g.id)}
+                className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50"
+              >
+                <span>
+                  {g.nom}
+                  {g.date_debut && g.date_fin && (
+                    <span className="ml-2 text-xs text-slate-400">
+                      {formaterDateJJMMAAAA(g.date_debut)}–{formaterDateJJMMAAAA(g.date_fin)}
+                    </span>
+                  )}
+                </span>
+                {g.est_live && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    LIVE
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Toutes les grilles type de cette chaîne sont déjà ouvertes.</p>
+        )}
+        <form onSubmit={creer} className="space-y-3 border-t border-slate-100 pt-4">
+          <div>
+            <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
+              Nouvelle grille type
+            </label>
+            <input
+              id={idNom}
+              type="text"
+              value={nomNouvelle}
+              onChange={(e) => setNomNouvelle(e.target.value)}
+              placeholder="ex. Ramadan 2027"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={idDebut} className="mb-1 block text-xs font-medium text-slate-700">
+                Période saisonnière — début (optionnel)
+              </label>
+              <input
+                id={idDebut}
+                type="date"
+                value={dateDebut}
+                onChange={(e) => setDateDebut(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor={idFin} className="mb-1 block text-xs font-medium text-slate-700">
+                Fin
+              </label>
+              <input
+                id={idFin}
+                type="date"
+                value={dateFin}
+                onChange={(e) => setDateFin(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={creation || !nomNouvelle.trim()}
+            className="w-full rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+          >
+            Créer
+          </button>
+        </form>
+        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+      </div>
+    </Modal>
+  )
+}
+
+// Modale nom + dates saisonnières (P28, miroir ModaleNomGrille/P23) —
+// réutilisée par Renommer et Dupliquer, les 2 dates restent modifiables
+// chaque année (pas de calcul astronomique du Ramadan).
+function ModaleNomGrilleType({ titre, valeurInitiale, dateDebutInitiale, dateFinInitiale, labelBouton, onValider, onFermer }) {
+  const [nom, setNom] = useState(valeurInitiale)
+  const [dateDebut, setDateDebut] = useState(dateDebutInitiale)
+  const [dateFin, setDateFin] = useState(dateFinInitiale)
+  const [enCours, setEnCours] = useState(false)
+  const [erreur, setErreur] = useState(null)
+  const idNom = useId()
+  const idDebut = useId()
+  const idFin = useId()
+
+  async function soumettre(e) {
+    e.preventDefault()
+    if (!nom.trim()) return
+    setEnCours(true)
+    setErreur(null)
+    try {
+      await onValider(nom.trim(), dateDebut, dateFin)
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnCours(false)
+    }
+  }
+
+  return (
+    <Modal titre={titre} onFermer={onFermer}>
+      <form onSubmit={soumettre} className="space-y-4">
+        <div>
+          <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
+            Nom
+          </label>
+          <input
+            id={idNom}
+            type="text"
+            required
+            autoFocus
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor={idDebut} className="mb-1 block text-xs font-medium text-slate-700">
+              Période saisonnière — début (optionnel)
+            </label>
+            <input
+              id={idDebut}
+              type="date"
+              value={dateDebut}
+              onChange={(e) => setDateDebut(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor={idFin} className="mb-1 block text-xs font-medium text-slate-700">
+              Fin
+            </label>
+            <input
+              id={idFin}
+              type="date"
+              value={dateFin}
+              onChange={(e) => setDateFin(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={enCours}
+            className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+          >
+            {enCours ? 'Enregistrement…' : labelBouton}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

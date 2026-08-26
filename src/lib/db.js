@@ -288,6 +288,46 @@ export async function supprimerBlocGrilleType(id) {
   verifie(await supabase.from('bloc_grille_type').delete().eq('id', id).select())
 }
 
+export async function listerBlocsGrilleTypeParGrilleType(grilleTypeId) {
+  return verifie(
+    await supabase.from('bloc_grille_type').select('*').eq('grille_type_id', grilleTypeId).order('heure_debut')
+  )
+}
+
+// Bulk (P28, dupliquerGrilleType) — même précédent que creerDiffusionsLineaires/creerElementsSecondaires.
+export async function creerBlocsGrilleType(lignes) {
+  return verifie(await supabase.from('bloc_grille_type').insert(lignes).select())
+}
+
+// --- grille_type (multi-documents + gabarits saisonniers, P28) ---
+
+export async function listerGrillesTypeParChaine(chaineId) {
+  return verifie(await supabase.from('grille_type').select('*').eq('chaine_id', chaineId).order('cree_le'))
+}
+
+export async function obtenirGrilleTypeLiveParChaine(chaineId) {
+  return verifie(
+    await supabase.from('grille_type').select('*').eq('chaine_id', chaineId).eq('est_live', true).maybeSingle()
+  )
+}
+
+export async function creerGrilleType(champs) {
+  return verifiePremiere(await supabase.from('grille_type').insert(champs).select())
+}
+
+export async function mettreAJourGrilleType(id, champs) {
+  return verifiePremiere(await supabase.from('grille_type').update(champs).eq('id', id).select())
+}
+
+export async function supprimerGrilleType(id) {
+  verifie(await supabase.from('grille_type').delete().eq('id', id).select())
+}
+
+export async function definirGrilleTypeLive(chaineId, grilleTypeId) {
+  verifie(await supabase.from('grille_type').update({ est_live: false }).eq('chaine_id', chaineId).eq('est_live', true))
+  return verifiePremiere(await supabase.from('grille_type').update({ est_live: true }).eq('id', grilleTypeId).select())
+}
+
 // --- fenetre_droits (M6, P14a) ---
 
 export async function listerFenetresDroitsParProgramme(programmeId) {

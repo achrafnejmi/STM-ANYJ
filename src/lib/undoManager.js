@@ -49,13 +49,13 @@ const TABLES = {
   },
 }
 
-// P24 : quelle colonne de historique_action porte l'id de document pour un
-// écran donné — GRILLE_LINEAIRE et PLAN_MEDIA ont chacun la leur (plusieurs
-// documents ouverts en parallèle, une pile par document) ; GRILLE_TYPE n'en a
-// aucune (une seule pile par chaîne, inchangé depuis P19b).
+// P24/P28 : quelle colonne de historique_action porte l'id de document pour
+// un écran donné — GRILLE_LINEAIRE, PLAN_MEDIA et GRILLE_TYPE ont chacun la
+// leur (plusieurs documents ouverts en parallèle, une pile par document).
 const COLONNE_DOCUMENT_PAR_ECRAN = {
   GRILLE_LINEAIRE: 'grille_id',
   PLAN_MEDIA: 'plan_media_id',
+  GRILLE_TYPE: 'grille_type_id',
 }
 
 // Enregistre une action déjà exécutée par l'appelant comme une seule entrée

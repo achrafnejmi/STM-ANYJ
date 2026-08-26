@@ -5,7 +5,8 @@ import {
   listerTousLesEpisodes,
   listerDiffusionsLineairesParGrille,
   listerGrillesParChaine,
-  listerBlocsGrilleTypeParChaine,
+  obtenirGrilleTypeLiveParChaine,
+  listerBlocsGrilleTypeParGrilleType,
   listerToutesLesFenetresDroits,
   creerDiffusionsLineaires,
   supprimerDiffusionsLineairesAutomatiquesParPeriode,
@@ -53,19 +54,24 @@ export default function AutoProgrammation({ chaineActive }) {
     Promise.all([
       listerProgrammesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
-      listerBlocsGrilleTypeParChaine(chaineActive.id),
+      obtenirGrilleTypeLiveParChaine(chaineActive.id),
       listerToutesLesFenetresDroits(),
       listerGrillesParChaine(chaineActive.id),
     ])
-      .then(([lignesProgrammes, lignesEpisodes, lignesBlocs, lignesFenetres, lignesGrilles]) => {
-        setProgrammes(lignesProgrammes)
-        setEpisodes(lignesEpisodes)
-        setBlocsGrilleType(lignesBlocs)
-        setFenetresDroits(lignesFenetres)
-        setGrilles(lignesGrilles)
-        const live = lignesGrilles.find((g) => g.est_live)
-        setGrilleCibleId(live?.id ?? lignesGrilles[0]?.id ?? null)
-      })
+      // P28 : le moteur ne pourvoit que les blocs de la grille type LIVE
+      // (jamais "tous les blocs de la chaîne") — dépend du résultat
+      // ci-dessus, d'où ce second .then() imbriqué.
+      .then(([lignesProgrammes, lignesEpisodes, grilleTypeLive, lignesFenetres, lignesGrilles]) =>
+        (grilleTypeLive ? listerBlocsGrilleTypeParGrilleType(grilleTypeLive.id) : Promise.resolve([])).then((lignesBlocs) => {
+          setProgrammes(lignesProgrammes)
+          setEpisodes(lignesEpisodes)
+          setBlocsGrilleType(lignesBlocs)
+          setFenetresDroits(lignesFenetres)
+          setGrilles(lignesGrilles)
+          const live = lignesGrilles.find((g) => g.est_live)
+          setGrilleCibleId(live?.id ?? lignesGrilles[0]?.id ?? null)
+        })
+      )
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
   }, [chaineActive])
