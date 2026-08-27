@@ -1,8 +1,8 @@
 // Nomenclatures de l'onglet Réseaux sociaux (Grille non-linéaire, hors
 // cahier, P20) — listes fermées, identiques aux CHECK constraints de
-// migration-p20.sql (table publication_reseau). Codées en dur (même logique
-// que typesBloc.js/couleursType.js) : pas d'administration, un ajout de
-// plateforme/format demande une migration de toute façon (CHECK constraint).
+// migration-p20.sql (table publication_reseau). Codées en dur : pas
+// d'administration, un ajout de plateforme/format demande une migration de
+// toute façon (CHECK constraint).
 export const PLATEFORMES_RESEAU = [
   { code: 'FACEBOOK', libelle: 'Facebook' },
   { code: 'INSTAGRAM', libelle: 'Instagram' },

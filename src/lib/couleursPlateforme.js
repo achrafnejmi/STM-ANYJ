@@ -1,5 +1,5 @@
 // Couleur de marque par plateforme réseaux sociaux (Grille non-linéaire, P20).
-// Correspondance EXACTE (pas substring, comme couleursType.js) : `plateforme`
+// Correspondance EXACTE (pas substring) : `plateforme`
 // est une valeur fermée (CHECK constraint), jamais du texte libre comme
 // `genre`. Classes Tailwind LITTÉRALES (contrainte JIT, voir couleursGenre.js)
 // associées aux tokens définis dans index.css (@theme). FORJA n'a pas

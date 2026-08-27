@@ -1,5 +1,26 @@
 import { useId, useMemo, useRef, useEffect, useState } from 'react'
-import { Plus, Pencil, Copy, Trash2, X, Undo2, Redo2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
+import {
+  Plus,
+  Pencil,
+  Copy,
+  Trash2,
+  X,
+  Undo2,
+  Redo2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  CheckSquare,
+  ClipboardPaste,
+  Download,
+  Save,
+  FileSpreadsheet,
+  FileText,
+  File,
+} from 'lucide-react'
 import {
   listerGrillesTypeParChaine,
   listerBlocsGrilleTypeParChaine,
@@ -13,8 +34,8 @@ import {
 import { lireGrillesTypeOuvertes, definirGrillesTypeOuvertes, dupliquerGrilleType } from '../lib/grillesType.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
-import { TYPES_BLOC } from '../lib/typesBloc.js'
-import { couleurType } from '../lib/couleursType.js'
+import { GENRES } from '../lib/genres.js'
+import { couleurGenre } from '../lib/couleursGenre.js'
 import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE, aujourdHuiISO, formaterDateJJMMAAAA } from '../lib/semaine.js'
 import {
   PX_PAR_MINUTE,
@@ -24,12 +45,21 @@ import {
   positionVersMinute,
   disposerEnPistes,
 } from '../lib/grilleAxe.js'
+import { construireDonneesGrilleType, construireLignesExcelGrilleType, construireNomFichierGrilleType, ENTETE_GRILLE_TYPE } from '../lib/exportGrilleType.js'
 import Modal from '../components/Modal.jsx'
-import PaletteTypes from '../components/PaletteTypes.jsx'
+import PaletteGenres from '../components/PaletteGenres.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
+// Durée par défaut d'un bloc créé par glisser-déposer d'un genre ou par le
+// bouton générique (P28b, remplace les durées variables par ancien
+// "type_bloc") — librement réajustable ensuite par étirement.
+const DUREE_DEFAUT_MIN = 120
+// Champs copiés au presse-papier interne (P28b, même pattern que
+// CHAMPS_COPIABLES de GrilleLineaire.jsx/P23) — jamais id/chaine_id/
+// grille_type_id, recalculés à la cible au moment de coller.
+const CHAMPS_COPIABLES_BLOC = ['nom', 'heure_debut', 'heure_fin', 'jours', 'frequence', 'genre_attendu']
 
 // Calendrier hebdomadaire FIXE (pas de date ni de navigation semaine
 // précédente/suivante) : un bloc_grille_type n'est pas daté, seulement
@@ -53,7 +83,7 @@ const JOURS_SEMAINE = [
 function confirmerChevauchement(autre, confirmer) {
   return confirmer({
     titre: 'Chevauchement',
-    message: `Ce créneau chevauche « ${autre.nom || autre.type_bloc || 'un bloc existant'} ». Continuer ? Les deux blocs resteront côte à côte.`,
+    message: `Ce créneau chevauche « ${autre.nom || autre.genre_attendu || 'un bloc existant'} ». Continuer ? Les deux blocs resteront côte à côte.`,
     labelConfirmer: 'Continuer',
   })
 }
@@ -125,13 +155,18 @@ export default function GrilleType({ chaineActive }) {
   const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const [pleinEcran, setPleinEcran] = useState(false)
+  // Sélection multiple + copier/coller (P28b, même pattern que GrilleLineaire.jsx/P23)
+  const [selectionActive, setSelectionActive] = useState(false)
+  const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
+  const [presseGaPapier, setPresseGaPapier] = useState([])
+  const [exportOuvert, setExportOuvert] = useState(false)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
   const previsualisationRef = useRef(null)
   const dernierRedimTermineRef = useRef(0)
   const chargementIdRef = useRef(0)
-  const { confirmer } = useNotification()
+  const { confirmer, succes } = useNotification()
 
   // `chargementIdRef` ignore une réponse dépassée par un chargement plus
   // récent (StrictMode double-invoque cet effet en dev — même garde que
@@ -218,7 +253,7 @@ export default function GrilleType({ chaineActive }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/grilleTypeActive par closure, seules dépendances réelles
   }, [chaineActive, grilleTypeActive])
 
-  const typesPresents = [...new Set(blocs.map((b) => b.type_bloc).filter(Boolean))]
+  const genresPresents = [...new Set(blocs.map((b) => b.genre_attendu).filter(Boolean))]
 
   // Création directe en base (pas d'étape de formulaire intermédiaire), le
   // panneau s'ouvre ensuite sur le bloc fraîchement créé — même logique que
@@ -232,7 +267,7 @@ export default function GrilleType({ chaineActive }) {
           chaineId: chaineActive.id,
           ecran: 'GRILLE_TYPE',
           documentId: grilleTypeActive.id,
-          libelle: `Création : ${cree.nom || cree.type_bloc || 'bloc'}`,
+          libelle: `Création : ${cree.nom || cree.genre_attendu || 'bloc'}`,
           operations: [{ table: 'bloc_grille_type', type: 'INSERT', id: cree.id, apres: cree }],
         }).then(() => {
           setBlocsChaine((prev) => [...prev, cree])
@@ -285,15 +320,13 @@ export default function GrilleType({ chaineActive }) {
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
-    const type = TYPES_BLOC.find((t) => t.nom === payload.type)
-    if (!type) return
-    const dureeMin = minutesDepuisDebutAntenne(type.heure_fin) - minutesDepuisDebutAntenne(type.heure_debut)
+    const genre = GENRES.find((g) => g.fr === payload.genre)
+    if (!genre) return
     creerAvecVerification({
-      nom: type.nom,
-      type_bloc: type.nom,
-      genre_attendu: type.genre_defaut,
+      nom: genre.fr,
+      genre_attendu: genre.fr,
       heure_debut: minutesEnHeure(minuteDebut),
-      heure_fin: minutesEnHeure(minuteDebut + dureeMin),
+      heure_fin: minutesEnHeure(minuteDebut + DUREE_DEFAUT_MIN),
       jours: [jourIndex],
       frequence: 'Quotidien',
     })
@@ -303,11 +336,10 @@ export default function GrilleType({ chaineActive }) {
   // glisser-déposer, valeurs génériques (renommables tout de suite dans le
   // panneau qui s'ouvre juste après, comme pour le dépôt).
   function nouveauBlocGenerique() {
-    const type = TYPES_BLOC[0]
+    const genre = GENRES[0]
     creerAvecVerification({
-      nom: type.nom,
-      type_bloc: type.nom,
-      genre_attendu: type.genre_defaut,
+      nom: genre.fr,
+      genre_attendu: genre.fr,
       heure_debut: '15:00',
       heure_fin: '17:00',
       jours: [0],
@@ -402,7 +434,7 @@ export default function GrilleType({ chaineActive }) {
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
         documentId: grilleTypeActive?.id,
-        libelle: `Déplacement/étirement : ${etat.bloc.nom || etat.bloc.type_bloc || 'bloc'}`,
+        libelle: `Déplacement/étirement : ${etat.bloc.nom || etat.bloc.genre_attendu || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: etat.bloc.id, avant: etat.bloc, apres: maj }],
       })
       appliquerModification(maj)
@@ -416,6 +448,8 @@ export default function GrilleType({ chaineActive }) {
   function selectionnerGrilleType(id) {
     setGrilleTypeActiveId(id)
     setBlocSelectionne(null)
+    setSelectionActive(false)
+    setBlocsSelectionnesIds(new Set())
   }
 
   function ouvrirGrilleType(id) {
@@ -494,6 +528,126 @@ export default function GrilleType({ chaineActive }) {
       setGrilleTypeActiveId(restante[0] ?? null)
       return restante
     })
+  }
+
+  // --- Sélection multiple + copier/coller (P28b, même pattern que GrilleLineaire.jsx/P23) ---
+
+  function activerSelection() {
+    setSelectionActive(true)
+    setBlocsSelectionnesIds(new Set())
+  }
+
+  function annulerSelection() {
+    setSelectionActive(false)
+    setBlocsSelectionnesIds(new Set())
+  }
+
+  function toggleSelectionBloc(id) {
+    setBlocsSelectionnesIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function copierSelection() {
+    const snapshots = blocs
+      .filter((b) => blocsSelectionnesIds.has(b.id))
+      .map((b) => Object.fromEntries(CHAMPS_COPIABLES_BLOC.map((c) => [c, b[c]])))
+    setPresseGaPapier(snapshots)
+    annulerSelection()
+  }
+
+  // Colle dans le document actuellement ouvert (peut être un autre onglet que
+  // celui de la copie, comme Grille linéaire entre 2 grilles). Aucune
+  // vérification de chevauchement au collage — EXG-M3-07 les autorise
+  // explicitement, même principe que coller() de Grille linéaire qui ne
+  // bloque pas non plus sur un conflit d'horaire.
+  async function coller() {
+    if (!grilleTypeActive || presseGaPapier.length === 0) return
+    const lignes = presseGaPapier.map((item) => ({ ...item, chaine_id: chaineActive.id, grille_type_id: grilleTypeActive.id }))
+    const creees = []
+    for (const ligne of lignes) {
+      creees.push(await creerBlocGrilleType(ligne))
+    }
+    await enregistrerAction({
+      chaineId: chaineActive.id,
+      ecran: 'GRILLE_TYPE',
+      documentId: grilleTypeActive.id,
+      libelle: `Collage (${creees.length} bloc${creees.length > 1 ? 's' : ''})`,
+      operations: creees.map((b) => ({ table: 'bloc_grille_type', type: 'INSERT', id: b.id, apres: b })),
+    })
+    setBlocsChaine((prev) => [...prev, ...creees])
+    setPresseGaPapier([])
+  }
+
+  // --- Export (P28b, mirroir P26/P27 : Excel/Word/PDF, colonnes du cahier) ---
+
+  function donneesExportGrilleType() {
+    return construireDonneesGrilleType({ grilleTypeNom: grilleTypeActive?.nom ?? '', chaineNom: chaineActive.nom, blocs })
+  }
+
+  function exporterGrilleTypeExcel() {
+    try {
+      const donnees = donneesExportGrilleType()
+      const feuille = XLSX.utils.aoa_to_sheet(construireLignesExcelGrilleType(donnees))
+      const classeur = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(classeur, feuille, 'Grille type')
+      XLSX.writeFile(classeur, construireNomFichierGrilleType(grilleTypeActive?.nom ?? 'Grille type', 'xlsx'))
+    } catch (err) {
+      setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
+  }
+
+  function exporterGrilleTypePdf() {
+    try {
+      const donnees = donneesExportGrilleType()
+      const doc = new jsPDF({ orientation: 'landscape' })
+      doc.setFontSize(14)
+      doc.text(donnees.titre, 14, 16)
+      autoTable(doc, {
+        startY: 24,
+        head: [ENTETE_GRILLE_TYPE],
+        body: donnees.lignes.map((l) => [l.nom, l.debut, l.fin, l.duree, l.frequence, l.jours, l.genre]),
+      })
+      doc.save(construireNomFichierGrilleType(grilleTypeActive?.nom ?? 'Grille type', 'pdf'))
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    }
+  }
+
+  async function exporterGrilleTypeWord() {
+    try {
+      const donnees = donneesExportGrilleType()
+      const ligneEntete = (libelles) =>
+        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
+      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+
+      const doc = new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({ text: donnees.titre, heading: HeadingLevel.HEADING_1 }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [ligneEntete(ENTETE_GRILLE_TYPE), ...donnees.lignes.map((l) => ligne([l.nom, l.debut, l.fin, l.duree, l.frequence, l.jours, l.genre]))],
+              }),
+            ],
+          },
+        ],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = construireNomFichierGrilleType(grilleTypeActive?.nom ?? 'Grille type', 'docx')
+      lien.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setErreur(`Échec de l'export Word : ${err.message}`)
+    }
   }
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
@@ -630,10 +784,83 @@ export default function GrilleType({ chaineActive }) {
               className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
                 pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
-              title={pleinEcran ? 'Afficher le panneau des types de bloc' : 'Masquer le panneau des types de bloc pour élargir la grille'}
+              title={pleinEcran ? 'Afficher le panneau des genres' : 'Masquer le panneau des genres pour élargir la grille'}
             >
               {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
               Plein écran
+            </button>
+            <button
+              type="button"
+              onClick={nouveauBlocGenerique}
+              disabled={!grilleTypeActive}
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+            >
+              <Plus size={16} />
+              Ajouter un bloc
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {!selectionActive && (
+              <button
+                type="button"
+                onClick={activerSelection}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <CheckSquare size={15} />
+                Sélectionner
+              </button>
+            )}
+            {selectionActive && (
+              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
+                <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
+                <button
+                  type="button"
+                  onClick={copierSelection}
+                  disabled={blocsSelectionnesIds.size === 0}
+                  className="font-medium underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Copier
+                </button>
+                <button type="button" onClick={annulerSelection} className="text-slate-500 hover:text-slate-700">
+                  Annuler
+                </button>
+              </div>
+            )}
+            {presseGaPapier.length > 0 && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+                <span>{presseGaPapier.length} copié(s)</span>
+                <button type="button" onClick={coller} className="flex items-center gap-1 font-medium underline hover:no-underline">
+                  <ClipboardPaste size={13} />
+                  Coller
+                </button>
+                <button type="button" onClick={() => setPresseGaPapier([])} className="text-amber-700/70 hover:text-amber-900">
+                  Vider
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setExportOuvert(true)}
+              disabled={!grilleTypeActive}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              title="Exporter la grille type (Excel/Word/PDF)"
+            >
+              <Download size={15} />
+              Exporter
+            </button>
+            <button
+              type="button"
+              onClick={() => succes('Grille type enregistrée ✓')}
+              title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+            >
+              <Save size={15} />
+              Enregistrer
             </button>
             <div className="flex rounded-md border border-slate-300">
               <button
@@ -655,26 +882,17 @@ export default function GrilleType({ chaineActive }) {
                 <Redo2 size={15} />
               </button>
             </div>
-            <button
-              type="button"
-              onClick={nouveauBlocGenerique}
-              disabled={!grilleTypeActive}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-            >
-              <Plus size={16} />
-              Ajouter un bloc
-            </button>
           </div>
         </div>
 
-        {typesPresents.length > 0 && (
+        {genresPresents.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
-            {typesPresents.map((t) => {
-              const { fond } = couleurType(t)
+            {genresPresents.map((g) => {
+              const { fond } = couleurGenre(g)
               return (
-                <span key={t} className="flex items-center gap-1.5 text-xs text-slate-600">
+                <span key={g} className="flex items-center gap-1.5 text-xs text-slate-600">
                   <span className={`h-2.5 w-2.5 rounded-full ${fond}`} />
-                  {t}
+                  {g}
                 </span>
               )
             })}
@@ -685,7 +903,7 @@ export default function GrilleType({ chaineActive }) {
       </div>
 
       <div className="flex items-start gap-4">
-        {!pleinEcran && <PaletteTypes dragRef={dragRef} />}
+        {!pleinEcran && <PaletteGenres dragRef={dragRef} />}
 
         {!chargement && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
@@ -753,15 +971,16 @@ export default function GrilleType({ chaineActive }) {
                         if (enPrevisualisation && !previsualisation.jours.includes(j.index)) return null
                         const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
                         const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
-                        const { fond, texte } = couleurType(bloc.type_bloc)
+                        const { fond, texte } = couleurGenre(bloc.genre_attendu)
                         const estSelectionne = blocSelectionne?.id === bloc.id
+                        const estCoche = selectionActive && blocsSelectionnesIds.has(bloc.id)
                         return (
                           <button
                             type="button"
                             key={bloc.id}
-                            onClick={() => selectionnerBloc(bloc)}
+                            onClick={() => (selectionActive ? toggleSelectionBloc(bloc.id) : selectionnerBloc(bloc))}
                             className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
-                              estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
+                              estCoche ? 'ring-2 ring-offset-1 ring-emerald-600' : estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
                             }`}
                             style={{
                               top: `${top}px`,
@@ -770,23 +989,35 @@ export default function GrilleType({ chaineActive }) {
                               width: `${100 / nbPistes}%`,
                             }}
                           >
-                            <div
-                              className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize hover:bg-black/20"
-                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'haut')}
-                            />
-                            <div
-                              className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize hover:bg-black/20"
-                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'bas')}
-                            />
-                            <div
-                              className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-black/20"
-                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'gauche')}
-                            />
-                            <div
-                              className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-black/20"
-                              onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'droite')}
-                            />
-                            <div className="font-medium truncate">{bloc.nom || bloc.type_bloc}</div>
+                            {!selectionActive && (
+                              <>
+                                <div
+                                  className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize hover:bg-black/20"
+                                  onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'haut')}
+                                />
+                                <div
+                                  className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize hover:bg-black/20"
+                                  onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'bas')}
+                                />
+                                <div
+                                  className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-black/20"
+                                  onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'gauche')}
+                                />
+                                <div
+                                  className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-black/20"
+                                  onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'droite')}
+                                />
+                              </>
+                            )}
+                            {selectionActive && (
+                              <input
+                                type="checkbox"
+                                checked={estCoche}
+                                readOnly
+                                className="pointer-events-none absolute right-1 top-1"
+                              />
+                            )}
+                            <div className="font-medium truncate">{bloc.nom || bloc.genre_attendu}</div>
                           </button>
                         )
                       })}
@@ -841,6 +1072,26 @@ export default function GrilleType({ chaineActive }) {
           onValider={dupliquerGrilleTypeActive}
           onFermer={() => setModaleGrilleType(null)}
         />
+      )}
+
+      {exportOuvert && (
+        <Modal titre="Exporter la grille type" onFermer={() => setExportOuvert(false)}>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-slate-500">{grilleTypeActive?.nom} — {blocs.length} bloc{blocs.length > 1 ? 's' : ''}</p>
+            <button type="button" onClick={exporterGrilleTypeExcel} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
+              <FileSpreadsheet size={16} />
+              Excel
+            </button>
+            <button type="button" onClick={exporterGrilleTypeWord} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">
+              <FileText size={16} />
+              Word
+            </button>
+            <button type="button" onClick={exporterGrilleTypePdf} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+              <File size={16} />
+              PDF
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

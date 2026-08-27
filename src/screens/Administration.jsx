@@ -12,11 +12,6 @@ import TableauTranches from '../components/TableauTranches.jsx'
 
 const NOMENCLATURES_NON_MIGREES = [
   {
-    nom: 'Types de bloc (grille type)',
-    raison:
-      "contrainte d'intégrité en base (CHECK) et correspondance couleur exacte (couleursType.js) à maintenir manuellement pour toute nouvelle valeur — un type ajouté depuis l'UI resterait gris tant que le code n'est pas mis à jour.",
-  },
-  {
     nom: 'Vecteurs (TNT / Satellite)',
     raison: "mécanisme structurel binaire (scission/fusion, RG-10 à RG-14), pas une liste ouverte à laquelle ajouter une ligne.",
   },

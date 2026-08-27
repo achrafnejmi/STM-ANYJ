@@ -3,7 +3,6 @@ import { X, Trash2 } from 'lucide-react'
 import { mettreAJourBlocGrilleType, supprimerBlocGrilleType } from '../lib/db.js'
 import { enregistrerAction } from '../lib/undoManager.js'
 import { GENRES } from '../lib/genres.js'
-import { TYPES_BLOC } from '../lib/typesBloc.js'
 import { minutesDepuisDebutAntenne, formaterDureeMinutes } from '../lib/semaine.js'
 import { useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
 
@@ -30,7 +29,6 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
   useEffect(() => {
     const initial = {
       nom: bloc.nom,
-      type_bloc: bloc.type_bloc ?? '',
       heure_debut: bloc.heure_debut.slice(0, 5),
       heure_fin: bloc.heure_fin.slice(0, 5),
       jours: bloc.jours,
@@ -67,15 +65,13 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
     setEnregistrement(true)
     setErreur(null)
     try {
-      // type_bloc vide -> null (pas '') : le check en base n'autorise que les
-      // 9 noms de type ou NULL, jamais une chaîne vide.
-      const champs = { ...form, nom: form.nom.trim(), type_bloc: form.type_bloc || null }
+      const champs = { ...form, nom: form.nom.trim() }
       const maj = await mettreAJourBlocGrilleType(bloc.id, champs)
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
         documentId: grilleTypeId,
-        libelle: `Édition : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
+        libelle: `Édition : ${bloc.nom || bloc.genre_attendu || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'UPDATE', id: bloc.id, avant: bloc, apres: maj }],
       })
       onModifie(maj)
@@ -93,7 +89,7 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
         chaineId: chaineActive.id,
         ecran: 'GRILLE_TYPE',
         documentId: grilleTypeId,
-        libelle: `Suppression : ${bloc.nom || bloc.type_bloc || 'bloc'}`,
+        libelle: `Suppression : ${bloc.nom || bloc.genre_attendu || 'bloc'}`,
         operations: [{ table: 'bloc_grille_type', type: 'DELETE', id: bloc.id, avant: bloc }],
       })
       onSupprime(bloc.id)
@@ -119,27 +115,11 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
           <input
             id={idNom}
             type="text"
-            placeholder={form.type_bloc || 'Optionnel — nom du type par défaut si vide'}
+            placeholder={form.genre_attendu || 'Optionnel — genre attendu par défaut si vide'}
             value={form.nom}
             onChange={(e) => setForm({ ...form, nom: e.target.value })}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
-        </div>
-
-        <div>
-          <span className="mb-1 block text-sm font-medium text-slate-700">Type de bloc</span>
-          <select
-            value={form.type_bloc}
-            onChange={(e) => setForm({ ...form, type_bloc: e.target.value })}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">— Aucun —</option>
-            {TYPES_BLOC.map((t) => (
-              <option key={t.nom} value={t.nom}>
-                {t.nom}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -226,7 +206,7 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
             ))}
           </select>
           <p className="mt-1 text-xs text-slate-500">
-            Sert au contrôle de cohérence (écart de genre), pas à la couleur.
+            Détermine la couleur du bloc et sert au contrôle de cohérence (écart de genre).
           </p>
         </div>
 

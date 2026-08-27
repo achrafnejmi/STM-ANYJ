@@ -45,7 +45,6 @@ import { lireUtilisateur } from '../lib/session.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
-import { couleurType } from '../lib/couleursType.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
@@ -1160,12 +1159,10 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                           Rendues avant les blocs de transmission dans le JSX
                           pour rester visuellement en arrière-plan. */}
                       {bandes.map((bloc) => {
-                        // Couleur du TYPE de bloc (Grille type — évolution des
-                        // types) ; repli sur le genre attendu pour d'éventuels
-                        // blocs sans type (avant cette évolution / migration).
-                        const { fondClair, bordure } = bloc.type_bloc
-                          ? couleurType(bloc.type_bloc)
-                          : couleurGenre(bloc.genre_attendu)
+                        // Couleur = genre attendu du bloc (P28b — "type_bloc"
+                        // retiré, hors cahier ; conforme à la règle "couleur =
+                        // genre" pour la grille type comme pour la grille).
+                        const { fondClair, bordure } = couleurGenre(bloc.genre_attendu)
                         const topBande = (minutesDepuisDebutAntenne(bloc.heure_debut) - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute
                         const hauteurBande =
                           (minutesDepuisDebutAntenne(bloc.heure_fin) - minutesDepuisDebutAntenne(bloc.heure_debut)) *
