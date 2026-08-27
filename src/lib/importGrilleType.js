@@ -199,19 +199,55 @@ const GENRE_PAR_DEFAUT = 'Divertissement'
 // fin du précédent sur CHACUN des jours qu'il partage avec lui — jamais le
 // contraire (le précédent n'est jamais raccourci), et jamais avant son heure
 // d'origine si aucun conflit ne s'applique.
+function balayerChevauchements(lignes, finInitialeParJour) {
+  const finConnueParJour = new Map(finInitialeParJour)
+  const parLigne = lignes.map(({ jours, dureeMinutes, debutOrigineMin }) => {
+    const debutMin = jours.reduce((max, j) => Math.max(max, finConnueParJour.get(j) ?? 0), debutOrigineMin)
+    const finMin = debutMin + dureeMinutes
+    for (const j of jours) finConnueParJour.set(j, finMin)
+    return { debutMin, finMin }
+  })
+  return { parLigne, finConnueParJour }
+}
+
 export function apparierProposition(coupures) {
-  const finConnueParJour = new Map()
-  return coupures.map((c, i) => {
+  const lignes = coupures.map((c) => {
     const genreDevine = classifierGenre(c.texte)
     const { minutes, confiance } = extraireDureeMinutes(c.texte)
-    const dureeMinutes = minutes ?? c.nbCreneaux * 15
+    return {
+      c,
+      genreDevine,
+      confiance,
+      dureeMinutes: minutes ?? c.nbCreneaux * 15,
+      debutOrigineMin: heureEnMinutes(c.heureDebut),
+      jours: c.jours,
+    }
+  })
 
-    const debutOrigineMin = heureEnMinutes(c.heureDebut)
-    const debutMin = c.jours.reduce((max, j) => Math.max(max, finConnueParJour.get(j) ?? 0), debutOrigineMin)
-    const finMin = debutMin + dureeMinutes
-    for (const j of c.jours) finConnueParJour.set(j, finMin)
+  // Passe 1 : balayage simple du début à la fin du fichier.
+  let { parLigne, finConnueParJour } = balayerChevauchements(lignes, [])
+
+  // Bouclage de journée (un gabarit de grille type se répète tous les jours,
+  // EXG-M3-07) : si le dernier bloc d'un jour déborde après 24h (24:00 =
+  // 06:00 du lendemain dans une répétition quotidienne), ce débordement doit
+  // aussi repousser les tout premiers blocs de CE MÊME jour — sinon le tout
+  // premier bloc de la journée (ex. « Lecture du Coran + Météo » à 07:00)
+  // reste artificiellement en avance sur la fin réelle du dernier bloc de la
+  // veille (cas réel signalé par l'utilisateur, capturé en screenshot). Une
+  // seconde passe, réamorcée avec l'excédent (fin - 1440) de la première,
+  // suffit en pratique : l'excédent total d'une seule journée reste borné,
+  // pas besoin d'itérer jusqu'à un point fixe pour ce PoC.
+  const bouclage = [...finConnueParJour.entries()]
+    .map(([j, fin]) => [j, fin - 1440])
+    .filter(([, excedent]) => excedent > 0)
+  if (bouclage.length > 0) {
+    ;({ parLigne } = balayerChevauchements(lignes, bouclage))
+  }
+
+  return lignes.map(({ c, genreDevine, confiance, dureeMinutes, debutOrigineMin }, i) => {
+    const { debutMin } = parLigne[i]
     const heureDebut = minutesEnHeure(debutMin)
-    const decale = debutMin !== debutOrigineMin
+    const decale = ((debutMin % 1440) + 1440) % 1440 !== debutOrigineMin
 
     return {
       id: `l${i}`,
