@@ -7,9 +7,17 @@ import { useEffect, useId, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { listerDiffusionsLineairesParProgramme } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
+import { enregistrerAction } from '../lib/undoManager.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { STATUTS_PUBLICATION } from '../lib/statutsPublication.js'
 import { useNotification, useGardeModifications, useSignalerModifications } from './NotificationProvider.jsx'
+
+// P30 rollback : quel écran (pile annuler/rétablir dédiée) selon la table
+// visée par `config` — deux piles indépendantes (Réseaux/VOD), décision
+// utilisateur : Ctrl+Z n'annule que dans l'onglet actif.
+function ecranPour(config) {
+  return config.table === 'publication_reseau' ? 'GRILLE_NON_LINEAIRE_RESEAUX' : 'GRILLE_NON_LINEAIRE_VOD'
+}
 
 export default function PanneauPublication({
   publication,
@@ -92,12 +100,25 @@ export default function PanneauPublication({
       visuel: form.visuel.trim() || null,
       statut: form.statut,
     }
+    const titreProgramme = programmes.find((p) => p.id === form.programme_id)?.titre || 'publication'
     try {
       if (estEdition) {
         const maj = await config.mettreAJour(publication.id, champs)
+        await enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: ecranPour(config),
+          libelle: `Modification : ${titreProgramme}`,
+          operations: [{ table: config.table, type: 'UPDATE', id: maj.id, avant: publication, apres: maj }],
+        })
         onModifie(maj)
       } else {
         const cree = await config.creer({ ...champs, cree_par: lireUtilisateur() })
+        await enregistrerAction({
+          chaineId: chaineActive.id,
+          ecran: ecranPour(config),
+          libelle: `Création : ${titreProgramme}`,
+          operations: [{ table: config.table, type: 'INSERT', id: cree.id, apres: cree }],
+        })
         onCree(cree)
       }
     } catch (err) {
@@ -116,6 +137,12 @@ export default function PanneauPublication({
     if (!confirme) return
     try {
       await config.supprimer(publication.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: ecranPour(config),
+        libelle: `Suppression : ${publication.titre || 'publication'}`,
+        operations: [{ table: config.table, type: 'DELETE', id: publication.id, avant: publication }],
+      })
       onSupprime(publication.id)
     } catch (err) {
       setErreur(err.message)

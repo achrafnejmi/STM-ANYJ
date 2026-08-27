@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
-import { ChevronLeft, ChevronRight, Plus, FileSpreadsheet, FileText, File } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, FileSpreadsheet, FileText, File, Undo2, Redo2 } from 'lucide-react'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -19,6 +19,7 @@ import {
   formaterPlageSemaine,
   formaterDateLongue,
 } from '../lib/semaine.js'
+import { etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { couleurPlateforme } from '../lib/couleursPlateforme.js'
 import { statutPublication } from '../lib/statutsPublication.js'
 import {
@@ -31,6 +32,13 @@ import CataloguePanel from './CataloguePanel.jsx'
 import PopoverHistorique from './PopoverHistorique.jsx'
 import PanneauPublication from './PanneauPublication.jsx'
 import { useNotification } from './NotificationProvider.jsx'
+
+// P30 rollback : deux piles annuler/rétablir indépendantes (Réseaux/VOD) —
+// même helper que PanneauPublication.jsx, dupliqué volontairement (trivial,
+// pas de lib partagée naturelle pour cette correspondance écran-only).
+function ecranPour(config) {
+  return config.table === 'publication_reseau' ? 'GRILLE_NON_LINEAIRE_RESEAUX' : 'GRILLE_NON_LINEAIRE_VOD'
+}
 
 // Sans heure = en tête de journée (confirmé) ; sinon tri chronologique.
 function comparerPublications(a, b) {
@@ -52,6 +60,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   const [filtrePlateforme, setFiltrePlateforme] = useState('')
   const [filtreFormat, setFiltreFormat] = useState('')
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
+  const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
 
   useEffect(() => {
@@ -65,6 +74,31 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- config est un objet statique par onglet, pas une dépendance réactive
+  }, [chaineActive, config.table])
+
+  // Pile annuler/rétablir (P30 rollback) : rafraîchie après chaque écriture.
+  // Pas de documentId (un seul calendrier continu par chaîne, pas de
+  // multi-document) — scope chaîne+écran seul, comme GRILLE_TYPE avant P28.
+  useEffect(() => {
+    etatPile(chaineActive.id, ecranPour(config)).then(setPile)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- config est un objet statique par onglet, pas une dépendance réactive
+  }, [chaineActive, config.table, publications])
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const cible = document.activeElement
+      if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        gererAnnuler()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        gererRetablir()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/config par closure
   }, [chaineActive, config.table])
 
   const lundi = lundiDeLaSemaine(dateReference)
@@ -127,6 +161,32 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   function appliquerSuppression(id) {
     setPublications((prev) => prev.filter((p) => p.id !== id))
     setPanneau(null)
+  }
+
+  // Deux piles indépendantes (Réseaux/VOD, P30 rollback) : les changements
+  // renvoyés ici concernent TOUJOURS la table de cet onglet (chaque pile
+  // n'accumule que les actions enregistrées sous son propre écran) — pas de
+  // filtrage supplémentaire nécessaire avant de fusionner dans l'état local.
+  function appliquerChangementsPile(changements) {
+    setPublications((prev) => fusionnerChangements(prev, changements))
+  }
+
+  async function gererAnnuler() {
+    const resultat = await annulerDerniereAction(chaineActive.id, ecranPour(config))
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
+  }
+
+  async function gererRetablir() {
+    const resultat = await retablirAction(chaineActive.id, ecranPour(config))
+    if (!resultat.ok) {
+      setErreur(resultat.motif)
+      return
+    }
+    appliquerChangementsPile(resultat.changements)
   }
 
   function deposerSurJour(jour) {
@@ -296,6 +356,26 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
               </button>
               <button type="button" onClick={exporterWord} title="Exporter en Word" className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50">
                 <File size={15} />
+              </button>
+            </div>
+            <div className="flex rounded-md border border-slate-300">
+              <button
+                type="button"
+                onClick={gererAnnuler}
+                disabled={!pile.peutAnnuler}
+                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
+                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={gererRetablir}
+                disabled={!pile.peutRetablir}
+                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
+                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Redo2 size={15} />
               </button>
             </div>
           </div>

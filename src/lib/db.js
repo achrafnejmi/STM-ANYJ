@@ -234,6 +234,11 @@ export async function listerPublicationsReseauParChaine(chaineId) {
   )
 }
 
+// Lecture simple (P30 rollback) — nécessaire à verifierEtatActuel d'undoManager.js.
+export async function obtenirPublicationReseau(id) {
+  return verifie(await supabase.from('publication_reseau').select('*').eq('id', id).maybeSingle())
+}
+
 export async function creerPublicationReseau(champs) {
   return verifiePremiere(await supabase.from('publication_reseau').insert(champs).select())
 }
@@ -250,6 +255,11 @@ export async function supprimerPublicationReseau(id) {
 
 export async function listerPublicationsVodParChaine(chaineId) {
   return verifie(await supabase.from('publication_vod').select('*').eq('chaine_id', chaineId).order('date_publication'))
+}
+
+// Lecture simple (P30 rollback) — nécessaire à verifierEtatActuel d'undoManager.js.
+export async function obtenirPublicationVod(id) {
+  return verifie(await supabase.from('publication_vod').select('*').eq('id', id).maybeSingle())
 }
 
 export async function creerPublicationVod(champs) {

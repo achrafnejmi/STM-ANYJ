@@ -25,6 +25,14 @@ import {
   creerElementSecondaire,
   mettreAJourElementSecondaire,
   supprimerElementSecondaire,
+  obtenirPublicationReseau,
+  creerPublicationReseau,
+  mettreAJourPublicationReseau,
+  supprimerPublicationReseau,
+  obtenirPublicationVod,
+  creerPublicationVod,
+  mettreAJourPublicationVod,
+  supprimerPublicationVod,
 } from './db.js'
 import { lireUtilisateur } from './session.js'
 
@@ -47,11 +55,30 @@ const TABLES = {
     mettreAJour: mettreAJourElementSecondaire,
     supprimer: supprimerElementSecondaire,
   },
+  // P30 rollback (Grille non-linéaire) : pas de colonne de document (un seul
+  // calendrier continu par chaîne) — voir COLONNE_DOCUMENT_PAR_ECRAN
+  // ci-dessous, ces deux écrans n'y figurent pas volontairement.
+  publication_reseau: {
+    obtenir: obtenirPublicationReseau,
+    creer: creerPublicationReseau,
+    mettreAJour: mettreAJourPublicationReseau,
+    supprimer: supprimerPublicationReseau,
+  },
+  publication_vod: {
+    obtenir: obtenirPublicationVod,
+    creer: creerPublicationVod,
+    mettreAJour: mettreAJourPublicationVod,
+    supprimer: supprimerPublicationVod,
+  },
 }
 
 // P24/P28 : quelle colonne de historique_action porte l'id de document pour
 // un écran donné — GRILLE_LINEAIRE, PLAN_MEDIA et GRILLE_TYPE ont chacun la
 // leur (plusieurs documents ouverts en parallèle, une pile par document).
+// GRILLE_NON_LINEAIRE_RESEAUX/_VOD (P30 rollback) n'y figurent pas
+// délibérément : un seul calendrier continu par chaîne, pas de document —
+// documentId reste implicitement null, la pile est scopée chaîne+écran seul
+// (comportement déjà supporté, colonne optionnelle dans enregistrerAction).
 const COLONNE_DOCUMENT_PAR_ECRAN = {
   GRILLE_LINEAIRE: 'grille_id',
   PLAN_MEDIA: 'plan_media_id',
