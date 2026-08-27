@@ -110,10 +110,18 @@ export function parserFeuilleGrilleType(workbook) {
   }
 
   // Reconstruction de l'heure de chaque ligne de données par un compteur de
-  // position (0=nouvelle heure, 1/2/3=+15/+30/+45min) — jamais par un calcul
-  // de bloc de 4 lignes strict : une ligne trouée dans le fichier réel (la
-  // colonne heure vide juste avant 22h) ferait dérailler tout calcul
-  // positionnel, alors qu'incrémenter l'heure précédente s'en sort proprement.
+  // position (0=nouvelle heure, 1/2/3=+15/+30/+45min), calé UNIQUEMENT sur les
+  // lignes où la colonne heure porte une valeur explicite — jamais sur un
+  // calcul de bloc de 4 lignes strict aveugle. Cas réel découvert (ligne 63
+  // du fichier réel, juste avant 22h) : une ligne de CONTENU insérée
+  // HORS grille, colonne heure vide, qui ne correspond à AUCUN créneau du
+  // quadrillage 15 min — la première version incrémentait l'heure précédente
+  // sur cette ligne (en la prenant pour le "22:00" manquant), ce qui décalait
+  // d'un cran TOUT le reste du fichier (confirmé par l'utilisateur : les
+  // dernières lignes affichaient des minutes aberrantes comme 22:56/22:57...
+  // au lieu du quadrillage 15 min). Fix : une ligne à colonne heure vide ne
+  // consomme JAMAIS de position — elle hérite du dernier créneau connu (bloc
+  // hors grille, à vérifier dans l'aperçu) sans décaler les lignes suivantes.
   const heuresParLigne = new Map()
   let heureCourante = null
   let position = 0
@@ -126,15 +134,22 @@ export function parserFeuilleGrilleType(workbook) {
       }
     }
     if (ligneVide) continue
-    if (position === 0) {
-      const valeurHeure = valeurCellule(feuille, r, colonneHeure)
-      if (typeof valeurHeure === 'number') heureCourante = valeurHeure
-      else if (heureCourante !== null) heureCourante = (heureCourante + 1) % 24
-      if (heureCourante !== null) heuresParLigne.set(r, `${String(heureCourante).padStart(2, '0')}:00`)
-    } else if (heureCourante !== null) {
-      heuresParLigne.set(r, `${String(heureCourante).padStart(2, '0')}:${String(position * 15).padStart(2, '0')}`)
+    const valeurHeure = valeurCellule(feuille, r, colonneHeure)
+    if (typeof valeurHeure === 'number') {
+      if (position === 0) heureCourante = valeurHeure
+      if (heureCourante !== null) {
+        heuresParLigne.set(
+          r,
+          position === 0
+            ? `${String(heureCourante).padStart(2, '0')}:00`
+            : `${String(heureCourante).padStart(2, '0')}:${String(position * 15).padStart(2, '0')}`
+        )
+      }
+      position = (position + 1) % 4
+    } else {
+      const derniereEtiquette = [...heuresParLigne.values()].at(-1) ?? null
+      if (derniereEtiquette) heuresParLigne.set(r, derniereEtiquette)
     }
-    position = (position + 1) % 4
   }
 
   const merges = feuille['!merges'] ?? []
