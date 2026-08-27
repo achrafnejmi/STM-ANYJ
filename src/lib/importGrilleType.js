@@ -16,15 +16,16 @@
 import * as XLSX from 'xlsx'
 import { heureEnMinutes, minutesEnHeure } from './semaine.js'
 
-// Devinette du genre par mots-clés (liste validée avec l'utilisateur, non
-// élargie au-delà de ce qui a été demandé — un contenu religieux non couvert
-// ici, ex. "Prière du vendredi", reste à choisir à la main dans l'aperçu).
+// Devinette du genre par mots-clés (liste validée avec l'utilisateur ; élargie
+// sur demande explicite pour couvrir "Prière du vendredi"/"Appel à la
+// prière" et "Al Madih" — un contenu religieux encore non couvert, ex.
+// "Nafahat Ramadania", reste à choisir à la main dans l'aperçu).
 const REGLES_GENRE = [
   { motifs: ['documentaire', 'docu'], genre: 'Documentaire' },
   { motifs: ['série', 'serie'], genre: 'Série' },
   { motifs: ['film'], genre: 'Film' },
   { motifs: ['jt', 'journal', 'info'], genre: 'Information' },
-  { motifs: ['coran', 'massira', 'dourouss', 'amdah'], genre: 'Religieux' },
+  { motifs: ['coran', 'massira', 'dourouss', 'amdah', 'prière', 'priere', 'madih'], genre: 'Religieux' },
   { motifs: ['sport', 'match'], genre: 'Sport' },
   { motifs: ['jeunesse', 'dessin'], genre: 'Jeunesse' },
 ]
