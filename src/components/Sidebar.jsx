@@ -51,7 +51,9 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
           type="button"
           onClick={onBasculerReplier}
           title={repliee ? 'Étendre le menu' : 'Réduire le menu'}
-          className="hidden items-center justify-center border-t border-white/10 py-3 text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex"
+          className={`hidden items-center border-t border-white/10 py-3 text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex ${
+            repliee ? 'justify-center' : 'justify-end px-4'
+          }`}
         >
           {repliee ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
         </button>
