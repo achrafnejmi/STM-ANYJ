@@ -6,6 +6,7 @@
 // d'aller-retour réseau supplémentaire.
 
 import { get, set } from './storage.js'
+import { listerChaines } from './db.js'
 
 export const CHAINES = [
   {
@@ -71,4 +72,27 @@ export function definirChaineActive(code) {
     throw new Error('Chaîne inconnue.')
   }
   set(CLE_CHAINE_ACTIVE, code)
+}
+
+// Resynchronise CHAINES sur la table `chaine` (retouche post-P29,
+// administrable — nom/nom_ar/ligne_editoriale/couleur_token) — même
+// principe que chargerGenres()/chargerTranches() : mutation EN PLACE des
+// objets déjà référencés ailleurs (id/code/logo restent fixes, jamais
+// modifiés depuis l'UI), jamais de réassignation de CHAINES ni de ses
+// entrées. Si la table est vide ou injoignable, les valeurs de secours
+// ci-dessus sont conservées.
+export async function chargerChaines() {
+  try {
+    const lignes = await listerChaines()
+    for (const ligne of lignes) {
+      const chaine = CHAINES.find((c) => c.id === ligne.id)
+      if (!chaine) continue
+      chaine.nom = ligne.nom
+      chaine.nomAr = ligne.nom_ar
+      chaine.ligneEditoriale = ligne.ligne_editoriale
+      chaine.couleur = `bg-snrt-${ligne.couleur_token}`
+    }
+  } catch (erreur) {
+    console.error('Chargement des chaînes impossible, valeurs de secours conservées.', erreur)
+  }
 }

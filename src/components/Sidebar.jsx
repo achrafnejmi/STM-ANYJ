@@ -1,4 +1,4 @@
-import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { SECTIONS } from '../lib/navigation.js'
 import Marque from './Marque.jsx'
 
@@ -51,12 +51,9 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
           type="button"
           onClick={onBasculerReplier}
           title={repliee ? 'Étendre le menu' : 'Réduire le menu'}
-          className={`hidden items-center gap-2 border-t border-white/10 px-3 py-3 text-sm text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex ${
-            repliee ? 'justify-center' : ''
-          }`}
+          className="hidden items-center justify-center border-t border-white/10 py-3 text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex"
         >
-          {repliee ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          {!repliee && <span>Réduire</span>}
+          {repliee ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
         </button>
       </aside>
     </>

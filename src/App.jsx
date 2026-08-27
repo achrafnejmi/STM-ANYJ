@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
-import { lireChaineActive, definirChaineActive } from './lib/chaines.js'
+import { lireChaineActive, definirChaineActive, chargerChaines } from './lib/chaines.js'
 import { sectionVersHash, hashVersSection } from './lib/navigation.js'
 import { get as lireStockage, set as ecrireStockage } from './lib/storage.js'
 import { chargerGenres } from './lib/genres.js'
@@ -97,11 +97,13 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  // Nomenclatures administrables (P19a) : chargées une fois au démarrage,
-  // indépendamment de la chaîne active (genre/tranche_antenne sont globaux).
+  // Nomenclatures administrables (P19a, + chaînes en retouche post-P29) :
+  // chargées une fois au démarrage, indépendamment de la chaîne active
+  // (genre/tranche_antenne/chaine sont globaux).
   useEffect(() => {
     chargerGenres()
     chargerTranches()
+    chargerChaines()
   }, [])
 
   // Recharge simple (pas de réconciliation) : utilisée après qu'un écran a
@@ -217,7 +219,7 @@ function App() {
   const Ecran = ECRANS[section]
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar
         section={section}
         onNaviguer={naviguer}
@@ -227,7 +229,7 @@ function App() {
         repliee={sidebarRepliee}
         onBasculerReplier={basculerSidebarRepliee}
       />
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar
           utilisateur={utilisateur}
           onDeconnexion={handleDeconnexion}

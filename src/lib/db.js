@@ -656,3 +656,17 @@ export async function listerUtilisateurs() {
 export async function mettreAJourRoleUtilisateur(nom, role) {
   return verifiePremiere(await supabase.from('utilisateur').update({ role }).eq('nom_utilisateur', nom).select())
 }
+
+// --- chaine (retouche post-P29 : gestion en Administration) ---
+// Liste fermée à 5 lignes (M1, migration-p9.sql) — édition seulement (nom,
+// nom_ar, ligne_editoriale, couleur_token), jamais d'ajout/suppression :
+// `code`/`id` sont référencés en dur dans src/lib/chaines.js et tout le
+// scoping par chaîne de l'app.
+
+export async function listerChaines() {
+  return verifie(await supabase.from('chaine').select('*').order('nom'))
+}
+
+export async function mettreAJourChaine(id, champs) {
+  return verifiePremiere(await supabase.from('chaine').update(champs).eq('id', id).select())
+}

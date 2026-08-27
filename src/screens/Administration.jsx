@@ -4,13 +4,15 @@
 // restent codées en dur, pour des raisons structurelles listées ci-dessous
 // (transparence plutôt qu'une fonctionnalité manquante cachée).
 import { useEffect, useState } from 'react'
-import { listerGenres, listerTranchesAntenne, listerUtilisateurs } from '../lib/db.js'
+import { listerGenres, listerTranchesAntenne, listerUtilisateurs, listerChaines } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { chargerGenres } from '../lib/genres.js'
 import { chargerTranches } from '../lib/tranches.js'
+import { chargerChaines } from '../lib/chaines.js'
 import TableauGenres from '../components/TableauGenres.jsx'
 import TableauTranches from '../components/TableauTranches.jsx'
 import TableauUtilisateurs from '../components/TableauUtilisateurs.jsx'
+import TableauChaines from '../components/TableauChaines.jsx'
 
 const NOMENCLATURES_NON_MIGREES = [
   {
@@ -27,6 +29,7 @@ const NOMENCLATURES_NON_MIGREES = [
 export default function Administration({ roleUtilisateur }) {
   const [genres, setGenres] = useState([])
   const [tranches, setTranches] = useState([])
+  const [chaines, setChaines] = useState([])
   const [utilisateurs, setUtilisateurs] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
@@ -45,17 +48,20 @@ export default function Administration({ roleUtilisateur }) {
     setChargement(true)
     setErreur(null)
     try {
-      const [lignesGenres, lignesTranches, lignesUtilisateurs] = await Promise.all([
+      const [lignesGenres, lignesTranches, lignesChaines, lignesUtilisateurs] = await Promise.all([
         listerGenres(),
         listerTranchesAntenne(),
+        listerChaines(),
         listerUtilisateurs(),
       ])
       setGenres(lignesGenres)
       setTranches(lignesTranches)
+      setChaines(lignesChaines)
       setUtilisateurs(lignesUtilisateurs)
-      // Resynchronise les caches utilisés partout ailleurs (GENRES/TRANCHES,
-      // genres.js/tranches.js) sur l'état qui vient d'être enregistré.
-      await Promise.all([chargerGenres(), chargerTranches()])
+      // Resynchronise les caches utilisés partout ailleurs (GENRES/TRANCHES/
+      // CHAINES, genres.js/tranches.js/chaines.js) sur l'état qui vient
+      // d'être enregistré.
+      await Promise.all([chargerGenres(), chargerTranches(), chargerChaines()])
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -76,6 +82,7 @@ export default function Administration({ roleUtilisateur }) {
 
       <TableauGenres genres={genres} onRafraichir={rafraichir} />
       <TableauTranches tranches={tranches} onRafraichir={rafraichir} />
+      <TableauChaines chaines={chaines} onRafraichir={rafraichir} />
 
       {estAdmin && (
         <TableauUtilisateurs utilisateurs={utilisateurs} utilisateurActif={lireUtilisateur()} onRafraichir={rafraichir} />
