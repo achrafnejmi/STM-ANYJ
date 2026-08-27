@@ -184,23 +184,44 @@ const GENRE_PAR_DEFAUT = 'Divertissement'
 // Construit l'aperçu (une ligne par coupure détectée) : genre deviné par
 // mots-clés, sinon GENRE_PAR_DEFAUT (jamais vide) ; durée devinée (repli sur
 // la hauteur de fusion × 15 min si aucun motif) ; ambre si le genre est une
-// estimation (pas de mot-clé trouvé) OU si la durée est incertaine ; cochée
-// par défaut seulement si le genre vient d'un mot-clé (une estimation reste
-// décochée par défaut, à valider explicitement par l'utilisateur).
+// estimation (pas de mot-clé trouvé), si la durée est incertaine, OU si le
+// début a dû être repoussé pour éviter un chevauchement ; cochée par défaut
+// seulement si le genre vient d'un mot-clé (une estimation reste décochée par
+// défaut, à valider explicitement par l'utilisateur).
+//
+// Chevauchements (demande explicite) : la grille source a une granularité de
+// 15 min (une ligne = un créneau), mais une durée réelle extraite du texte
+// (ex. 52') dépasse souvent le créneau suivant — le bloc suivant démarre
+// alors avant la fin réelle du précédent. `coupures` est déjà ordonné
+// chronologiquement (parserFeuilleGrilleType émet ligne par ligne, du haut
+// vers le bas) : un balayage linéaire, avec une fin connue par jour
+// (0=lundi..6=dimanche), suffit à repousser chaque bloc en conflit jusqu'à la
+// fin du précédent sur CHACUN des jours qu'il partage avec lui — jamais le
+// contraire (le précédent n'est jamais raccourci), et jamais avant son heure
+// d'origine si aucun conflit ne s'applique.
 export function apparierProposition(coupures) {
+  const finConnueParJour = new Map()
   return coupures.map((c, i) => {
     const genreDevine = classifierGenre(c.texte)
     const { minutes, confiance } = extraireDureeMinutes(c.texte)
     const dureeMinutes = minutes ?? c.nbCreneaux * 15
+
+    const debutOrigineMin = heureEnMinutes(c.heureDebut)
+    const debutMin = c.jours.reduce((max, j) => Math.max(max, finConnueParJour.get(j) ?? 0), debutOrigineMin)
+    const finMin = debutMin + dureeMinutes
+    for (const j of c.jours) finConnueParJour.set(j, finMin)
+    const heureDebut = minutesEnHeure(debutMin)
+    const decale = debutMin !== debutOrigineMin
+
     return {
       id: `l${i}`,
       nom: c.texte,
-      heureDebut: c.heureDebut,
+      heureDebut,
       dureeMinutes,
       jours: c.jours,
       genre: genreDevine ?? GENRE_PAR_DEFAUT,
-      ambre: !genreDevine || confiance !== 'haute',
-      coche: Boolean(genreDevine),
+      ambre: !genreDevine || confiance !== 'haute' || decale,
+      coche: Boolean(genreDevine) && !decale,
     }
   })
 }
