@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   FileText,
   File,
+  FileUp,
 } from 'lucide-react'
 import {
   listerGrillesTypeParChaine,
@@ -49,6 +50,7 @@ import { construireDonneesGrilleType, construireLignesExcelGrilleType, construir
 import Modal from '../components/Modal.jsx'
 import PaletteGenres from '../components/PaletteGenres.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
+import PanneauImportGrilleType from '../components/PanneauImportGrilleType.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
@@ -160,6 +162,7 @@ export default function GrilleType({ chaineActive }) {
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
   const [exportOuvert, setExportOuvert] = useState(false)
+  const [importOuvert, setImportOuvert] = useState(false)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
@@ -441,6 +444,17 @@ export default function GrilleType({ chaineActive }) {
     } catch (err) {
       setErreur(err.message)
     }
+  }
+
+  // Import Excel (P28b Partie E) : le document créé n'est jamais live par
+  // défaut — ouvert comme un nouvel onglet, même geste que « Définir comme
+  // live » pour tout autre document (même principe que documentImporte dans
+  // PlanMedia.jsx/P26).
+  function documentImporte(nouveauDocument, blocsCrees) {
+    setGrillesType((prev) => [...prev, nouveauDocument])
+    setBlocsChaine((prev) => [...prev, ...blocsCrees])
+    ouvrirGrilleType(nouveauDocument.id)
+    setImportOuvert(false)
   }
 
   // --- Gestion des grilles type (P28, même pattern que GrilleLineaire.jsx/P23) ---
@@ -845,6 +859,15 @@ export default function GrilleType({ chaineActive }) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setImportOuvert(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              title="Importer une grille type depuis un fichier Excel"
+            >
+              <FileUp size={15} />
+              Importer
+            </button>
+            <button
+              type="button"
               onClick={() => setExportOuvert(true)}
               disabled={!grilleTypeActive}
               className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
@@ -1072,6 +1095,10 @@ export default function GrilleType({ chaineActive }) {
           onValider={dupliquerGrilleTypeActive}
           onFermer={() => setModaleGrilleType(null)}
         />
+      )}
+
+      {importOuvert && (
+        <PanneauImportGrilleType chaineActive={chaineActive} onFermer={() => setImportOuvert(false)} onImporte={documentImporte} />
       )}
 
       {exportOuvert && (
