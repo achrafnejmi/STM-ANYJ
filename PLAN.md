@@ -157,8 +157,10 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   signale les fenêtres de droits proches de la fermeture (RG-04, réconcilié au changement de
   chaîne, jamais dupliqué). *Test : créer un programme → notification(s) ; fenêtre de droits
   proche → alerte réconciliée une seule fois ; clic → fiche + marqué lu.*
-- **P30 — Rollback étendu** : étendre annuler/rétablir au plan média et à la grille
-  non-linéaire.
+- **P30 — Rollback étendu** ✅ LIVRÉ : plan média avait déjà son rollback complet (P24) ; ajout
+  du dernier écran manquant, la grille non-linéaire — deux piles indépendantes
+  (Réseaux/VOD, chacune scopée chaîne+écran, pas de multi-document). *Test : Ctrl+Z/Ctrl+Y sur
+  chaque onglet, les deux piles restent indépendantes l'une de l'autre.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
