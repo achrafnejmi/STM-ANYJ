@@ -152,8 +152,11 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
 - **P28 — Grille type : création & saisonnalité** : créer une grille type de zéro puis
   l'enregistrer ; 3 grilles types saisonnières (Ramadan, rentrée, été) qui basculent
   automatiquement selon la période de l'année.
-- **P29 — Notifications** : alerter au 1er ajout d'un programme ; signaler si un programme est
-  en fin de droits ou proche (reprise de l'idée notification d'origine).
+- **P29 — Notifications** ✅ LIVRÉ : centre de notifications persistant (cloche TopBar, lu/non
+  lu par chaîne) — alerte au 1er ajout d'un programme (fan-out sur les 5 chaînes si partagé) et
+  signale les fenêtres de droits proches de la fermeture (RG-04, réconcilié au changement de
+  chaîne, jamais dupliqué). *Test : créer un programme → notification(s) ; fenêtre de droits
+  proche → alerte réconciliée une seule fois ; clic → fiche + marqué lu.*
 - **P30 — Rollback étendu** : étendre annuler/rétablir au plan média et à la grille
   non-linéaire.
 
