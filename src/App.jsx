@@ -4,10 +4,21 @@ import { lireChaineActive, definirChaineActive } from './lib/chaines.js'
 import { sectionVersHash, hashVersSection } from './lib/navigation.js'
 import { chargerGenres } from './lib/genres.js'
 import { chargerTranches } from './lib/tranches.js'
+import { aujourdHuiISO } from './lib/semaine.js'
+import {
+  listerProgrammesParChaine,
+  listerToutesLesFenetresDroits,
+  listerNotificationsParChaine,
+  creerNotifications,
+  marquerNotificationLue,
+  marquerToutesNotificationsLues,
+} from './lib/db.js'
+import { calculerNotificationsDroitsManquantes } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import TopBar from './components/TopBar.jsx'
 import RechercheGlobale from './components/RechercheGlobale.jsx'
+import PanneauNotifications from './components/PanneauNotifications.jsx'
 import Accueil from './screens/Accueil.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
@@ -48,6 +59,12 @@ function App() {
   // programme est rouvert deux fois de suite, pour que l'effet de
   // Programmes.jsx se redéclenche à chaque fois.
   const [programmeCible, setProgrammeCible] = useState(null)
+  // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
+  // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
+  // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
+  // réconcilié ici à chaque changement de chaîne (voir effet ci-dessous).
+  const [notifications, setNotifications] = useState([])
+  const [notificationsOuvertes, setNotificationsOuvertes] = useState(false)
 
   useEffect(() => {
     function onHashChange() {
@@ -64,6 +81,53 @@ function App() {
     chargerGenres()
     chargerTranches()
   }, [])
+
+  // Recharge simple (pas de réconciliation) : utilisée après qu'un écran a
+  // lui-même écrit une notification (ex. FicheProgramme.jsx à la création
+  // d'un programme) — l'écriture est déjà faite, il ne manque que la
+  // resynchronisation de l'état local pour que la cloche/le panneau la
+  // voient sans attendre un changement de chaîne.
+  function rafraichirNotifications() {
+    listerNotificationsParChaine(chaineActive.id)
+      .then(setNotifications)
+      .catch((err) => console.error('Rafraîchissement des notifications impossible :', err))
+  }
+
+  // Réconciliation DROITS_PROCHES (P29) : compare les fenêtres actuellement
+  // proches de la fermeture (RG-04, droits.js — aucune formule dupliquée) aux
+  // notifications déjà connues de cette chaîne, insère les manquantes, puis
+  // recharge la liste. NOUVEAU_PROGRAMME n'a pas besoin de ça (écrit une fois
+  // à la création) — seule DROITS_PROCHES est une condition à réconcilier.
+  useEffect(() => {
+    let annule = false
+    Promise.all([
+      listerProgrammesParChaine(chaineActive.id),
+      listerToutesLesFenetresDroits(),
+      listerNotificationsParChaine(chaineActive.id),
+    ])
+      .then(async ([programmes, fenetresDroits, notificationsExistantes]) => {
+        if (annule) return
+        const programmesParId = new Map(programmes.map((p) => [p.id, p]))
+        const manquantes = calculerNotificationsDroitsManquantes({
+          chaineId: chaineActive.id,
+          fenetresDroits,
+          programmesParId,
+          notificationsExistantes,
+          dateReference: aujourdHuiISO(),
+        })
+        if (manquantes.length === 0) {
+          setNotifications(notificationsExistantes)
+          return
+        }
+        await creerNotifications(manquantes)
+        if (annule) return
+        setNotifications(await listerNotificationsParChaine(chaineActive.id))
+      })
+      .catch((err) => console.error('Chargement des notifications impossible :', err))
+    return () => {
+      annule = true
+    }
+  }, [chaineActive])
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -104,6 +168,23 @@ function App() {
     setProgrammeCible({ id, cle: crypto.randomUUID(), onglet })
   }
 
+  // Clic sur une notification : marque lue puis ouvre la fiche du programme
+  // visé — sur l'onglet Droits pour une alerte de fin de droits, Général
+  // sinon (même mécanisme que RechercheGlobale.jsx/Contrats.jsx).
+  function allerNotification(n) {
+    if (!n.lu) {
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, lu: true } : x)))
+      marquerNotificationLue(n.id).catch((err) => console.error('Marquage lu impossible :', err))
+    }
+    setNotificationsOuvertes(false)
+    if (n.programme_id) ouvrirProgramme(n.programme_id, n.type === 'DROITS_PROCHES' ? 'DROITS' : undefined)
+  }
+
+  function marquerToutesLues() {
+    setNotifications((prev) => prev.map((n) => ({ ...n, lu: true })))
+    marquerToutesNotificationsLues(chaineActive.id).catch((err) => console.error('Marquage lu impossible :', err))
+  }
+
   const Ecran = ECRANS[section]
 
   return (
@@ -123,6 +204,8 @@ function App() {
           chaineActive={chaineActive}
           onChangerChaine={changerChaine}
           onOuvrirRecherche={() => setRechercheOuverte(true)}
+          onOuvrirNotifications={() => setNotificationsOuvertes(true)}
+          nbNotificationsNonLues={notifications.filter((n) => !n.lu).length}
         />
         <main className="flex-1 overflow-y-auto p-6">
           <Ecran
@@ -130,6 +213,7 @@ function App() {
             onAnomaliesBloquantes={setNbAnomaliesBloquantes}
             programmeCible={programmeCible}
             onOuvrirProgramme={ouvrirProgramme}
+            onNotificationCreee={rafraichirNotifications}
           />
         </main>
       </div>
@@ -139,6 +223,14 @@ function App() {
         onFermer={() => setRechercheOuverte(false)}
         onOuvrirProgramme={ouvrirProgramme}
       />
+      {notificationsOuvertes && (
+        <PanneauNotifications
+          notifications={notifications}
+          onFermer={() => setNotificationsOuvertes(false)}
+          onAller={allerNotification}
+          onMarquerToutesLues={marquerToutesLues}
+        />
+      )}
     </div>
   )
 }

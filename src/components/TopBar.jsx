@@ -1,4 +1,4 @@
-import { Menu, LogOut, UserRound, Search } from 'lucide-react'
+import { Menu, LogOut, UserRound, Search, Bell } from 'lucide-react'
 import { CHAINES } from '../lib/chaines.js'
 import Marque from './Marque.jsx'
 
@@ -9,6 +9,8 @@ export default function TopBar({
   chaineActive,
   onChangerChaine,
   onOuvrirRecherche,
+  onOuvrirNotifications,
+  nbNotificationsNonLues = 0,
 }) {
   return (
     <div>
@@ -51,6 +53,19 @@ export default function TopBar({
         </div>
 
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onOuvrirNotifications}
+            title="Notifications"
+            className="relative text-slate-500 hover:text-slate-700"
+          >
+            <Bell size={20} />
+            {nbNotificationsNonLues > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                {nbNotificationsNonLues}
+              </span>
+            )}
+          </button>
           <span className="flex items-center gap-1.5 text-sm text-slate-600">
             <UserRound size={16} />
             {utilisateur}

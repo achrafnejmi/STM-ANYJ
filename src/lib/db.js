@@ -616,3 +616,23 @@ export async function perimerActionsAnnulees(chaineId, ecran, documentId = null)
   if (documentId && colonne) requete = requete.eq(colonne, documentId)
   return verifie(await requete.select())
 }
+
+// --- notification (P29 : centre de notifications persistant, lu/non lu par chaîne) ---
+
+export async function listerNotificationsParChaine(chaineId) {
+  return verifie(await supabase.from('notification').select('*').eq('chaine_id', chaineId).order('cree_le', { ascending: false }))
+}
+
+// Insertion en lot (fan-out NOUVEAU_PROGRAMME sur les chaînes visées, ou lignes
+// DROITS_PROCHES manquantes) — même précédent que creerBlocsGrilleType.
+export async function creerNotifications(lignes) {
+  return verifie(await supabase.from('notification').insert(lignes).select())
+}
+
+export async function marquerNotificationLue(id) {
+  return verifiePremiere(await supabase.from('notification').update({ lu: true }).eq('id', id).select())
+}
+
+export async function marquerToutesNotificationsLues(chaineId) {
+  return verifie(await supabase.from('notification').update({ lu: true }).eq('chaine_id', chaineId).eq('lu', false).select())
+}

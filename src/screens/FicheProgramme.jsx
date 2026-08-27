@@ -7,10 +7,12 @@ import {
   televerserAttestation,
   urlAttestation,
   listerEpisodes,
+  creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
+import { messageNouveauProgramme } from '../lib/notifications.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
@@ -82,7 +84,7 @@ function versFormulaire(programme, chaineActive) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange, onNotificationCreee }) {
   const [id, setId] = useState(idInitial)
   const valeurVide = { ...FORM_VIDE, chaineExclusiveId: chaineActive.id }
   const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
@@ -173,6 +175,23 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         setId(cree.id)
         setValeurInitiale(versFormulaire(cree, chaineActive))
         notifier.succes('Programme créé.')
+        // P29 : notification persistante « nouveau programme » — partagé
+        // (chaine_id null, modèle P22) → une ligne par chaîne (fan-out, le
+        // catalogue est commun) ; exclusif → une seule ligne. Best-effort :
+        // une erreur ici ne doit jamais faire échouer la création déjà
+        // réussie du programme.
+        const chainesCibles = cree.chaine_id ? [cree.chaine_id] : CHAINES.map((c) => c.id)
+        creerNotifications(
+          chainesCibles.map((chaineId) => ({
+            chaine_id: chaineId,
+            type: 'NOUVEAU_PROGRAMME',
+            programme_id: cree.id,
+            message: messageNouveauProgramme(cree),
+            lu: false,
+          }))
+        )
+          .then(() => onNotificationCreee?.())
+          .catch((err) => console.error('Notification « nouveau programme » impossible :', err))
       }
     } catch (err) {
       if (err.code === '23505') {

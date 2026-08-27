@@ -3,7 +3,7 @@ import ListeProgrammes from './ListeProgrammes.jsx'
 import FicheProgramme from './FicheProgramme.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
-export default function Programmes({ chaineActive, programmeCible }) {
+export default function Programmes({ chaineActive, programmeCible, onNotificationCreee }) {
   const [vue, setVue] = useState('LISTE')
   const [programmeId, setProgrammeId] = useState(null)
   const [ongletCible, setOngletCible] = useState(undefined)
@@ -66,6 +66,7 @@ export default function Programmes({ chaineActive, programmeCible }) {
         onRetour={retourListe}
         ongletInitial={ongletCible ?? 'GENERAL'}
         onModifieChange={setFicheModifiee}
+        onNotificationCreee={onNotificationCreee}
       />
     )
   }
