@@ -636,3 +636,23 @@ export async function marquerNotificationLue(id) {
 export async function marquerToutesNotificationsLues(chaineId) {
   return verifie(await supabase.from('notification').update({ lu: true }).eq('chaine_id', chaineId).eq('lu', false).select())
 }
+
+// --- utilisateur (retouche post-P29 : rôles Administrateur/Utilisateur) ---
+
+// Upsert best-effort (jamais d'écrasement d'un rôle déjà attribué :
+// ignoreDuplicates fait que la ligne existante n'est pas touchée), puis
+// relecture pour renvoyer le rôle réel (nouveau ou déjà en place — ex.
+// l'admin amorcé par la migration).
+export async function obtenirOuCreerUtilisateur(nom) {
+  const { error } = await supabase.from('utilisateur').upsert({ nom_utilisateur: nom }, { onConflict: 'nom_utilisateur', ignoreDuplicates: true })
+  if (error) throw error
+  return verifie(await supabase.from('utilisateur').select('*').eq('nom_utilisateur', nom).maybeSingle())
+}
+
+export async function listerUtilisateurs() {
+  return verifie(await supabase.from('utilisateur').select('*').order('nom_utilisateur'))
+}
+
+export async function mettreAJourRoleUtilisateur(nom, role) {
+  return verifiePremiere(await supabase.from('utilisateur').update({ role }).eq('nom_utilisateur', nom).select())
+}

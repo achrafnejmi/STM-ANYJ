@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
 import { lireChaineActive, definirChaineActive } from './lib/chaines.js'
 import { sectionVersHash, hashVersSection } from './lib/navigation.js'
+import { get as lireStockage, set as ecrireStockage } from './lib/storage.js'
 import { chargerGenres } from './lib/genres.js'
 import { chargerTranches } from './lib/tranches.js'
 import { aujourdHuiISO } from './lib/semaine.js'
@@ -12,6 +13,7 @@ import {
   creerNotifications,
   marquerNotificationLue,
   marquerToutesNotificationsLues,
+  obtenirOuCreerUtilisateur,
 } from './lib/db.js'
 import { calculerNotificationsDroitsManquantes } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
@@ -47,6 +49,10 @@ function App() {
   const [utilisateur, setUtilisateur] = useState(() => lireUtilisateur())
   const [section, setSection] = useState(() => hashVersSection(window.location.hash) ?? 'ACCUEIL')
   const [sidebarOuverte, setSidebarOuverte] = useState(false)
+  // Repli desktop en rail d'icônes (retouche post-P29) — distinct du tiroir
+  // mobile ci-dessus : persiste entre sessions, même patron que
+  // session:chaine (storage.js, lib/chaines.js).
+  const [sidebarRepliee, setSidebarRepliee] = useState(() => lireStockage('session:sidebar-repliee') ?? false)
   const [chaineActive, setChaineActive] = useState(() => lireChaineActive())
   // Pastille rail (EXG-M0-08/EXG-M8-02) : remontée depuis GrilleLineaire, seul
   // écran qui écrit sur diffusion_lineaire — reste affichée (dernière valeur
@@ -65,6 +71,22 @@ function App() {
   // réconcilié ici à chaque changement de chaîne (voir effet ci-dessous).
   const [notifications, setNotifications] = useState([])
   const [notificationsOuvertes, setNotificationsOuvertes] = useState(false)
+  // Rôle (retouche post-P29) : convention d'affichage, pas une vraie barrière
+  // de sécurité (connexion sans mot de passe, cf. session.js) — juste de quoi
+  // masquer la section « Utilisateurs & rôles » de Administration.jsx aux
+  // non-admins. Chargé une fois à la connexion (upsert best-effort : ne
+  // touche jamais un rôle déjà attribué).
+  const [roleUtilisateur, setRoleUtilisateur] = useState(null)
+
+  useEffect(() => {
+    if (!utilisateur) {
+      setRoleUtilisateur(null)
+      return
+    }
+    obtenirOuCreerUtilisateur(utilisateur)
+      .then((u) => setRoleUtilisateur(u?.role ?? 'UTILISATEUR'))
+      .catch((err) => console.error('Chargement du rôle utilisateur impossible :', err))
+  }, [utilisateur])
 
   useEffect(() => {
     function onHashChange() {
@@ -160,6 +182,13 @@ function App() {
     setChaineActive(lireChaineActive())
   }
 
+  function basculerSidebarRepliee() {
+    setSidebarRepliee((v) => {
+      ecrireStockage('session:sidebar-repliee', !v)
+      return !v
+    })
+  }
+
   // Ouverture externe d'une fiche programme (recherche globale EXG-M10-04, ou
   // Contrats & droits vers l'onglet Droits) : bascule sur Programmes et ouvre
   // directement la fiche visée, sur l'onglet demandé (Général par défaut).
@@ -195,6 +224,8 @@ function App() {
         ouverte={sidebarOuverte}
         onFermer={() => setSidebarOuverte(false)}
         badges={{ GRILLE_LINEAIRE: nbAnomaliesBloquantes }}
+        repliee={sidebarRepliee}
+        onBasculerReplier={basculerSidebarRepliee}
       />
       <div className="flex flex-1 flex-col">
         <TopBar
@@ -214,6 +245,7 @@ function App() {
             programmeCible={programmeCible}
             onOuvrirProgramme={ouvrirProgramme}
             onNotificationCreee={rafraichirNotifications}
+            roleUtilisateur={roleUtilisateur}
           />
         </main>
       </div>

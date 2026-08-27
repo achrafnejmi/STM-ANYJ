@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from 'react'
-import { ArrowLeft, Paperclip, Loader2 } from 'lucide-react'
+import { ArrowLeft, Paperclip, Loader2, Trash2 } from 'lucide-react'
 import {
   obtenirProgramme,
   creerProgramme,
   mettreAJourProgramme,
+  supprimerProgramme,
   televerserAttestation,
   urlAttestation,
   listerEpisodes,
@@ -204,6 +205,29 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     }
   }
 
+  // Suppression (retouche post-P29) : toutes les FK vers programme(id) sont
+  // déjà en cascade (episode, diffusion_lineaire, publication_reseau,
+  // publication_vod, fenetre_droits, campagne, notification) — le message de
+  // confirmation doit donc être explicite sur tout ce qui disparaît avec, et
+  // rappeler que ce n'est PAS couvert par Annuler/Rétablir (aucun
+  // enregistrerAction ici, contrairement aux écritures de grille).
+  async function supprimer() {
+    if (!id || !programme) return
+    const ok = await notifier.confirmer({
+      titre: 'Supprimer le programme',
+      message: `Supprimer « ${programme.titre} » ? Cette action est irréversible et supprimera aussi : ${nombreEpisodes} épisode${nombreEpisodes > 1 ? 's' : ''}, ses fenêtres de droits, et toutes ses diffusions programmées (grilles linéaire et non-linéaire). Cette suppression n'est PAS annulable (Ctrl+Z ne la couvre pas).`,
+      labelConfirmer: 'Supprimer définitivement',
+    })
+    if (!ok) return
+    try {
+      await supprimerProgramme(id)
+      notifier.succes('Programme supprimé.')
+      onRetour()
+    } catch (err) {
+      setErreur(err.message)
+    }
+  }
+
   async function handleAttestation(e) {
     const fichier = e.target.files?.[0]
     e.target.value = ''
@@ -233,14 +257,26 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={gererRetour}
-        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
-      >
-        <ArrowLeft size={16} />
-        Retour à la liste
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={gererRetour}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+        >
+          <ArrowLeft size={16} />
+          Retour à la liste
+        </button>
+        {id && (
+          <button
+            type="button"
+            onClick={supprimer}
+            className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={14} />
+            Supprimer le programme
+          </button>
+        )}
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <h2 className="mb-4 text-base font-semibold text-slate-900">Définition de programme</h2>

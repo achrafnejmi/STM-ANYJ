@@ -8,20 +8,23 @@ import {
 } from '../lib/db.js'
 import { aujourdHuiISO } from '../lib/semaine.js'
 import { useNotification, useGardeModifications } from './NotificationProvider.jsx'
+import Toggle from './Toggle.jsx'
 
 const FENETRE_VIDE = {
   date_debut: aujourdHuiISO(),
   date_fin: '',
   passages_autorises: '',
   passages_consommes: 0,
+  illimite: false,
 }
 
 function versFormulaire(fenetre) {
   return {
     date_debut: fenetre.date_debut,
-    date_fin: fenetre.date_fin,
-    passages_autorises: fenetre.passages_autorises,
+    date_fin: fenetre.date_fin ?? '',
+    passages_autorises: fenetre.passages_autorises ?? '',
     passages_consommes: fenetre.passages_consommes,
+    illimite: fenetre.illimite ?? false,
   }
 }
 
@@ -32,6 +35,9 @@ function versFormulaire(fenetre) {
 const JOURS_SEUIL_PROCHE = 30
 
 function statutFenetre(f, aujourdHui) {
+  // Fenêtre illimitée (retouche post-P29, production interne SNRT) : ni
+  // échéance ni plafond — toujours conforme, jamais ambre/rouge.
+  if (f.illimite) return 'vert'
   const expiree = aujourdHui > f.date_fin
   const restants = f.passages_autorises - f.passages_consommes
   const epuisee = restants <= 0
@@ -63,10 +69,10 @@ function CartesFenetres({ fenetres }) {
         return (
           <div key={f.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
             <span className="text-sm text-slate-700">
-              {f.date_debut} → {f.date_fin}
+              {f.date_debut} → {f.illimite ? 'illimité' : f.date_fin}
             </span>
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASSES_STATUT[statut]}`}>
-              {restants < 0 ? 0 : restants}/{f.passages_autorises} passages restants
+              {f.illimite ? 'Illimité' : `${restants < 0 ? 0 : restants}/${f.passages_autorises} passages restants`}
             </span>
           </div>
         )
@@ -85,6 +91,7 @@ export default function FenetresDroitsPanel({ programmeId }) {
   const [enregistrement, setEnregistrement] = useState(false)
   const notifier = useNotification()
   const { demanderConfirmation } = useGardeModifications(form, valeurInitiale)
+  const idIllimite = useId()
 
   useEffect(() => {
     rafraichir()
@@ -142,9 +149,10 @@ export default function FenetresDroitsPanel({ programmeId }) {
     try {
       const champs = {
         date_debut: form.date_debut,
-        date_fin: form.date_fin,
-        passages_autorises: Number(form.passages_autorises),
+        date_fin: form.illimite ? null : form.date_fin,
+        passages_autorises: form.illimite ? null : Number(form.passages_autorises),
         passages_consommes: Number(form.passages_consommes) || 0,
+        illimite: form.illimite,
         programme_id: programmeId,
       }
       if (fenetreId === 'NOUVEAU') {
@@ -207,9 +215,9 @@ export default function FenetresDroitsPanel({ programmeId }) {
                   }`}
                 >
                   <td className="py-2 pr-4 text-slate-700">{f.date_debut}</td>
-                  <td className="py-2 pr-4 text-slate-700">{f.date_fin}</td>
+                  <td className="py-2 pr-4 text-slate-700">{f.illimite ? 'Illimité' : f.date_fin}</td>
                   <td className="py-2 pr-4 text-slate-700">
-                    {f.passages_consommes}/{f.passages_autorises}
+                    {f.illimite ? '—' : `${f.passages_consommes}/${f.passages_autorises}`}
                   </td>
                   <td className="py-2 pr-4">
                     <button
@@ -242,6 +250,26 @@ export default function FenetresDroitsPanel({ programmeId }) {
             <p className="text-sm text-slate-500">Sélectionnez une fenêtre ou ajoutez-en une.</p>
           ) : (
             <form onSubmit={enregistrer} className="space-y-4">
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <Toggle
+                    id={idIllimite}
+                    checked={form.illimite}
+                    onChange={(v) => setForm({ ...form, illimite: v })}
+                    label="Illimité (production interne)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, illimite: !form.illimite })}
+                    className="text-sm font-medium text-slate-700"
+                  >
+                    Illimité (production interne)
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  SNRT détient tous les droits — aucune échéance ni plafond de passages.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <Champ
                   label="Date de début *"
@@ -253,8 +281,9 @@ export default function FenetresDroitsPanel({ programmeId }) {
                 <Champ
                   label="Date de fin *"
                   type="date"
-                  required
-                  value={form.date_fin}
+                  required={!form.illimite}
+                  disabled={form.illimite}
+                  value={form.illimite ? '' : form.date_fin}
                   onChange={(v) => setForm({ ...form, date_fin: v })}
                 />
               </div>
@@ -262,13 +291,15 @@ export default function FenetresDroitsPanel({ programmeId }) {
                 <Champ
                   label="Passages autorisés *"
                   type="number"
-                  required
-                  value={form.passages_autorises}
+                  required={!form.illimite}
+                  disabled={form.illimite}
+                  value={form.illimite ? '' : form.passages_autorises}
                   onChange={(v) => setForm({ ...form, passages_autorises: v })}
                 />
                 <Champ
                   label="Passages consommés"
                   type="number"
+                  disabled={form.illimite}
                   value={form.passages_consommes}
                   onChange={(v) => setForm({ ...form, passages_consommes: v })}
                 />
@@ -293,7 +324,7 @@ export default function FenetresDroitsPanel({ programmeId }) {
   )
 }
 
-function Champ({ label, type = 'text', value, onChange, required }) {
+function Champ({ label, type = 'text', value, onChange, required, disabled }) {
   const id = useId()
   return (
     <div>
@@ -304,9 +335,10 @@ function Champ({ label, type = 'text', value, onChange, required }) {
         id={id}
         type={type}
         required={required}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
       />
     </div>
   )

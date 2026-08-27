@@ -1,17 +1,20 @@
-import { X } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { SECTIONS } from '../lib/navigation.js'
 import Marque from './Marque.jsx'
 
-export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges = {} }) {
+// `repliee` (retouche post-P29) : rail d'icônes desktop, distinct du tiroir
+// mobile `ouverte`/`onFermer` ci-dessous — les deux mécanismes coexistent,
+// le repli n'a aucun sens sur le tiroir mobile qui se ferme déjà entièrement.
+export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges = {}, repliee = false, onBasculerReplier }) {
   return (
     <>
       {ouverte && <div className="fixed inset-0 z-20 bg-black/30 lg:hidden" onClick={onFermer} />}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-snrt-navy transition-transform duration-200 lg:static lg:translate-x-0 ${
-          ouverte ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-30 flex flex-col bg-snrt-navy transition-[transform,width] duration-200 lg:static lg:translate-x-0 ${
+          repliee ? 'lg:w-16' : 'lg:w-64'
+        } w-64 ${ouverte ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="flex items-center justify-between px-4 py-5">
+        <div className={`flex items-center px-4 py-5 ${repliee ? 'lg:justify-center lg:px-0' : 'justify-between'}`}>
           <Marque variante="sidebar" />
           <button type="button" onClick={onFermer} className="text-white/70 hover:text-white lg:hidden">
             <X size={20} />
@@ -23,20 +26,38 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
               key={id}
               type="button"
               onClick={() => onNaviguer(id)}
-              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                section === id ? 'bg-snrt-navy-hover text-white' : 'text-white/70 hover:bg-snrt-navy-hover hover:text-white'
-              }`}
+              title={label}
+              className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                repliee ? 'lg:justify-center lg:px-2' : ''
+              } ${section === id ? 'bg-snrt-navy-hover text-white' : 'text-white/70 hover:bg-snrt-navy-hover hover:text-white'}`}
             >
-              <Icone size={18} />
-              <span className="flex-1 text-left">{label}</span>
+              <Icone size={18} className="shrink-0" />
+              <span className={repliee ? 'flex-1 text-left lg:hidden' : 'flex-1 text-left'}>{label}</span>
               {badges[id] > 0 && (
-                <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                <span
+                  className={
+                    repliee
+                      ? 'rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white lg:absolute lg:right-1 lg:top-1 lg:px-1 lg:py-0 lg:text-[9px]'
+                      : 'rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white'
+                  }
+                >
                   {badges[id]}
                 </span>
               )}
             </button>
           ))}
         </nav>
+        <button
+          type="button"
+          onClick={onBasculerReplier}
+          title={repliee ? 'Étendre le menu' : 'Réduire le menu'}
+          className={`hidden items-center gap-2 border-t border-white/10 px-3 py-3 text-sm text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex ${
+            repliee ? 'justify-center' : ''
+          }`}
+        >
+          {repliee ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {!repliee && <span>Réduire</span>}
+        </button>
       </aside>
     </>
   )

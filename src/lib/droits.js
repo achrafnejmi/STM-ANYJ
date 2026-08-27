@@ -15,8 +15,11 @@ export function estProgrammable(programmeId, fenetresDroits, dateISO) {
   const fenetresDuTitre = fenetresDroits.filter((f) => f.programme_id === programmeId)
   if (fenetresDuTitre.length === 0) return { ok: true, motif: null }
 
+  // Fenêtre illimitée (retouche post-P29, production interne SNRT) : ni
+  // échéance ni plafond de passages, toujours valide — court-circuite le
+  // test date/passages ci-dessous.
   const valide = fenetresDuTitre.find(
-    (f) => dateISO >= f.date_debut && dateISO <= f.date_fin && f.passages_consommes < f.passages_autorises
+    (f) => f.illimite || (dateISO >= f.date_debut && dateISO <= f.date_fin && f.passages_consommes < f.passages_autorises)
   )
   if (valide) return { ok: true, motif: null }
 
@@ -38,6 +41,9 @@ export function estEpisodePret(episode) {
 // expirée n'est pas "proche de la fermeture", elle est juste invalide
 // (gérée séparément par estProgrammable).
 function fenetreProcheDeLaFermeture(fenetre, dateISO) {
+  // Une fenêtre illimitée n'a ni échéance ni plafond — jamais "proche de la
+  // fermeture" par définition.
+  if (fenetre.illimite) return false
   const joursRestants = (new Date(fenetre.date_fin) - new Date(dateISO)) / 86400000
   const passagesRestants = fenetre.passages_autorises - fenetre.passages_consommes
   return joursRestants >= 0 && (joursRestants < 45 || passagesRestants < 5)

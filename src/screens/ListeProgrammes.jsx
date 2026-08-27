@@ -1,10 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Plus, Search, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
+import { Plus, Search, FileSpreadsheet, FileText, File, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listerProgrammesParChaine, listerTousLesEpisodes, listerDiffusionsLineairesParChaine } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
 import { calculerDerniereParProgramme } from '../lib/historique.js'
 import { formaterDateLongue, formaterDureeMinutes } from '../lib/semaine.js'
+import { construireDonneesProgrammes, construireLignesExcelProgrammes, construireNomFichierProgrammes, ENTETE_PROGRAMMES } from '../lib/exportProgrammes.js'
 
 const TAILLE_PAGE = 30
 
@@ -115,22 +119,78 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
   const pageAffichee = Math.min(page, nbPages - 1)
   const lignesPage = filtres.slice(pageAffichee * TAILLE_PAGE, (pageAffichee + 1) * TAILLE_PAGE)
 
+  function donneesExport() {
+    return construireDonneesProgrammes({
+      chaineNom: chaineActive.nom,
+      programmes: filtres,
+      dureeMoyenneParProgramme,
+      nbEpisodesParProgramme,
+      derniereDiffusionParProgramme,
+    })
+  }
+
   function exporterExcel() {
     try {
-      const lignes = filtres.map((p) => ({
-        Titre: p.titre,
-        Chaîne: p.chaine_id == null ? 'Toutes chaînes' : p.chaine,
-        Genre: p.genre ?? '',
-        'Durée moyenne': formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id)),
-        'Nb épisodes': nbEpisodesParProgramme.get(p.id) ?? 0,
-        'Dernière diffusion': derniereDiffusionParProgramme.get(p.id) ?? '',
-      }))
-      const feuille = XLSX.utils.json_to_sheet(lignes)
+      const donnees = donneesExport()
+      const feuille = XLSX.utils.aoa_to_sheet(construireLignesExcelProgrammes(donnees))
       const classeur = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(classeur, feuille, 'Programmes')
-      XLSX.writeFile(classeur, 'programmes.xlsx')
+      XLSX.writeFile(classeur, construireNomFichierProgrammes(chaineActive.nom, 'xlsx'))
     } catch (err) {
       setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
+  }
+
+  function exporterPdf() {
+    try {
+      const donnees = donneesExport()
+      const doc = new jsPDF()
+      doc.setFontSize(14)
+      doc.text(donnees.titre, 14, 16)
+      autoTable(doc, {
+        startY: 24,
+        head: [ENTETE_PROGRAMMES],
+        body: donnees.lignes.map((l) => [l.titre, l.chaine, l.genre, l.duree, l.nbEpisodes, l.derniereDiffusion]),
+      })
+      doc.save(construireNomFichierProgrammes(chaineActive.nom, 'pdf'))
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    }
+  }
+
+  async function exporterWord() {
+    try {
+      const donnees = donneesExport()
+      const ligneEntete = (libelles) =>
+        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
+      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+
+      const doc = new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({ text: donnees.titre, heading: HeadingLevel.HEADING_1 }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  ligneEntete(ENTETE_PROGRAMMES),
+                  ...donnees.lignes.map((l) => ligne([l.titre, l.chaine, l.genre, l.duree, l.nbEpisodes, l.derniereDiffusion])),
+                ],
+              }),
+            ],
+          },
+        ],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = construireNomFichierProgrammes(chaineActive.nom, 'docx')
+      lien.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setErreur(`Échec de l'export Word : ${err.message}`)
     }
   }
 
@@ -182,7 +242,25 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
               title="Exporter en Excel"
             >
               <FileSpreadsheet size={16} />
-              Exporter
+              Excel
+            </button>
+            <button
+              type="button"
+              onClick={exporterWord}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+              title="Exporter en Word"
+            >
+              <FileText size={16} />
+              Word
+            </button>
+            <button
+              type="button"
+              onClick={exporterPdf}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+              title="Exporter en PDF"
+            >
+              <File size={16} />
+              PDF
             </button>
             <button
               type="button"

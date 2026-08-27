@@ -4,11 +4,13 @@
 // restent codées en dur, pour des raisons structurelles listées ci-dessous
 // (transparence plutôt qu'une fonctionnalité manquante cachée).
 import { useEffect, useState } from 'react'
-import { listerGenres, listerTranchesAntenne } from '../lib/db.js'
+import { listerGenres, listerTranchesAntenne, listerUtilisateurs } from '../lib/db.js'
+import { lireUtilisateur } from '../lib/session.js'
 import { chargerGenres } from '../lib/genres.js'
 import { chargerTranches } from '../lib/tranches.js'
 import TableauGenres from '../components/TableauGenres.jsx'
 import TableauTranches from '../components/TableauTranches.jsx'
+import TableauUtilisateurs from '../components/TableauUtilisateurs.jsx'
 
 const NOMENCLATURES_NON_MIGREES = [
   {
@@ -22,23 +24,35 @@ const NOMENCLATURES_NON_MIGREES = [
   },
 ]
 
-export default function Administration() {
+export default function Administration({ roleUtilisateur }) {
   const [genres, setGenres] = useState([])
   const [tranches, setTranches] = useState([])
+  const [utilisateurs, setUtilisateurs] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
+  const estAdmin = roleUtilisateur === 'ADMIN'
 
   useEffect(() => {
     rafraichir()
   }, [])
 
+  // Chargée sans condition sur `estAdmin` (permis par les RLS de toute façon,
+  // coût négligeable) — seul l'AFFICHAGE de la section est gardé par le rôle,
+  // ce qui évite toute dépendance sur l'ordre d'arrivée du rôle (chargé de
+  // façon async par App.jsx après la connexion, potentiellement après le
+  // premier rendu de cet écran).
   async function rafraichir() {
     setChargement(true)
     setErreur(null)
     try {
-      const [lignesGenres, lignesTranches] = await Promise.all([listerGenres(), listerTranchesAntenne()])
+      const [lignesGenres, lignesTranches, lignesUtilisateurs] = await Promise.all([
+        listerGenres(),
+        listerTranchesAntenne(),
+        listerUtilisateurs(),
+      ])
       setGenres(lignesGenres)
       setTranches(lignesTranches)
+      setUtilisateurs(lignesUtilisateurs)
       // Resynchronise les caches utilisés partout ailleurs (GENRES/TRANCHES,
       // genres.js/tranches.js) sur l'état qui vient d'être enregistré.
       await Promise.all([chargerGenres(), chargerTranches()])
@@ -62,6 +76,10 @@ export default function Administration() {
 
       <TableauGenres genres={genres} onRafraichir={rafraichir} />
       <TableauTranches tranches={tranches} onRafraichir={rafraichir} />
+
+      {estAdmin && (
+        <TableauUtilisateurs utilisateurs={utilisateurs} utilisateurActif={lireUtilisateur()} onRafraichir={rafraichir} />
+      )}
 
       <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-700">Nomenclatures non administrables (par conception)</h2>
