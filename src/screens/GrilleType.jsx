@@ -39,10 +39,11 @@ import { GENRES } from '../lib/genres.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE, aujourdHuiISO, formaterDateJJMMAAAA } from '../lib/semaine.js'
 import {
-  PX_PAR_MINUTE,
-  HAUTEUR_TOTALE,
-  PAS_ARRONDI_MIN,
+  PRESETS_ZOOM,
+  INDEX_ZOOM_DEFAUT,
   genererMarquesHeures,
+  genererGraduationsMineures,
+  calculerHauteurTotale,
   positionVersMinute,
   disposerEnPistes,
 } from '../lib/grilleAxe.js'
@@ -157,6 +158,7 @@ export default function GrilleType({ chaineActive }) {
   const [previsualisation, setPrevisualisation] = useState(null) // { blocId, heure_debut, heure_fin, jours }
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const [pleinEcran, setPleinEcran] = useState(false)
+  const [indexZoom, setIndexZoom] = useState(INDEX_ZOOM_DEFAUT)
   // Sélection multiple + copier/coller (P28b, même pattern que GrilleLineaire.jsx/P23)
   const [selectionActive, setSelectionActive] = useState(false)
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
@@ -257,6 +259,11 @@ export default function GrilleType({ chaineActive }) {
   }, [chaineActive, grilleTypeActive])
 
   const genresPresents = [...new Set(blocs.map((b) => b.genre_attendu).filter(Boolean))]
+
+  // Zoom (P25, porté depuis GrilleLineaire.jsx) : même liste de paliers
+  // partagée via grilleAxe.js — Vue d'ensemble/Standard/Précis.
+  const presetZoom = PRESETS_ZOOM[indexZoom]
+  const graduationsMineures = useMemo(() => genererGraduationsMineures(presetZoom.pasGraduationMin), [presetZoom])
 
   // Création directe en base (pas d'étape de formulaire intermédiaire), le
   // panneau s'ouvre ensuite sur le bloc fraîchement créé — même logique que
@@ -381,15 +388,15 @@ export default function GrilleType({ chaineActive }) {
     if (etat.mode === 'haut' || etat.mode === 'bas') {
       const rect = etat.rectsColonnes[etat.jourOccurrence]
       if (!rect) return
-      const minute = positionVersMinute(e.clientY - rect.top)
+      const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
       const debutMin = minutesDepuisDebutAntenne(etat.bloc.heure_debut)
       const finMin = minutesDepuisDebutAntenne(etat.bloc.heure_fin)
       let nouvelle
       if (etat.mode === 'bas') {
-        if (minute - debutMin < PAS_ARRONDI_MIN) return
+        if (minute - debutMin < presetZoom.pasArrondiMin) return
         nouvelle = { ...previsualisationRef.current, heure_fin: minutesEnHeure(minute) }
       } else {
-        if (finMin - minute < PAS_ARRONDI_MIN) return
+        if (finMin - minute < presetZoom.pasArrondiMin) return
         nouvelle = { ...previsualisationRef.current, heure_debut: minutesEnHeure(minute) }
       }
       previsualisationRef.current = nouvelle
@@ -817,6 +824,18 @@ export default function GrilleType({ chaineActive }) {
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-md border border-slate-300 text-sm" title="Précision d'affichage">
+              {PRESETS_ZOOM.map((preset, i) => (
+                <button
+                  key={preset.code}
+                  type="button"
+                  onClick={() => setIndexZoom(i)}
+                  className={`px-3 py-1.5 ${i === indexZoom ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
             {!selectionActive && (
               <button
                 type="button"
@@ -943,15 +962,24 @@ export default function GrilleType({ chaineActive }) {
                   </div>
                 ))}
 
-                <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: HAUTEUR_TOTALE }}>
+                <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: calculerHauteurTotale(presetZoom) }}>
                   {MARQUES_HEURES.map((m) => (
                     <div
                       key={m}
-                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE - 6, right: 8 }}
+                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute - 6, right: 8 }}
                       className="text-[11px] text-slate-400"
                     >
                       {minutesEnHeure(m)}
                     </div>
+                  ))}
+                  {/* Graduations mineures (P25, portées depuis GrilleLineaire.jsx) : trait
+                      court sans heure écrite, pas dépendant du palier de zoom courant. */}
+                  {graduationsMineures.map((m) => (
+                    <div
+                      key={m}
+                      style={{ position: 'absolute', top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute, right: 8, width: 6 }}
+                      className="border-t border-slate-300"
+                    />
                   ))}
                 </div>
 
@@ -965,12 +993,12 @@ export default function GrilleType({ chaineActive }) {
                         colonneRefs.current[j.index] = el
                       }}
                       className="relative border-l border-slate-100"
-                      style={{ gridRow: 2, gridColumn: i + 2, height: HAUTEUR_TOTALE }}
+                      style={{ gridRow: 2, gridColumn: i + 2, height: calculerHauteurTotale(presetZoom) }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault()
                         const rect = e.currentTarget.getBoundingClientRect()
-                        const minute = positionVersMinute(e.clientY - rect.top)
+                        const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
                         deposerType(j.index, minute)
                       }}
                     >
@@ -978,7 +1006,14 @@ export default function GrilleType({ chaineActive }) {
                         <div
                           key={m}
                           className="absolute left-0 right-0 border-t border-slate-100"
-                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE }}
+                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute }}
+                        />
+                      ))}
+                      {graduationsMineures.map((m) => (
+                        <div
+                          key={m}
+                          className="absolute left-0 right-0 border-t border-dashed border-slate-100"
+                          style={{ top: (m - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute }}
                         />
                       ))}
                       {pistees.map(({ item: bloc, debut: debutOrig, fin: finOrig, piste, nbPistes }) => {
@@ -992,8 +1027,8 @@ export default function GrilleType({ chaineActive }) {
                         // prévisualisation (les autres occurrences du même
                         // bloc restent à leur état d'origine, affichées normalement).
                         if (enPrevisualisation && !previsualisation.jours.includes(j.index)) return null
-                        const top = (debut - DEBUT_JOURNEE_ANTENNE) * PX_PAR_MINUTE
-                        const hauteur = Math.max(14, (fin - debut) * PX_PAR_MINUTE - 2)
+                        const top = (debut - DEBUT_JOURNEE_ANTENNE) * presetZoom.pxParMinute
+                        const hauteur = Math.max(14, (fin - debut) * presetZoom.pxParMinute - 2)
                         const { fond, texte } = couleurGenre(bloc.genre_attendu)
                         const estSelectionne = blocSelectionne?.id === bloc.id
                         const estCoche = selectionActive && blocsSelectionnesIds.has(bloc.id)
