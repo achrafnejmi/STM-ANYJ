@@ -172,14 +172,23 @@ export function parserFeuilleGrilleType(workbook) {
   return { titre, coupures }
 }
 
-// Construit l'aperçu (une ligne par coupure détectée) : genre deviné/vide,
-// durée devinée (repli sur la hauteur de fusion × 15 min si aucun motif),
-// ambre si genre vide OU durée incertaine, cochée par défaut seulement si un
-// genre a été deviné (genre_attendu est NOT NULL en base — une ligne à genre
-// vide ne peut de toute façon pas s'enregistrer telle quelle).
+// Genre de repli quand aucun mot-clé ne correspond (ex. « Prière du
+// vendredi », « Al Madih », « Nafahat Ramadania » — contenu religieux hors de
+// la liste de mots-clés validée, cf. REGLES_GENRE) : une estimation modifiable
+// dans l'aperçu, jamais une case vide qui bloquerait la ligne (genre_attendu
+// est NOT NULL en base) — la ligne reste cochable d'emblée (via « Sélectionner
+// tout » ou individuellement), toujours signalée en ambre pour relecture.
+const GENRE_PAR_DEFAUT = 'Divertissement'
+
+// Construit l'aperçu (une ligne par coupure détectée) : genre deviné par
+// mots-clés, sinon GENRE_PAR_DEFAUT (jamais vide) ; durée devinée (repli sur
+// la hauteur de fusion × 15 min si aucun motif) ; ambre si le genre est une
+// estimation (pas de mot-clé trouvé) OU si la durée est incertaine ; cochée
+// par défaut seulement si le genre vient d'un mot-clé (une estimation reste
+// décochée par défaut, à valider explicitement par l'utilisateur).
 export function apparierProposition(coupures) {
   return coupures.map((c, i) => {
-    const genre = classifierGenre(c.texte)
+    const genreDevine = classifierGenre(c.texte)
     const { minutes, confiance } = extraireDureeMinutes(c.texte)
     const dureeMinutes = minutes ?? c.nbCreneaux * 15
     return {
@@ -188,9 +197,9 @@ export function apparierProposition(coupures) {
       heureDebut: c.heureDebut,
       dureeMinutes,
       jours: c.jours,
-      genre: genre ?? '',
-      ambre: !genre || confiance !== 'haute',
-      coche: Boolean(genre),
+      genre: genreDevine ?? GENRE_PAR_DEFAUT,
+      ambre: !genreDevine || confiance !== 'haute',
+      coche: Boolean(genreDevine),
     }
   })
 }

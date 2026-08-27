@@ -59,6 +59,16 @@ export default function PanneauImportGrilleType({ chaineActive, onFermer, onImpo
     setLignes((prev) => prev.map((l) => (l.id === id ? { ...l, ...champs } : l)))
   }
 
+  // Coche/décoche toutes les lignes d'un coup (chaque ligne a désormais
+  // toujours un genre — deviné ou GENRE_PAR_DEFAUT — donc toutes sont
+  // cochables ; les lignes ambre restent visuellement signalées pour une
+  // relecture rapide avant confirmation).
+  const tousCoches = lignes.length > 0 && lignes.every((l) => l.coche)
+  function toggleSelectionnerTout() {
+    const prochainEtat = !tousCoches
+    setLignes((prev) => prev.map((l) => (l.genre ? { ...l, coche: prochainEtat } : l)))
+  }
+
   function basculerJour(id, jour) {
     setLignes((prev) =>
       prev.map((l) =>
@@ -165,7 +175,14 @@ export default function PanneauImportGrilleType({ chaineActive, onFermer, onImpo
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="w-6 py-1.5"></th>
+                  <th className="w-6 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={tousCoches}
+                      onChange={toggleSelectionnerTout}
+                      title="Tout sélectionner / tout désélectionner"
+                    />
+                  </th>
                   <th className="py-1.5 pr-2">Nom</th>
                   <th className="py-1.5 pr-2">Début</th>
                   <th className="py-1.5 pr-2">Durée (min)</th>
