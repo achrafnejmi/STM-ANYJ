@@ -56,6 +56,12 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
     }))
   }
 
+  // "Tous les jours" (même pattern que l'onglet Répéter de l'Inspecteur,
+  // P27b) : bascule entre les 7 jours cochés et aucun, en un clic.
+  function toggleTousLesJours() {
+    setForm((f) => ({ ...f, jours: f.jours.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6] }))
+  }
+
   async function enregistrer(e) {
     e.preventDefault()
     if (form.jours.length === 0) {
@@ -153,7 +159,13 @@ export default function PanneauBlocGrilleType({ bloc, chaineActive, grilleTypeId
         <p className="text-xs text-slate-500">Durée : {formaterDuree(form.heure_debut, form.heure_fin)}</p>
 
         <div>
-          <span className="mb-1 block text-sm font-medium text-slate-700">Jours d'application *</span>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="block text-sm font-medium text-slate-700">Jours d'application *</span>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input type="checkbox" checked={form.jours.length === 7} onChange={toggleTousLesJours} />
+              Tous les jours
+            </label>
+          </div>
           <div className="flex gap-1">
             {JOURS_ABBR.map((j, i) => (
               <button
