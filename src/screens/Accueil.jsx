@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
-import { FileSpreadsheet, FileText, File } from 'lucide-react'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 import {
   listerProgrammesParChaine,
   listerTousLesEpisodes,
@@ -289,18 +289,7 @@ export default function Accueil({ chaineActive }) {
             <p className="text-sm text-slate-500">Semaine du {formaterPlageSemaine(lundi)} (période de référence pour « non programmés »)</p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={exporterExcel} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50">
-              <FileSpreadsheet size={15} />
-              Excel
-            </button>
-            <button type="button" onClick={exporterWord} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50">
-              <FileText size={15} />
-              Word
-            </button>
-            <button type="button" onClick={exporterPdf} className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
-              <File size={15} />
-              PDF
-            </button>
+            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
           </div>
         </div>
 

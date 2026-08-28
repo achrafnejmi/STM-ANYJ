@@ -15,11 +15,7 @@ import {
   PanelLeftOpen,
   CheckSquare,
   ClipboardPaste,
-  Download,
   Save,
-  FileSpreadsheet,
-  FileText,
-  File,
   FileUp,
 } from 'lucide-react'
 import {
@@ -52,6 +48,7 @@ import Modal from '../components/Modal.jsx'
 import PaletteGenres from '../components/PaletteGenres.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 import PanneauImportGrilleType from '../components/PanneauImportGrilleType.jsx'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
@@ -163,7 +160,6 @@ export default function GrilleType({ chaineActive }) {
   const [selectionActive, setSelectionActive] = useState(false)
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
-  const [exportOuvert, setExportOuvert] = useState(false)
   const [importOuvert, setImportOuvert] = useState(false)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
@@ -885,16 +881,13 @@ export default function GrilleType({ chaineActive }) {
               <FileUp size={15} />
               Importer
             </button>
-            <button
-              type="button"
-              onClick={() => setExportOuvert(true)}
+            <BoutonExporter
+              onExcel={exporterGrilleTypeExcel}
+              onWord={exporterGrilleTypeWord}
+              onPdf={exporterGrilleTypePdf}
               disabled={!grilleTypeActive}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-              title="Exporter la grille type (Excel/Word/PDF)"
-            >
-              <Download size={15} />
-              Exporter
-            </button>
+              sousTitre={grilleTypeActive ? `${grilleTypeActive.nom} — ${blocs.length} bloc${blocs.length > 1 ? 's' : ''}` : undefined}
+            />
             <button
               type="button"
               onClick={() => succes('Grille type enregistrée ✓')}
@@ -1136,25 +1129,6 @@ export default function GrilleType({ chaineActive }) {
         <PanneauImportGrilleType chaineActive={chaineActive} onFermer={() => setImportOuvert(false)} onImporte={documentImporte} />
       )}
 
-      {exportOuvert && (
-        <Modal titre="Exporter la grille type" onFermer={() => setExportOuvert(false)}>
-          <div className="space-y-3 text-sm">
-            <p className="text-xs text-slate-500">{grilleTypeActive?.nom} — {blocs.length} bloc{blocs.length > 1 ? 's' : ''}</p>
-            <button type="button" onClick={exporterGrilleTypeExcel} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
-              <FileSpreadsheet size={16} />
-              Excel
-            </button>
-            <button type="button" onClick={exporterGrilleTypeWord} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">
-              <FileText size={16} />
-              Word
-            </button>
-            <button type="button" onClick={exporterGrilleTypePdf} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
-              <File size={16} />
-              PDF
-            </button>
-          </div>
-        </Modal>
-      )}
     </div>
   )
 }

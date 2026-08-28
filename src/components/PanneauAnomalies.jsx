@@ -24,7 +24,7 @@ export default function PanneauAnomalies({ anomalies, onFermer, onAller }) {
   const compte = (niveau) => anomalies.filter((a) => a.niveau === niveau).length
 
   return (
-    <div className="fixed right-0 top-0 z-30 flex h-full w-96 flex-col overflow-y-auto border-l border-slate-200 bg-white p-4 shadow-xl">
+    <div className="animer-entree-panneau fixed right-0 top-0 z-30 flex h-full w-96 flex-col overflow-y-auto border-l border-slate-200 bg-white p-4 shadow-xl">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">Anomalies</h3>
         <button type="button" onClick={onFermer} className="text-slate-400 hover:text-slate-600">
@@ -81,7 +81,7 @@ export default function PanneauAnomalies({ anomalies, onFermer, onAller }) {
         })}
         {visibles.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-10 text-center">
-            <ShieldCheck size={24} className="text-emerald-500" />
+            <ShieldCheck size={24} className="text-snrt-success" />
             <p className="text-sm font-semibold text-slate-700">Rien à signaler</p>
             <p className="text-xs text-slate-500">Chevauchements, matériel, trous et écarts de grille type : la période est conforme.</p>
           </div>

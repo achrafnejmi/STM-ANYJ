@@ -8,8 +8,12 @@ import Modal from './Modal.jsx'
 
 const DUREE_AFFICHAGE_MS = 4000
 
+// P31 — passe design : le toast succès porte désormais le vert de marque
+// (--color-snrt-success), réservé à ce type de signal positif dans toute
+// l'app — plus le vert générique Tailwind (emerald) utilisé ailleurs pour
+// des raisons sans lien (ex. icône Excel, convention universelle).
 const STYLES_TOAST = {
-  succes: { accent: 'bg-emerald-500', halo: 'bg-emerald-100 text-emerald-600', Icone: CheckCircle2 },
+  succes: { accent: 'bg-snrt-success', halo: 'bg-snrt-success/10 text-snrt-success', Icone: CheckCircle2 },
   erreur: { accent: 'bg-red-500', halo: 'bg-red-100 text-red-600', Icone: CircleAlert },
   info: { accent: 'bg-slate-400', halo: 'bg-slate-100 text-slate-600', Icone: Info },
 }

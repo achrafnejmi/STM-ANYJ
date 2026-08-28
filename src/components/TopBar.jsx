@@ -17,7 +17,7 @@ export default function TopBar({
       <div className={`h-[3px] w-full ${chaineActive.couleur}`} />
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={onToggleSidebar} className="text-slate-500 hover:text-slate-700 lg:hidden">
+          <button type="button" onClick={onToggleSidebar} className="text-slate-500 hover:text-snrt-accent lg:hidden">
             <Menu size={22} />
           </button>
           <Marque variante="topbar" />
@@ -57,7 +57,7 @@ export default function TopBar({
             type="button"
             onClick={onOuvrirNotifications}
             title="Notifications"
-            className="relative text-slate-500 hover:text-slate-700"
+            className="relative text-slate-500 hover:text-snrt-accent"
           >
             <Bell size={20} />
             {nbNotificationsNonLues > 0 && (

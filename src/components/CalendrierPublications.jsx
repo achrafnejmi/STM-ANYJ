@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
-import { ChevronLeft, ChevronRight, Plus, FileSpreadsheet, FileText, File, Undo2, Redo2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Undo2, Redo2 } from 'lucide-react'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -31,6 +31,7 @@ import LogoPlateforme from './LogosPlateformes.jsx'
 import CataloguePanel from './CataloguePanel.jsx'
 import PopoverHistorique from './PopoverHistorique.jsx'
 import PanneauPublication from './PanneauPublication.jsx'
+import BoutonExporter from './BoutonExporter.jsx'
 import { useNotification } from './NotificationProvider.jsx'
 
 // P30 rollback : deux piles annuler/rétablir indépendantes (Réseaux/VOD) —
@@ -347,17 +348,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
               <Plus size={15} />
               Ajouter
             </button>
-            <div className="flex rounded-md border border-slate-300">
-              <button type="button" onClick={exporterExcel} title="Exporter en Excel" className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50">
-                <FileSpreadsheet size={15} />
-              </button>
-              <button type="button" onClick={exporterPdf} title="Exporter en PDF" className="border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50">
-                <FileText size={15} />
-              </button>
-              <button type="button" onClick={exporterWord} title="Exporter en Word" className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50">
-                <File size={15} />
-              </button>
-            </div>
+            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
             <div className="flex rounded-md border border-slate-300">
               <button
                 type="button"

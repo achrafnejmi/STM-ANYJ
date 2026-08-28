@@ -47,6 +47,8 @@ export function construireLignesExportConducteur(lignes) {
   ])
 }
 
-export function construireNomFichierConducteur(date) {
-  return `Conducteur — ${formaterJourDateLongue(date)}.xlsx`
+// `extension` (P31 — passe design, ajoute Word/PDF) : 'xlsx' par défaut,
+// comportement inchangé pour l'appel existant.
+export function construireNomFichierConducteur(date, extension = 'xlsx') {
+  return `Conducteur — ${formaterJourDateLongue(date)}.${extension}`
 }

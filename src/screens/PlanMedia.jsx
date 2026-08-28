@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
 import {
   ChevronLeft,
   ChevronRight,
   Library,
   PlusSquare,
-  FileSpreadsheet,
   Upload,
   Plus,
   Pencil,
@@ -52,7 +54,13 @@ import {
   DUREE_ECRAN_DEFAUT_SECONDES,
 } from '../lib/planMedia.js'
 import { calculerCouverture } from '../lib/couverture.js'
-import { construireLignesPlanMedia, construireNomFichierPlanMedia, TITRE_FEUILLE_PLAN_MEDIA, ENTETE_PLAN_MEDIA } from '../lib/exportPlanMedia.js'
+import {
+  construireLignesPlanMedia,
+  construireLignesTextePlanMedia,
+  construireNomFichierPlanMedia,
+  TITRE_FEUILLE_PLAN_MEDIA,
+  ENTETE_PLAN_MEDIA,
+} from '../lib/exportPlanMedia.js'
 import { TRANCHES } from '../lib/tranches.js'
 import Modal from '../components/Modal.jsx'
 import TableauCampagnes from '../components/TableauCampagnes.jsx'
@@ -60,6 +68,7 @@ import PanneauReglesHabillage from '../components/PanneauReglesHabillage.jsx'
 import PanneauApercuPlanMedia from '../components/PanneauApercuPlanMedia.jsx'
 import PanneauCouvertureCampagnes from '../components/PanneauCouvertureCampagnes.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 import PanneauInsertionManuelle from '../components/PanneauInsertionManuelle.jsx'
 import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
@@ -558,6 +567,57 @@ export default function PlanMedia({ chaineActive }) {
     }
   }
 
+  // Word/PDF (P31 — passe design, unification du bouton Export) : mêmes
+  // données que l'Excel métier ci-dessus (même regroupement/tri/libellés,
+  // construireLignesTextePlanMedia ne fait que reformater H.FIN/DUREE en
+  // texte plutôt qu'en fraction de journée) — présentées en tableau simple,
+  // pas de mise en forme du fichier réel à reproduire pour ces 2 formats.
+  function exporterPlanMediaPdf() {
+    try {
+      const lignes = construireLignesTextePlanMedia(dates, diffusions, elementsSecondairesActifs, programmesParId, campagnesParId)
+      const doc = new jsPDF()
+      doc.setFontSize(14)
+      doc.text(TITRE_FEUILLE_PLAN_MEDIA, 14, 16)
+      autoTable(doc, { startY: 24, head: [ENTETE_PLAN_MEDIA], body: lignes })
+      doc.save(construireNomFichierPlanMedia(vue, dates, 'pdf'))
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    }
+  }
+
+  async function exporterPlanMediaWord() {
+    try {
+      const lignes = construireLignesTextePlanMedia(dates, diffusions, elementsSecondairesActifs, programmesParId, campagnesParId)
+      const ligneEntete = (libelles) =>
+        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
+      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+
+      const doc = new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({ text: TITRE_FEUILLE_PLAN_MEDIA, heading: HeadingLevel.HEADING_1 }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [ligneEntete(ENTETE_PLAN_MEDIA), ...lignes.map(ligne)],
+              }),
+            ],
+          },
+        ],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = construireNomFichierPlanMedia(vue, dates, 'docx')
+      lien.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setErreur(`Échec de l'export Word : ${err.message}`)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-6">
@@ -758,39 +818,36 @@ export default function PlanMedia({ chaineActive }) {
         </div>
 
         {ongletPanneau === 'COMPOSITION' && (
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-            <button
-              type="button"
-              onClick={() => setBibliothequeOuverte(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              <Library size={15} />
-              Bibliothèque de spots
-            </button>
-            <button
-              type="button"
-              onClick={() => setInsertionOuverte(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              <PlusSquare size={15} />
-              Insertion manuelle
-            </button>
-            <button
-              type="button"
-              onClick={exporterPlanMedia}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"
-            >
-              <FileSpreadsheet size={15} />
-              Exporter (Excel)
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportOuvert(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              <Upload size={15} />
-              Importer
-            </button>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInsertionOuverte(true)}
+                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              >
+                <PlusSquare size={15} />
+                Insertion manuelle
+              </button>
+              <div className="flex rounded-md border border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => setBibliothequeOuverte(true)}
+                  className="flex items-center gap-1.5 rounded-l-md border-r border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  <Library size={15} />
+                  Bibliothèque de spots
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportOuvert(true)}
+                  className="flex items-center gap-1.5 rounded-r-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  <Upload size={15} />
+                  Importer
+                </button>
+              </div>
+            </div>
+            <BoutonExporter onExcel={exporterPlanMedia} onWord={exporterPlanMediaWord} onPdf={exporterPlanMediaPdf} />
           </div>
         )}
 

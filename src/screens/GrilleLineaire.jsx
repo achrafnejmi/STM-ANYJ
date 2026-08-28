@@ -19,11 +19,9 @@ import {
   Trash2,
   CheckSquare,
   ClipboardPaste,
-  Download,
-  Save,
+  MoreHorizontal,
   FileSpreadsheet,
-  FileText,
-  File,
+  Save,
 } from 'lucide-react'
 import {
   listerDiffusionsLineairesParChaine,
@@ -85,6 +83,7 @@ import CataloguePanel from '../components/CataloguePanel.jsx'
 import PopoverHistorique from '../components/PopoverHistorique.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const DUREE_PAR_DEFAUT_MIN = 30
@@ -119,7 +118,10 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
   const [blocModifie, setBlocModifie] = useState(false)
   const [anomaliesOuvertes, setAnomaliesOuvertes] = useState(false)
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
-  const [listeTransmissionsOuverte, setListeTransmissionsOuverte] = useState(false)
+  // P31 — passe design : Renommer/Dupliquer/Supprimer (actions rares sur le
+  // document) regroupées derrière un petit menu « … » plutôt que 3 boutons
+  // à poids égal avec les contrôles d'édition fréquents de la barre du bas.
+  const [menuDocumentOuvert, setMenuDocumentOuvert] = useState(false)
   // P27b : 2 positions seulement ('TNT' | 'SATELLITE', pas de vue "Unifié") —
   // défaut Satellite, la vue où se fait l'édition au quotidien.
   const [vueVecteur, setVueVecteur] = useState('SATELLITE')
@@ -807,31 +809,21 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
 
           {grilleActive && (
             <div className="ml-auto flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setModaleGrille('RENOMMER')}
+              <BoutonExporter
+                onExcel={exporterTransmissionsExcel}
+                onWord={exporterTransmissionsWord}
+                onPdf={exporterTransmissionsPdf}
+                sousTitre={`${grilleActive.nom} — ${periodeLabel} (${diffusionsAffichees.length} transmission${diffusionsAffichees.length > 1 ? 's' : ''})`}
                 className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Pencil size={12} />
-                Renommer
-              </button>
-              <button
-                type="button"
-                onClick={() => setModaleGrille('DUPLIQUER')}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Copy size={12} />
-                Dupliquer
-              </button>
-              <button
-                type="button"
-                onClick={() => setListeTransmissionsOuverte(true)}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                title="Exporter la grille (Excel/Word/PDF/TNT+SAT)"
-              >
-                <Download size={12} />
-                Exporter
-              </button>
+                optionsSupplementaires={[
+                  {
+                    label: 'Excel (TNT + SAT)',
+                    Icone: FileSpreadsheet,
+                    onClick: exporterTransmissionsExcelTNTSat,
+                    title: 'Feuilles TNT + Satellite séparées, indépendamment de la bascule d’affichage',
+                  },
+                ]}
+              />
               {!grilleActive.est_live && (
                 <button
                   type="button"
@@ -843,13 +835,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               )}
               <button
                 type="button"
-                onClick={supprimerGrilleActive}
-                disabled={grilleActive.est_live}
-                title={grilleActive.est_live ? 'Basculez une autre grille en live avant de supprimer celle-ci' : 'Supprimer'}
-                className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => setMenuDocumentOuvert(true)}
+                title="Autres actions (renommer, dupliquer, supprimer)"
+                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
               >
-                <Trash2 size={12} />
-                Supprimer
+                <MoreHorizontal size={14} />
               </button>
             </div>
           )}
@@ -1328,32 +1318,43 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
         />
       )}
 
-      {listeTransmissionsOuverte && (
-        <Modal titre="Exporter la grille" onFermer={() => setListeTransmissionsOuverte(false)}>
-          <div className="space-y-3 text-sm">
-            <p className="text-xs text-slate-500">
-              {grilleActive?.nom} — {periodeLabel} ({diffusionsAffichees.length} transmission{diffusionsAffichees.length > 1 ? 's' : ''})
-            </p>
-            <button type="button" onClick={exporterTransmissionsExcel} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
-              <FileSpreadsheet size={16} />
-              Excel
-            </button>
-            <button type="button" onClick={exporterTransmissionsWord} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">
-              <FileText size={16} />
-              Word
-            </button>
-            <button type="button" onClick={exporterTransmissionsPdf} className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
-              <File size={16} />
-              PDF
+      {menuDocumentOuvert && grilleActive && (
+        <Modal titre={`Grille « ${grilleActive.nom} »`} onFermer={() => setMenuDocumentOuvert(false)}>
+          <div className="space-y-2 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleGrille('RENOMMER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Pencil size={16} />
+              Renommer
             </button>
             <button
               type="button"
-              onClick={exporterTransmissionsExcelTNTSat}
-              title="Feuilles TNT + Satellite séparées, indépendamment de la bascule d'affichage"
-              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleGrille('DUPLIQUER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
-              <FileSpreadsheet size={16} />
-              Excel (TNT + SAT)
+              <Copy size={16} />
+              Dupliquer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                supprimerGrilleActive()
+              }}
+              disabled={grilleActive.est_live}
+              title={grilleActive.est_live ? 'Basculez une autre grille en live avant de supprimer celle-ci' : 'Supprimer'}
+              className="flex w-full items-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={16} />
+              Supprimer
             </button>
           </div>
         </Modal>

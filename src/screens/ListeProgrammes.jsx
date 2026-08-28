@@ -3,12 +3,13 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
-import { Plus, Search, FileSpreadsheet, FileText, File, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listerProgrammesParChaine, listerTousLesEpisodes, listerDiffusionsLineairesParChaine } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
 import { calculerDerniereParProgramme } from '../lib/historique.js'
 import { formaterDateLongue, formaterDureeMinutes } from '../lib/semaine.js'
 import { construireDonneesProgrammes, construireLignesExcelProgrammes, construireNomFichierProgrammes, ENTETE_PROGRAMMES } from '../lib/exportProgrammes.js'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 
 const TAILLE_PAGE = 30
 
@@ -235,33 +236,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={exporterExcel}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
-              title="Exporter en Excel"
-            >
-              <FileSpreadsheet size={16} />
-              Excel
-            </button>
-            <button
-              type="button"
-              onClick={exporterWord}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
-              title="Exporter en Word"
-            >
-              <FileText size={16} />
-              Word
-            </button>
-            <button
-              type="button"
-              onClick={exporterPdf}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-              title="Exporter en PDF"
-            >
-              <File size={16} />
-              PDF
-            </button>
+            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
             <button
               type="button"
               onClick={onNouveau}

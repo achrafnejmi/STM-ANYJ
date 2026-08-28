@@ -278,7 +278,7 @@ export default function PanneauImportPlanMedia({ chaineActive, diffusions, campa
                         ) : l.statutCoupure === 'NON_APPARIABLE' ? (
                           <span className="text-slate-400">Aucune transmission ce jour-là</span>
                         ) : (
-                          <span className="text-emerald-600">appariée</span>
+                          <span className="text-snrt-success">appariée</span>
                         )}
                       </td>
                       <td className="py-1">

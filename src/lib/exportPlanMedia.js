@@ -86,11 +86,39 @@ export function construireLignesPlanMedia(dates, diffusions, elementsSecondaires
   return { lignes, cellulesHeure }
 }
 
+function formaterFractionJournee(fraction) {
+  if (fraction === '' || fraction == null) return ''
+  const secondesTotales = Math.round(fraction * 86400)
+  const h = Math.floor(secondesTotales / 3600)
+  const m = Math.floor((secondesTotales % 3600) / 60)
+  const s = secondesTotales % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+// Version texte (Word/PDF, P31 — passe design, ajoute les formats manquants
+// au même contenu déjà exporté en Excel) : mêmes lignes que
+// construireLignesPlanMedia (même regroupement/tri/libellés, aucune logique
+// dupliquée), juste H.FIN/DUREE reformatés en "HH:MM:SS" au lieu de
+// fractions de journée Excel (mise en forme numérique propre à la feuille
+// XLSX, sans objet dans un document texte).
+export function construireLignesTextePlanMedia(dates, diffusions, elementsSecondaires, programmesParId, campagnesParId) {
+  const { lignes } = construireLignesPlanMedia(dates, diffusions, elementsSecondaires, programmesParId, campagnesParId)
+  return lignes.map(([jour, hFin, contexte, contenu, duree]) => [
+    jour,
+    formaterFractionJournee(hFin),
+    contexte,
+    contenu,
+    formaterFractionJournee(duree),
+  ])
+}
+
 // Nom de fichier dynamique selon la vue affichée (pas un nom fixe type
 // "PM_5AOUT" — ça n'était qu'un exemple du fichier réel à remplacer).
-export function construireNomFichierPlanMedia(vue, dates) {
-  if (vue === 'JOUR') return `Plan média — ${formaterJourDateLongue(dates[0])}.xlsx`
+// `extension` (P31 — passe design, ajoute Word/PDF) : 'xlsx' par défaut,
+// comportement inchangé pour l'appel existant.
+export function construireNomFichierPlanMedia(vue, dates, extension = 'xlsx') {
+  if (vue === 'JOUR') return `Plan média — ${formaterJourDateLongue(dates[0])}.${extension}`
   const debut = dates[0]
   const fin = dates[dates.length - 1]
-  return `Plan média — semaine du ${formaterDateLonguePadded(debut)} au ${formaterDateLonguePadded(fin)}.xlsx`
+  return `Plan média — semaine du ${formaterDateLonguePadded(debut)} au ${formaterDateLonguePadded(fin)}.${extension}`
 }

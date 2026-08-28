@@ -194,7 +194,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
                 >
                   <td className="py-2 pr-4 text-slate-700">{ep.numero ?? '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{ep.titre || '—'}</td>
-                  <td className="py-2 pr-4">{ep.pad && <CheckCircle2 size={16} className="text-emerald-600" />}</td>
+                  <td className="py-2 pr-4">{ep.pad && <CheckCircle2 size={16} className="text-snrt-success" />}</td>
                   <td className="py-2 pr-4">
                     <button
                       type="button"

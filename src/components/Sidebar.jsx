@@ -16,7 +16,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
       >
         <div className={`flex items-center px-4 py-5 ${repliee ? 'lg:justify-center lg:px-0' : 'justify-between'}`}>
           <Marque variante="sidebar" />
-          <button type="button" onClick={onFermer} className="text-white/70 hover:text-white lg:hidden">
+          <button type="button" onClick={onFermer} className="text-white/70 hover:text-snrt-accent lg:hidden">
             <X size={20} />
           </button>
         </div>
@@ -31,6 +31,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
                 repliee ? 'lg:justify-center lg:px-2' : ''
               } ${section === id ? 'bg-snrt-navy-hover text-white' : 'text-white/70 hover:bg-snrt-navy-hover hover:text-white'}`}
             >
+              {section === id && <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-snrt-accent" />}
               <Icone size={18} className="shrink-0" />
               <span className={repliee ? 'flex-1 text-left lg:hidden' : 'flex-1 text-left'}>{label}</span>
               {badges[id] > 0 && (
@@ -51,7 +52,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
           type="button"
           onClick={onBasculerReplier}
           title={repliee ? 'Étendre le menu' : 'Réduire le menu'}
-          className={`hidden items-center border-t border-white/10 py-3 text-white/70 hover:bg-snrt-navy-hover hover:text-white lg:flex ${
+          className={`hidden items-center border-t border-white/10 py-3 text-white/70 hover:bg-snrt-navy-hover hover:text-snrt-accent lg:flex ${
             repliee ? 'justify-center' : 'justify-end px-4'
           }`}
         >

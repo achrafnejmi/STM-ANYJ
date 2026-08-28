@@ -47,10 +47,12 @@ function statutFenetre(f, aujourdHui) {
   return 'vert'
 }
 
+// P31 — passe design : le vert « conforme » du sémaphore rouge/ambre/vert
+// (§3.3) porte le vert de marque réservé au succès, pas l'emerald générique.
 const CLASSES_STATUT = {
   rouge: 'bg-red-100 text-red-700',
   ambre: 'bg-amber-100 text-amber-700',
-  vert: 'bg-emerald-100 text-emerald-700',
+  vert: 'bg-snrt-success/10 text-snrt-success',
 }
 
 // Cartes de fenêtres de droits (EXG-M6-04) : début / fin / passages restants

@@ -62,7 +62,7 @@ function classifierDroits(programme, fenetresDroits, aujourdHui) {
       fenetre,
     }
   }
-  return { categorie: 'OK', Icone: ShieldCheck, classeTexte: 'text-emerald-600', libelle: 'Droits ouverts', fenetre }
+  return { categorie: 'OK', Icone: ShieldCheck, classeTexte: 'text-snrt-success', libelle: 'Droits ouverts', fenetre }
 }
 
 export default function Contrats({ chaineActive, onOuvrirProgramme }) {

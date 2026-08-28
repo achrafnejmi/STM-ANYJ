@@ -108,7 +108,7 @@ export default function RechercheGlobale({ chaineActive, ouverte, onFermer, onOu
                   <span className="font-mono text-xs text-slate-500">ÉP.{String(r.episode.numero ?? '?').padStart(2, '0')}</span>
                   <span className="truncate text-slate-800">{r.episode.titre || 'Sans titre'}</span>
                   <span className="shrink-0 text-xs text-slate-500">— {r.programme.titre}</span>
-                  {r.episode.pad && <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />}
+                  {r.episode.pad && <CheckCircle2 size={14} className="shrink-0 text-snrt-success" />}
                 </span>
               )}
             </button>

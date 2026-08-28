@@ -23,7 +23,7 @@ export default function PanneauNotifications({ notifications, onFermer, onAller,
   const nbNonLues = notifications.filter((n) => !n.lu).length
 
   return (
-    <div className="fixed right-0 top-0 z-30 flex h-full w-96 flex-col overflow-y-auto border-l border-slate-200 bg-white p-4 shadow-xl">
+    <div className="animer-entree-panneau fixed right-0 top-0 z-30 flex h-full w-96 flex-col overflow-y-auto border-l border-slate-200 bg-white p-4 shadow-xl">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
         <button type="button" onClick={onFermer} className="text-slate-400 hover:text-slate-600">

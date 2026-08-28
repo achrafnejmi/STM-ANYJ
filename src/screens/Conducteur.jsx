@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Plus, Trash2 } from 'lucide-react'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import {
   listerProgrammesParChaine,
   listerDiffusionsLineairesParGrille,
@@ -18,6 +21,7 @@ import { secondesEnHeureHMS } from '../lib/planMedia.js'
 import { construireLignesExportConducteur, ENTETE_CONDUCTEUR, construireNomFichierConducteur } from '../lib/exportConducteur.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import PanneauInsertionManuelle from '../components/PanneauInsertionManuelle.jsx'
+import BoutonExporter from '../components/BoutonExporter.jsx'
 
 const VECTEURS = [
   { code: 'UNIFIE', label: 'Unifié' },
@@ -203,14 +207,14 @@ export default function Conducteur({ chaineActive }) {
   }
 
   // EXG-M7-06 : « exportable et transmissible au système de diffusion » —
-  // aucune régie réelle dans ce PoC, l'export EST la transmission.
-  function exporter() {
+  // aucune régie réelle dans ce PoC, l'export EST la transmission (retouche
+  // P31 : le bouton s'appelle désormais « Exporter », plus honnête sur
+  // l'absence de vraie régie connectée, et propose aussi Word/PDF).
+  const titreExport = `Conducteur — ${chaineActive.nom} — ${formaterDateLongue(dateReference)}`
+
+  function exporterExcel() {
     try {
-      const feuilleAOA = [
-        [`Conducteur — ${chaineActive.nom} — ${formaterDateLongue(dateReference)}`],
-        ENTETE_CONDUCTEUR,
-        ...construireLignesExportConducteur(lignes),
-      ]
+      const feuilleAOA = [[titreExport], ENTETE_CONDUCTEUR, ...construireLignesExportConducteur(lignes)]
       const feuille = XLSX.utils.aoa_to_sheet(feuilleAOA)
       feuille['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: ENTETE_CONDUCTEUR.length - 1 } }]
       const classeur = XLSX.utils.book_new()
@@ -218,6 +222,50 @@ export default function Conducteur({ chaineActive }) {
       XLSX.writeFile(classeur, construireNomFichierConducteur(dateReference))
     } catch (err) {
       setErreur(`Échec de l'export Excel : ${err.message}`)
+    }
+  }
+
+  function exporterPdf() {
+    try {
+      const doc = new jsPDF()
+      doc.setFontSize(14)
+      doc.text(titreExport, 14, 16)
+      autoTable(doc, { startY: 24, head: [ENTETE_CONDUCTEUR], body: construireLignesExportConducteur(lignes) })
+      doc.save(construireNomFichierConducteur(dateReference, 'pdf'))
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    }
+  }
+
+  async function exporterWord() {
+    try {
+      const ligneEntete = (libelles) =>
+        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
+      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+
+      const doc = new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({ text: titreExport, heading: HeadingLevel.HEADING_1 }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [ligneEntete(ENTETE_CONDUCTEUR), ...construireLignesExportConducteur(lignes).map(ligne)],
+              }),
+            ],
+          },
+        ],
+      })
+
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = construireNomFichierConducteur(dateReference, 'docx')
+      lien.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setErreur(`Échec de l'export Word : ${err.message}`)
     }
   }
 
@@ -265,15 +313,12 @@ export default function Conducteur({ chaineActive }) {
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={exporter}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"
-              title="Exporter — aucune régie réelle connectée dans ce PoC"
-            >
-              <FileSpreadsheet size={15} />
-              Transmettre à l'antenne
-            </button>
+            <BoutonExporter
+              onExcel={exporterExcel}
+              onWord={exporterWord}
+              onPdf={exporterPdf}
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+            />
           </div>
         </div>
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}

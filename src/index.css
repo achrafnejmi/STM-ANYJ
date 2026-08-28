@@ -16,6 +16,13 @@
   --color-snrt-purple: #921e98; /* P9 — genre Divertissement ; re-teinté (audit dataviz) — remplace #7c3aed */
   --color-snrt-amber: #f59e0b; /* Grille type — type de bloc Matinale */
 
+  /* P31 — passe design : accents de marque, RÉSERVÉS à un usage précis, jamais
+     réutilisés comme couleur de genre/chaîne (noms distincts de
+     --color-snrt-orange/--color-snrt-green ci-dessus, qui restent pris par
+     couleursGenre.js/chaines.js — même pigment SNRT, jamais le même token). */
+  --color-snrt-accent: #d86000;  /* orange décoratif : focus, survols neutres, petits détails */
+  --color-snrt-success: #007824; /* vert RÉSERVÉ succès/conforme (toasts, statuts OK) */
+
   /* Grille non-linéaire (P20, hors cahier) — couleurs de marque des
      plateformes réseaux sociaux. FORJA n'a pas de couleur ici : son logo
      réel (public/brand/forja-logo.svg) s'affiche sans fond coloré. */
@@ -24,4 +31,64 @@
   --color-plateforme-tiktok: #010101;
   --color-plateforme-snapchat: #fffc00;
   --color-plateforme-youtube: #ff0000;
+}
+
+/* P31 — passe design (polish visuel uniquement, cf. CLAUDE.md/PLAN.md P31) :
+   transitions cohérentes appliquées GLOBALEMENT plutôt que fichier par fichier
+   (la majorité des survols de l'app n'avaient aucune classe transition-*) +
+   anneau de focus clavier en accent de marque. */
+@layer base {
+  button, a, select, input, [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: 180ms;
+    transition-timing-function: ease;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-snrt-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Entrée en fondu + léger glissement des panneaux latéraux flottants
+   (PanneauAnomalies.jsx, PanneauNotifications.jsx, etc.) — une classe
+   ajoutée à la div racine de chacun, jamais de changement de structure. */
+@keyframes panneau-entree {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animer-entree-panneau {
+  animation: panneau-entree 180ms ease;
+}
+
+/* Entrée en fondu + léger zoom des modales centrées (Modal.jsx, seul
+   composant partagé pour toutes les modales de l'app). */
+@keyframes modale-fond-entree {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modale-boite-entree {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animer-entree-modale-fond {
+  animation: modale-fond-entree 150ms ease;
+}
+.animer-entree-modale-boite {
+  animation: modale-boite-entree 180ms ease;
 }
