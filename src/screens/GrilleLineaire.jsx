@@ -814,7 +814,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
                 onWord={exporterTransmissionsWord}
                 onPdf={exporterTransmissionsPdf}
                 sousTitre={`${grilleActive.nom} — ${periodeLabel} (${diffusionsAffichees.length} transmission${diffusionsAffichees.length > 1 ? 's' : ''})`}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent"
                 optionsSupplementaires={[
                   {
                     label: 'Excel (TNT + SAT)',

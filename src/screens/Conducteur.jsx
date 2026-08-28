@@ -313,12 +313,7 @@ export default function Conducteur({ chaineActive }) {
                 </button>
               ))}
             </div>
-            <BoutonExporter
-              onExcel={exporterExcel}
-              onWord={exporterWord}
-              onPdf={exporterPdf}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
-            />
+            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
           </div>
         </div>
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}

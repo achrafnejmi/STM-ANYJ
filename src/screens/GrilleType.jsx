@@ -17,6 +17,7 @@ import {
   ClipboardPaste,
   Save,
   FileUp,
+  MoreHorizontal,
 } from 'lucide-react'
 import {
   listerGrillesTypeParChaine,
@@ -149,6 +150,9 @@ export default function GrilleType({ chaineActive }) {
   const [grillesTypeOuvertesIds, setGrillesTypeOuvertesIds] = useState([])
   const [grilleTypeActiveId, setGrilleTypeActiveId] = useState(null)
   const [modaleGrilleType, setModaleGrilleType] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
+  // P31 — passe design : Renommer/Dupliquer/Supprimer (actions rares sur le
+  // document) regroupées derrière « … » plutôt que 3 boutons toujours visibles.
+  const [menuDocumentOuvert, setMenuDocumentOuvert] = useState(false)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [blocSelectionne, setBlocSelectionne] = useState(null)
@@ -776,22 +780,6 @@ export default function GrilleType({ chaineActive }) {
 
           {grilleTypeActive && (
             <div className="ml-auto flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setModaleGrilleType('RENOMMER')}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Pencil size={12} />
-                Renommer
-              </button>
-              <button
-                type="button"
-                onClick={() => setModaleGrilleType('DUPLIQUER')}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Copy size={12} />
-                Dupliquer
-              </button>
               {!grilleTypeActive.est_live && (
                 <button
                   type="button"
@@ -803,13 +791,11 @@ export default function GrilleType({ chaineActive }) {
               )}
               <button
                 type="button"
-                onClick={supprimerGrilleTypeActive}
-                disabled={grilleTypeActive.est_live}
-                title={grilleTypeActive.est_live ? 'Basculez une autre grille type en live avant de supprimer celle-ci' : 'Supprimer'}
-                className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => setMenuDocumentOuvert(true)}
+                title="Autres actions (renommer, dupliquer, supprimer)"
+                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
               >
-                <Trash2 size={12} />
-                Supprimer
+                <MoreHorizontal size={14} />
               </button>
             </div>
           )}
@@ -1129,6 +1115,48 @@ export default function GrilleType({ chaineActive }) {
           onSupprime={appliquerSuppression}
           onModifieChange={setBlocModifie}
         />
+      )}
+
+      {menuDocumentOuvert && grilleTypeActive && (
+        <Modal titre={`Grille type « ${grilleTypeActive.nom} »`} onFermer={() => setMenuDocumentOuvert(false)}>
+          <div className="space-y-2 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleGrilleType('RENOMMER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Pencil size={16} />
+              Renommer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleGrilleType('DUPLIQUER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Copy size={16} />
+              Dupliquer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                supprimerGrilleTypeActive()
+              }}
+              disabled={grilleTypeActive.est_live}
+              title={grilleTypeActive.est_live ? 'Basculez une autre grille type en live avant de supprimer celle-ci' : 'Supprimer'}
+              className="flex w-full items-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={16} />
+              Supprimer
+            </button>
+          </div>
+        </Modal>
       )}
 
       {modaleGrilleType === 'OUVRIR' && (

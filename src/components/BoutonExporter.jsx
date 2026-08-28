@@ -40,7 +40,7 @@ export default function BoutonExporter({
         title="Exporter (Excel/Word/PDF)"
         className={
           className ??
-          'flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60'
+          'flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent disabled:opacity-60 disabled:hover:border-slate-300 disabled:hover:bg-transparent disabled:hover:text-slate-600'
         }
       >
         <Download size={15} />
