@@ -18,13 +18,16 @@ export default function Marque({ variante = 'topbar' }) {
     )
   }
 
+  // Variante "topbar" (défaut) : PAS d'étoile ici — la Sidebar juste à
+  // gauche porte déjà la marque (variante "sidebar"), un 2ᵉ logo à quelques
+  // pixels de distance lisait comme redondant. Le texte seul suffit à
+  // identifier l'écran, l'étoile de la Sidebar reste la seule marque
+  // iconique (visible aussi repliée, contrairement à celle-ci qui
+  // disparaîtrait).
   return (
-    <div className="flex items-end gap-2">
-      <img src={LOGO_SVG} alt="SNRT" className="h-8 w-auto" />
-      <div className="flex flex-col leading-tight">
-        <span className="text-lg font-bold text-snrt-navy">{ABBR}</span>
-        <span className="hidden text-[11px] tracking-wide text-slate-500 sm:inline">{NOM_COMPLET}</span>
-      </div>
+    <div className="flex flex-col leading-tight">
+      <span className="text-lg font-bold text-snrt-navy">{ABBR}</span>
+      <span className="hidden text-[11px] tracking-wide text-slate-500 sm:inline">{NOM_COMPLET}</span>
     </div>
   )
 }
