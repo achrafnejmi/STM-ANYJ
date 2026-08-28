@@ -27,6 +27,7 @@ import {
   mettreAJourGrilleType,
   supprimerGrilleType,
   definirGrilleTypeLive,
+  supprimerBlocGrilleType,
 } from '../lib/db.js'
 import { lireGrillesTypeOuvertes, definirGrillesTypeOuvertes, dupliquerGrilleType } from '../lib/grillesType.js'
 import { lireUtilisateur } from '../lib/session.js'
@@ -361,6 +362,31 @@ export default function GrilleType({ chaineActive }) {
   function appliquerSuppression(id) {
     setBlocsChaine((prev) => prev.filter((b) => b.id !== id))
     setBlocSelectionne(null)
+  }
+
+  // Suppression directe depuis le bloc (bouton X sur la grille) — même flux
+  // que PanneauBlocGrilleType.jsx (écriture, undo), avec confirmation en plus
+  // vu le risque de clic accidentel sur une cible aussi petite.
+  async function supprimerBlocDirect(bloc) {
+    const confirme = await confirmer({
+      titre: 'Supprimer le bloc',
+      message: `Supprimer le bloc « ${bloc.nom || bloc.genre_attendu || 'bloc'} » ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
+    try {
+      await supprimerBlocGrilleType(bloc.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_TYPE',
+        documentId: grilleTypeActive?.id,
+        libelle: `Suppression : ${bloc.nom || bloc.genre_attendu || 'bloc'}`,
+        operations: [{ table: 'bloc_grille_type', type: 'DELETE', id: bloc.id, avant: bloc }],
+      })
+      appliquerSuppression(bloc.id)
+    } catch (err) {
+      setErreur(err.message)
+    }
   }
 
   // --- Étirement des bords (évolution 2) : suivi souris manuel, pas de HTML5
@@ -870,6 +896,26 @@ export default function GrilleType({ chaineActive }) {
                 </button>
               </div>
             )}
+            <div className="flex rounded-md border border-slate-300">
+              <button
+                type="button"
+                onClick={gererAnnuler}
+                disabled={!pile.peutAnnuler}
+                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
+                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={gererRetablir}
+                disabled={!pile.peutRetablir}
+                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
+                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -897,26 +943,6 @@ export default function GrilleType({ chaineActive }) {
               <Save size={15} />
               Enregistrer
             </button>
-            <div className="flex rounded-md border border-slate-300">
-              <button
-                type="button"
-                onClick={gererAnnuler}
-                disabled={!pile.peutAnnuler}
-                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
-                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Undo2 size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={gererRetablir}
-                disabled={!pile.peutRetablir}
-                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
-                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Redo2 size={15} />
-              </button>
-            </div>
           </div>
         </div>
 
@@ -1030,7 +1056,7 @@ export default function GrilleType({ chaineActive }) {
                             type="button"
                             key={bloc.id}
                             onClick={() => (selectionActive ? toggleSelectionBloc(bloc.id) : selectionnerBloc(bloc))}
-                            className={`absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
+                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
                               estCoche ? 'ring-2 ring-offset-1 ring-emerald-600' : estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
                             }`}
                             style={{
@@ -1058,6 +1084,18 @@ export default function GrilleType({ chaineActive }) {
                                   className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-black/20"
                                   onMouseDown={(e) => demarrerRedimensionnement(e, bloc, j.index, 'droite')}
                                 />
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    supprimerBlocDirect(bloc)
+                                  }}
+                                  title="Supprimer directement"
+                                  className="absolute right-0.5 top-0.5 rounded p-0.5 opacity-0 hover:bg-black/20 group-hover:opacity-100"
+                                >
+                                  <X size={11} />
+                                </span>
                               </>
                             )}
                             {selectionActive && (

@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
-import { ChevronLeft, ChevronRight, Plus, Undo2, Redo2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Undo2, Redo2, X } from 'lucide-react'
 import {
   aujourdHuiISO,
   ajouterJours,
@@ -19,7 +19,7 @@ import {
   formaterPlageSemaine,
   formaterDateLongue,
 } from '../lib/semaine.js'
-import { etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
+import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { couleurPlateforme } from '../lib/couleursPlateforme.js'
 import { statutPublication } from '../lib/statutsPublication.js'
 import {
@@ -162,6 +162,29 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   function appliquerSuppression(id) {
     setPublications((prev) => prev.filter((p) => p.id !== id))
     setPanneau(null)
+  }
+
+  // Suppression directe depuis la carte (bouton X) — même flux que
+  // PanneauPublication.jsx (confirmation, écriture, undo) sans passer par le panneau.
+  async function supprimerDirect(p) {
+    const confirme = await confirmer({
+      titre: 'Supprimer la publication',
+      message: `Supprimer cette publication (« ${p.titre || 'sans titre'} ») ?`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!confirme) return
+    try {
+      await config.supprimer(p.id)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: ecranPour(config),
+        libelle: `Suppression : ${p.titre || 'publication'}`,
+        operations: [{ table: config.table, type: 'DELETE', id: p.id, avant: p }],
+      })
+      appliquerSuppression(p.id)
+    } catch (err) {
+      setErreur(err.message)
+    }
   }
 
   // Deux piles indépendantes (Réseaux/VOD, P30 rollback) : les changements
@@ -348,7 +371,6 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
               <Plus size={15} />
               Ajouter
             </button>
-            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
             <div className="flex rounded-md border border-slate-300">
               <button
                 type="button"
@@ -369,6 +391,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
                 <Redo2 size={15} />
               </button>
             </div>
+            <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
           </div>
         </div>
 
@@ -398,28 +421,43 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
                       const statut = statutPublication(p.statut)
                       const estForja = p.plateforme === 'FORJA'
                       return (
-                        <button
-                          type="button"
+                        <div
                           key={p.id}
-                          onClick={() => changerPanneau({ publication: p })}
-                          className="flex w-full flex-col gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-[11px] shadow-sm hover:border-snrt-navy"
+                          className="group relative flex w-full flex-col gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-[11px] shadow-sm hover:border-snrt-navy"
                         >
-                          <div className="flex items-center gap-1.5">
-                            {estForja ? (
-                              <img src="/brand/forja-logo.svg" alt="Forja" className="h-4 w-auto" />
-                            ) : (
-                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded ${couleur.fond}`}>
-                                <LogoPlateforme code={p.plateforme} size={11} className={couleur.texte} />
-                              </span>
-                            )}
-                            {p.format && <span className="text-slate-400">{p.format}</span>}
-                            {p.heure_publication && <span className="ml-auto font-mono text-slate-500">{p.heure_publication.slice(0, 5)}</span>}
-                          </div>
-                          <div className="truncate font-medium text-slate-800">{p.titre || programmesParId.get(p.programme_id)?.titre || '—'}</div>
-                          <span className={`self-start rounded px-1.5 py-0.5 text-[10px] font-medium ${statut.fond} ${statut.texte}`}>
-                            {statut.libelle}
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              supprimerDirect(p)
+                            }}
+                            title="Supprimer directement"
+                            className="absolute right-1 top-1 rounded p-0.5 text-slate-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                          >
+                            <X size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => changerPanneau({ publication: p })}
+                            className="flex w-full flex-col gap-1 text-left"
+                          >
+                            <div className="flex items-center gap-1.5 pr-4">
+                              {estForja ? (
+                                <img src="/brand/forja-logo.svg" alt="Forja" className="h-5 w-auto" />
+                              ) : (
+                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${couleur.fond}`}>
+                                  <LogoPlateforme code={p.plateforme} size={13} className={couleur.texte} />
+                                </span>
+                              )}
+                              {p.format && <span className="text-slate-400">{p.format}</span>}
+                              {p.heure_publication && <span className="ml-auto font-mono text-slate-500">{p.heure_publication.slice(0, 5)}</span>}
+                            </div>
+                            <div className="truncate font-medium text-slate-800">{p.titre || programmesParId.get(p.programme_id)?.titre || '—'}</div>
+                            <span className={`self-start rounded px-1.5 py-0.5 text-[10px] font-medium ${statut.fond} ${statut.texte}`}>
+                              {statut.libelle}
+                            </span>
+                          </button>
+                        </div>
                       )
                     })}
                   </div>

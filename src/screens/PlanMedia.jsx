@@ -776,6 +776,28 @@ export default function PlanMedia({ chaineActive }) {
                 </button>
               </div>
             )}
+            {ongletPanneau === 'COMPOSITION' && (
+              <div className="flex rounded-md border border-slate-300">
+                <button
+                  type="button"
+                  onClick={gererAnnuler}
+                  disabled={!pile.peutAnnuler}
+                  title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
+                  className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  <Undo2 size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={gererRetablir}
+                  disabled={!pile.peutRetablir}
+                  title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
+                  className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  <Redo2 size={15} />
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => naviguer(-1)} className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50">
@@ -794,26 +816,6 @@ export default function PlanMedia({ chaineActive }) {
             >
               Aujourd'hui
             </button>
-            <div className="flex rounded-md border border-slate-300">
-              <button
-                type="button"
-                onClick={gererAnnuler}
-                disabled={!pile.peutAnnuler}
-                title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
-                className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Undo2 size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={gererRetablir}
-                disabled={!pile.peutRetablir}
-                title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
-                className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <Redo2 size={15} />
-              </button>
-            </div>
           </div>
         </div>
 
