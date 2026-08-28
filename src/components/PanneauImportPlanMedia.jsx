@@ -6,7 +6,7 @@ import { enregistrerAction } from '../lib/undoManager.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { estFichierPlanMedia, parserFeuillePlanMedia, apparierProposition, revaliderLignes } from '../lib/importPlanMedia.js'
 import { heureHMSEnSecondes, secondesEnHeureHMS } from '../lib/planMedia.js'
-import { aujourdHuiISO, parserDateFrancaiseLongue } from '../lib/semaine.js'
+import { aujourdHuiISO, formaterDateLongue, parserDateFrancaiseLongue } from '../lib/semaine.js'
 import Modal from './Modal.jsx'
 
 const LIBELLES_TYPE = {
@@ -185,6 +185,17 @@ export default function PanneauImportPlanMedia({ chaineActive, diffusions, campa
             {nbRattachables > 0 && ` · ${nbRattachables} non appariée${nbRattachables > 1 ? 's' : ''} mais rattachable${nbRattachables > 1 ? 's' : ''} (décochée${nbRattachables > 1 ? 's' : ''})`}
             {nbInapariables > 0 && ` · ${nbInapariables} non rattachable${nbInapariables > 1 ? 's' : ''} (aucune transmission ce jour-là)`}
           </p>
+
+          {lignes.length > 0 && nbAppariees === 0 && nbRattachables === 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+              <span>
+                Aucune transmission n'existe dans la grille live le <strong>{formaterDateLongue(dateCible)}</strong> —
+                impossible de rattacher un élément sans coupure réelle ce jour-là. Vérifiez la date cible (« ← Revenir
+                au fichier ») ou complétez d'abord la Grille linéaire pour ce jour.
+              </span>
+            </div>
+          )}
 
           <div className="max-h-[55vh] overflow-y-auto">
             <table className="w-full text-left text-xs">
