@@ -161,6 +161,11 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   du dernier écran manquant, la grille non-linéaire — deux piles indépendantes
   (Réseaux/VOD, chacune scopée chaîne+écran, pas de multi-document). *Test : Ctrl+Z/Ctrl+Y sur
   chaque onglet, les deux piles restent indépendantes l'une de l'autre.*
+- **P31 — Passe de design UI/UX** ✅ LIVRÉ (hors feuille de route initiale, ajoutée en session) :
+  polish pur, aucune logique/donnée changée — tokens d'accent orange/succès vert (distincts des
+  couleurs genre/chaîne), transitions cohérentes, bouton Export unifié (Excel/Word/PDF) sur tous
+  les écrans qui exportent, désencombrement des barres d'outils les plus chargées. *Test :
+  aucune régression fonctionnelle, couleurs genre/chaîne inchangées, exports identiques.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
