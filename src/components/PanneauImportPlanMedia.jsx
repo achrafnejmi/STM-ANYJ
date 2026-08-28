@@ -74,9 +74,19 @@ export default function PanneauImportPlanMedia({ chaineActive, diffusions, campa
   const nbInapariables = lignes.filter((l) => l.statutCoupure === 'NON_APPARIABLE').length
   const nbCocheesInvalides = lignes.filter((l) => l.coche && invalides.has(l.id)).length
   const nbRetenues = lignes.filter((l) => l.coche && !invalides.has(l.id)).length
+  const nbRattachablesTotal = nbAppariees + nbRattachables
+  const toutesCochees = nbRattachablesTotal > 0 && lignes.filter((l) => l.statutCoupure !== 'NON_APPARIABLE').every((l) => l.coche)
 
   function majLigne(id, champs) {
     setLignes((prev) => prev.map((l) => (l.id === id ? { ...l, ...champs } : l)))
+  }
+
+  // « Tout cocher » (test rapide) : coche/décoche d'un coup toutes les lignes
+  // rattachables (appariées ou non), jamais les non-rattachables (case déjà
+  // désactivée). Les conflits restent visibles en rouge, à corriger ou
+  // décocher manuellement — même règle que cocher une ligne à la fois.
+  function toutCocherToggle() {
+    setLignes((prev) => prev.map((l) => (l.statutCoupure === 'NON_APPARIABLE' ? l : { ...l, coche: !toutesCochees })))
   }
 
   async function confirmer() {
@@ -180,11 +190,18 @@ export default function PanneauImportPlanMedia({ chaineActive, diffusions, campa
 
       {etape === 'APERCU' && (
         <div className="space-y-4 text-sm">
-          <p className="text-xs text-slate-600">
-            {nbAppariees} ligne{nbAppariees > 1 ? 's' : ''} appariée{nbAppariees > 1 ? 's' : ''} (cochée{nbAppariees > 1 ? 's' : ''} par défaut)
-            {nbRattachables > 0 && ` · ${nbRattachables} non appariée${nbRattachables > 1 ? 's' : ''} mais rattachable${nbRattachables > 1 ? 's' : ''} (décochée${nbRattachables > 1 ? 's' : ''})`}
-            {nbInapariables > 0 && ` · ${nbInapariables} non rattachable${nbInapariables > 1 ? 's' : ''} (aucune transmission ce jour-là)`}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-600">
+              {nbAppariees} ligne{nbAppariees > 1 ? 's' : ''} appariée{nbAppariees > 1 ? 's' : ''} (cochée{nbAppariees > 1 ? 's' : ''} par défaut)
+              {nbRattachables > 0 && ` · ${nbRattachables} non appariée${nbRattachables > 1 ? 's' : ''} mais rattachable${nbRattachables > 1 ? 's' : ''} (décochée${nbRattachables > 1 ? 's' : ''})`}
+              {nbInapariables > 0 && ` · ${nbInapariables} non rattachable${nbInapariables > 1 ? 's' : ''} (aucune transmission ce jour-là)`}
+            </p>
+            {nbRattachablesTotal > 0 && (
+              <button type="button" onClick={toutCocherToggle} className="shrink-0 text-xs font-medium text-snrt-navy hover:underline">
+                {toutesCochees ? 'Tout décocher' : `Tout cocher (${nbRattachablesTotal})`}
+              </button>
+            )}
+          </div>
 
           {lignes.length > 0 && nbAppariees === 0 && nbRattachables === 0 && (
             <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">

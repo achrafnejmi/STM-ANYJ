@@ -124,11 +124,20 @@ export function apparierProposition({ coupuresFichier, dateCible, diffusionsCibl
   const intervallesParAncre = new Map(intervalles.map((iv) => [iv.apresTransmissionId, iv]))
   const diffusionsParHeureFin = new Map(diffusionsCible.map((d) => [heureHMSEnSecondes(d.heure_fin), d]))
 
+  // Remplissage à la suite : plusieurs coupures du fichier proches dans le
+  // temps pointent souvent vers la même coupure réelle la plus proche — sans
+  // suivi, elles s'y empilent toutes et se chevauchent dès qu'on les coche.
+  // On mémorise ici combien de secondes sont déjà réservées par CETTE
+  // proposition dans chaque coupure réelle ; une fois une coupure pleine, la
+  // suivante bascule sur la prochaine coupure disponible la plus proche.
+  const occupeParAncre = new Map()
+
   const lignes = []
   let compteur = 0
   for (const coupure of coupuresFichier) {
     const heureFinSecondes = coupure.heureFin ? heureHMSEnSecondes(coupure.heureFin) : null
     const ancreExacte = heureFinSecondes != null ? diffusionsParHeureFin.get(heureFinSecondes) : null
+    const dureeTotaleCoupure = coupure.lignes.reduce((n, l) => n + l.dureeSec, 0)
 
     let statutCoupure
     let ancreParDefaut
@@ -153,7 +162,15 @@ export function apparierProposition({ coupuresFichier, dateCible, diffusionsCibl
             label: `après ${titre ?? '—'}, de ${diffusion?.heure_fin?.slice(0, 5) ?? '?'} à ${secondesEnHeureHMS(iv.fin * 60).slice(0, 5)}`,
           }
         })
-      ancreParDefaut = alternativesCoupure[0]?.apresTransmissionId ?? null
+      // Première alternative (la plus proche) avec assez de place restante
+      // pour toute la coupure ; à défaut, la plus proche quand même (le
+      // conflit reste visible et modifiable, comme avant).
+      const alternativeDisponible = alternativesCoupure.find((alt) => {
+        const iv = intervallesParAncre.get(alt.apresTransmissionId)
+        const dejaOccupe = occupeParAncre.get(alt.apresTransmissionId) ?? 0
+        return iv && (iv.fin - iv.debut) * 60 - dejaOccupe >= dureeTotaleCoupure
+      })
+      ancreParDefaut = (alternativeDisponible ?? alternativesCoupure[0])?.apresTransmissionId ?? null
     } else {
       statutCoupure = 'NON_APPARIABLE'
       ancreParDefaut = null
@@ -163,10 +180,17 @@ export function apparierProposition({ coupuresFichier, dateCible, diffusionsCibl
     // côtés — un H.FIN littéral largement hors bornes ne doit jamais produire
     // une heure de départ par défaut hors de la coupure choisie, même si le
     // résultat reste ensuite soumis à estPlacementValide comme toute ligne).
+    // Si la coupure réelle a déjà reçu du contenu de cette proposition, on
+    // reprend juste après (remplissage à la suite) plutôt que de recaler sur
+    // le H.FIN littéral du fichier.
     const intervalleParDefaut = ancreParDefaut ? intervallesParAncre.get(ancreParDefaut) : null
+    const dejaOccupe = ancreParDefaut ? (occupeParAncre.get(ancreParDefaut) ?? 0) : 0
     let curseurSecondes = intervalleParDefaut
-      ? Math.min(Math.max(intervalleParDefaut.debut * 60, heureFinSecondes ?? intervalleParDefaut.debut * 60), intervalleParDefaut.fin * 60)
+      ? dejaOccupe > 0
+        ? intervalleParDefaut.debut * 60 + dejaOccupe
+        : Math.min(Math.max(intervalleParDefaut.debut * 60, heureFinSecondes ?? intervalleParDefaut.debut * 60), intervalleParDefaut.fin * 60)
       : (heureFinSecondes ?? 0)
+    const curseurDebutCoupure = curseurSecondes
 
     for (const l of coupure.lignes) {
       const { type, libelle, nomProgrammeDevine } = classifierType(l.contenu)
@@ -186,6 +210,10 @@ export function apparierProposition({ coupuresFichier, dateCible, diffusionsCibl
         coche: statutCoupure === 'APPARIEE',
       })
       curseurSecondes += l.dureeSec
+    }
+
+    if (ancreParDefaut && intervalleParDefaut) {
+      occupeParAncre.set(ancreParDefaut, (occupeParAncre.get(ancreParDefaut) ?? 0) + (curseurSecondes - curseurDebutCoupure))
     }
   }
   return { lignes, intervallesParAncre }
