@@ -780,6 +780,13 @@ export default function GrilleType({ chaineActive }) {
 
           {grilleTypeActive && (
             <div className="ml-auto flex items-center gap-1.5">
+              <BoutonExporter
+                onExcel={exporterGrilleTypeExcel}
+                onWord={exporterGrilleTypeWord}
+                onPdf={exporterGrilleTypePdf}
+                sousTitre={`${grilleTypeActive.nom} — ${blocs.length} bloc${blocs.length > 1 ? 's' : ''}`}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent"
+              />
               {!grilleTypeActive.est_live && (
                 <button
                   type="button"
@@ -807,17 +814,6 @@ export default function GrilleType({ chaineActive }) {
             <p className="text-sm text-slate-500">La grille type décrit la structure de la journée, pas les titres.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPleinEcran((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
-                pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-              }`}
-              title={pleinEcran ? 'Afficher le panneau des genres' : 'Masquer le panneau des genres pour élargir la grille'}
-            >
-              {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-              Plein écran
-            </button>
             <button
               type="button"
               onClick={nouveauBlocGenerique}
@@ -903,6 +899,20 @@ export default function GrilleType({ chaineActive }) {
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setPleinEcran((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+              pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+            }`}
+            title={pleinEcran ? 'Afficher le panneau des genres' : 'Masquer le panneau des genres pour élargir la grille'}
+          >
+            {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            Plein écran
+          </button>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -913,13 +923,6 @@ export default function GrilleType({ chaineActive }) {
               <FileUp size={15} />
               Importer
             </button>
-            <BoutonExporter
-              onExcel={exporterGrilleTypeExcel}
-              onWord={exporterGrilleTypeWord}
-              onPdf={exporterGrilleTypePdf}
-              disabled={!grilleTypeActive}
-              sousTitre={grilleTypeActive ? `${grilleTypeActive.nom} — ${blocs.length} bloc${blocs.length > 1 ? 's' : ''}` : undefined}
-            />
             <button
               type="button"
               onClick={() => succes('Grille type enregistrée ✓')}

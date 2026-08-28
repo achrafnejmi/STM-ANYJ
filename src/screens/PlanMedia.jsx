@@ -17,6 +17,8 @@ import {
   ClipboardPaste,
   Undo2,
   Redo2,
+  X,
+  MoreHorizontal,
 } from 'lucide-react'
 import {
   listerProgrammesParChaine,
@@ -119,6 +121,9 @@ export default function PlanMedia({ chaineActive }) {
   const [planMediaOuvertsIds, setPlanMediaOuvertsIds] = useState([])
   const [planMediaActifId, setPlanMediaActifId] = useState(null)
   const [modaleDocument, setModaleDocument] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
+  // Retouche placement/couleur : Renommer/Dupliquer/Supprimer (actions rares sur le
+  // document) regroupées derrière « … », même patron que GrilleType.jsx/GrilleLineaire.jsx.
+  const [menuDocumentOuvert, setMenuDocumentOuvert] = useState(false)
   // P26bis : Composition (éditeur manuel, par défaut) / Génération auto
   // (secondaire) — pure réorganisation d'affichage, aucune donnée/logique
   // n'en dépend.
@@ -647,7 +652,7 @@ export default function PlanMedia({ chaineActive }) {
                 title={planMediasOuverts.length <= 1 ? 'Dernier onglet ouvert' : 'Fermer (le document reste enregistré)'}
                 className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                ×
+                <X size={12} />
               </button>
             </div>
           ))}
@@ -662,22 +667,13 @@ export default function PlanMedia({ chaineActive }) {
 
           {planMediaActif && (
             <div className="ml-auto flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setModaleDocument('RENOMMER')}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Pencil size={12} />
-                Renommer
-              </button>
-              <button
-                type="button"
-                onClick={() => setModaleDocument('DUPLIQUER')}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Copy size={12} />
-                Dupliquer
-              </button>
+              <BoutonExporter
+                onExcel={exporterPlanMedia}
+                onWord={exporterPlanMediaWord}
+                onPdf={exporterPlanMediaPdf}
+                sousTitre={planMediaActif.nom}
+                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent"
+              />
               {!planMediaActif.est_live && (
                 <button
                   type="button"
@@ -689,13 +685,11 @@ export default function PlanMedia({ chaineActive }) {
               )}
               <button
                 type="button"
-                onClick={supprimerDocumentActif}
-                disabled={planMediaActif.est_live}
-                title={planMediaActif.est_live ? 'Basculez un autre document en live avant de supprimer celui-ci' : 'Supprimer'}
-                className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={() => setMenuDocumentOuvert(true)}
+                title="Autres actions (renommer, dupliquer, supprimer)"
+                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
               >
-                <Trash2 size={12} />
-                Supprimer
+                <MoreHorizontal size={14} />
               </button>
             </div>
           )}
@@ -820,7 +814,7 @@ export default function PlanMedia({ chaineActive }) {
         </div>
 
         {ongletPanneau === 'COMPOSITION' && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -849,7 +843,6 @@ export default function PlanMedia({ chaineActive }) {
                 </button>
               </div>
             </div>
-            <BoutonExporter onExcel={exporterPlanMedia} onWord={exporterPlanMediaWord} onPdf={exporterPlanMediaPdf} />
           </div>
         )}
 
@@ -989,6 +982,48 @@ export default function PlanMedia({ chaineActive }) {
           onFermer={() => setImportOuvert(false)}
           onImporte={documentImporte}
         />
+      )}
+
+      {menuDocumentOuvert && planMediaActif && (
+        <Modal titre={`Plan média « ${planMediaActif.nom} »`} onFermer={() => setMenuDocumentOuvert(false)}>
+          <div className="space-y-2 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleDocument('RENOMMER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Pencil size={16} />
+              Renommer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                setModaleDocument('DUPLIQUER')
+              }}
+              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Copy size={16} />
+              Dupliquer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuDocumentOuvert(false)
+                supprimerDocumentActif()
+              }}
+              disabled={planMediaActif.est_live}
+              title={planMediaActif.est_live ? 'Basculez un autre document en live avant de supprimer celui-ci' : 'Supprimer'}
+              className="flex w-full items-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={16} />
+              Supprimer
+            </button>
+          </div>
+        </Modal>
       )}
 
       {modaleDocument === 'OUVRIR' && (
