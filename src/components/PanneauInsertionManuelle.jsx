@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { creerElementSecondaire } from '../lib/db.js'
 import { enregistrerAction } from '../lib/undoManager.js'
 import {
-  calculerIntervalles,
+  calculerPointsInsertion,
   estPlacementValide,
   heureHMSEnSecondes,
   secondesEnHeureHMS,
@@ -65,7 +65,7 @@ export default function PanneauInsertionManuelle({
   const [erreur, setErreur] = useState(null)
 
   const diffusionsParId = useMemo(() => new Map(diffusions.map((d) => [d.id, d])), [diffusions])
-  const intervalles = useMemo(() => calculerIntervalles(dates, diffusions), [dates, diffusions])
+  const intervalles = useMemo(() => calculerPointsInsertion(dates, diffusions), [dates, diffusions])
   const coupuresDuJour = useMemo(() => intervalles.filter((iv) => iv.date === dateChoisie), [intervalles, dateChoisie])
   // Zone « hors coupure » (P31) : toute la journée d'antenne, non ancrée à une
   // transmission. Recalculée en direct comme les vraies coupures, jamais figée.

@@ -42,14 +42,12 @@ import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fus
 import {
   aujourdHuiISO,
   ajouterJours,
-  lundiDeLaSemaine,
-  joursDeLaSemaine,
-  formaterPlageSemaine,
   formaterDateLongue,
   minutesEnHeure,
 } from '../lib/semaine.js'
 import {
   calculerIntervalles,
+  calculerPointsInsertion,
   genererElementsSecondaires,
   estPlacementValide,
   heureHMSEnSecondes,
@@ -110,7 +108,9 @@ const CHAMPS_COPIABLES_ELEMENT = [
 ]
 
 export default function PlanMedia({ chaineActive }) {
-  const [vue, setVue] = useState('SEMAINE')
+  // Le Plan média se compose JOUR par JOUR (socle : une grille linéaire d'une
+  // journée ⇒ un plan média de cette journée). Pas de vue semaine.
+  const vue = 'JOUR'
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [programmes, setProgrammes] = useState([])
   const [diffusions, setDiffusions] = useState([])
@@ -238,8 +238,7 @@ export default function PlanMedia({ chaineActive }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/planMediaActif par closure
   }, [chaineActive, planMediaActif])
 
-  const lundi = lundiDeLaSemaine(dateReference)
-  const dates = useMemo(() => (vue === 'SEMAINE' ? joursDeLaSemaine(lundi) : [dateReference]), [vue, lundi, dateReference])
+  const dates = useMemo(() => [dateReference], [dateReference])
 
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
   const campagnesParId = useMemo(() => new Map(campagnes.map((c) => [c.id, c])), [campagnes])
@@ -265,7 +264,10 @@ export default function PlanMedia({ chaineActive }) {
   // « Hors coupure » regroupe les éléments non ancrés (grille incomplète).
   const sectionsComposition = useMemo(() => {
     const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
-    const intervalles = calculerIntervalles(dates, diffusions)
+    // Socle du Plan média : un point d'insertion APRÈS CHAQUE programme de la
+    // grille linéaire de la journée (dernier programme inclus), pas seulement
+    // dans les écarts — cf. calculerPointsInsertion.
+    const intervalles = calculerPointsInsertion(dates, diffusions)
     const triDebut = (a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0)
 
     const parCoupure = new Map()
@@ -308,7 +310,7 @@ export default function PlanMedia({ chaineActive }) {
   }, [dates, diffusions, elementsPeriode, programmesParId])
 
   function naviguer(delta) {
-    setDateReference((d) => ajouterJours(d, vue === 'SEMAINE' ? 7 * delta : delta))
+    setDateReference((d) => ajouterJours(d, delta))
   }
 
   // Aucune écriture ici — pure lecture + calcul (planMedia.js). L'écriture
@@ -793,22 +795,6 @@ export default function PlanMedia({ chaineActive }) {
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
-            <div className="flex rounded-md border border-slate-300 text-sm">
-              <button
-                type="button"
-                onClick={() => setVue('SEMAINE')}
-                className={`px-3 py-2 ${vue === 'SEMAINE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Semaine
-              </button>
-              <button
-                type="button"
-                onClick={() => setVue('JOUR')}
-                className={`px-3 py-2 ${vue === 'JOUR' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-              >
-                Jour
-              </button>
-            </div>
             {ongletPanneau === 'COMPOSITION' && !selectionActive && (
               <button
                 type="button"
@@ -885,7 +871,7 @@ export default function PlanMedia({ chaineActive }) {
               <ChevronLeft size={16} />
             </button>
             <span className="min-w-[12rem] text-center text-sm font-medium text-slate-700">
-              {vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)}
+              {formaterDateLongue(dateReference)}
             </span>
             <button type="button" onClick={() => naviguer(1)} className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50">
               <ChevronRight size={16} />
@@ -1048,7 +1034,7 @@ export default function PlanMedia({ chaineActive }) {
 
           <div className="lg:sticky lg:top-6 lg:self-start">
             <PanneauReglesHabillage
-              periodeLabel={vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)}
+              periodeLabel={formaterDateLongue(dateReference)}
               opts={opts}
               onChangerOpts={setOpts}
               onGenerer={generer}

@@ -52,6 +52,39 @@ export function calculerIntervalles(dates, diffusions) {
   return intervalles
 }
 
+// Points d'insertion MANUELLE du Plan média : un créneau APRÈS CHAQUE
+// transmission de la journée — y compris le dernier programme (créneau jusqu'à
+// 06:00 le lendemain, fin de la journée d'antenne). C'est le socle du Plan
+// média : chaque programme de la grille linéaire de la journée est un point
+// d'ancrage visible, indépendamment de l'existence d'un écart réel.
+//
+// À NE PAS confondre avec calculerIntervalles (moteur auto, §4.6.5) qui, lui,
+// ignore volontairement l'après-dernier-programme. Deux programmes adjacents
+// (aucun écart) donnent un créneau borné à [debut, debut] : le programme reste
+// visible mais aucune insertion n'y est possible tant que l'écart est nul.
+export function calculerPointsInsertion(dates, diffusions) {
+  const parJour = new Map()
+  for (const d of diffusions) {
+    if (!parJour.has(d.date)) parJour.set(d.date, [])
+    parJour.get(d.date).push(d)
+  }
+
+  const FIN_JOURNEE_ANTENNE_MINUTES = 30 * 60 // 06:00 le lendemain
+  const points = []
+  for (const date of dates) {
+    const jour = (parJour.get(date) ?? [])
+      .slice()
+      .sort((a, b) => minutesDepuisDebutAntenne(a.heure_debut) - minutesDepuisDebutAntenne(b.heure_debut))
+    jour.forEach((t, i) => {
+      const debut = minutesDepuisDebutAntenne(t.heure_fin)
+      const finSuivante =
+        i < jour.length - 1 ? minutesDepuisDebutAntenne(jour[i + 1].heure_debut) : FIN_JOURNEE_ANTENNE_MINUTES
+      points.push({ date, debut, fin: Math.max(finSuivante, debut), apresTransmissionId: t.id })
+    })
+  }
+  return points
+}
+
 // --- protection RG-M5-06 (inconditionnelle, pas de case « Écraser ») ---
 
 // Une ligne MANUELLE est toujours protégée. Une ligne AUTOMATIQUE ne l'est
