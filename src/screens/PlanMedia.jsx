@@ -46,7 +46,7 @@ import {
   joursDeLaSemaine,
   formaterPlageSemaine,
   formaterDateLongue,
-  formaterJourCourt,
+  minutesEnHeure,
 } from '../lib/semaine.js'
 import {
   calculerIntervalles,
@@ -71,7 +71,7 @@ import PanneauApercuPlanMedia from '../components/PanneauApercuPlanMedia.jsx'
 import PanneauCouvertureCampagnes from '../components/PanneauCouvertureCampagnes.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
-import PanneauInsertionManuelle from '../components/PanneauInsertionManuelle.jsx'
+import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
 import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
@@ -145,6 +145,9 @@ export default function PlanMedia({ chaineActive }) {
   const [insertionOuverte, setInsertionOuverte] = useState(false)
   const [importOuvert, setImportOuvert] = useState(false)
   const [spotPreselectionne, setSpotPreselectionne] = useState(null) // P26bis : raccourci "+" bibliothèque
+  // P31 : "+" en bout de coupure — { date, coupureId } pré-remplis et figés
+  // dans le formulaire d'insertion (coupureId = '__LIBRE__' pour le bloc hors coupure).
+  const [insertionCible, setInsertionCible] = useState(null)
   const chargementIdRef = useRef(0)
   const { confirmer } = useNotification()
 
@@ -254,6 +257,55 @@ export default function PlanMedia({ chaineActive }) {
     [elementsSecondairesActifs, dates]
   )
   const couverture = useMemo(() => calculerCouverture(campagnes, elementsSecondairesActifs), [campagnes, elementsSecondairesActifs])
+
+  // Vue Composition (P31) : le Plan média se lit désormais comme le fichier
+  // réel — chaque coupure de la grille live devient une section titrée par le
+  // programme qui la précède (CONTEXTE), ses BA/spots/écrans en dessous, et un
+  // « + » en bout de section pour insérer jusqu'au programme suivant. Le bloc
+  // « Hors coupure » regroupe les éléments non ancrés (grille incomplète).
+  const sectionsComposition = useMemo(() => {
+    const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
+    const intervalles = calculerIntervalles(dates, diffusions)
+    const triDebut = (a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0)
+
+    const parCoupure = new Map()
+    const horsCoupureParDate = new Map()
+    for (const e of elementsPeriode) {
+      if (e.apres_transmission_id == null) {
+        if (!horsCoupureParDate.has(e.date)) horsCoupureParDate.set(e.date, [])
+        horsCoupureParDate.get(e.date).push(e)
+      } else {
+        if (!parCoupure.has(e.apres_transmission_id)) parCoupure.set(e.apres_transmission_id, [])
+        parCoupure.get(e.apres_transmission_id).push(e)
+      }
+    }
+
+    const parJour = new Map(dates.map((d) => [d, []]))
+    for (const date of dates) {
+      const hc = (horsCoupureParDate.get(date) ?? []).slice().sort(triDebut)
+      if (hc.length > 0) {
+        parJour.get(date).push({
+          cle: `${date}|libre`,
+          coupureId: COUPURE_LIBRE,
+          contexte: 'Hors coupure',
+          fenetre: '06:00 → 06:00',
+          elements: hc,
+        })
+      }
+    }
+    for (const iv of intervalles) {
+      if (!parJour.has(iv.date)) continue
+      const d = diffusionsParId.get(iv.apresTransmissionId)
+      parJour.get(iv.date).push({
+        cle: `${iv.date}|${iv.apresTransmissionId}`,
+        coupureId: iv.apresTransmissionId,
+        contexte: programmesParId.get(d?.programme_id)?.titre ?? '—',
+        fenetre: `${d?.heure_fin?.slice(0, 5) ?? '?'} → ${minutesEnHeure(iv.fin)}`,
+        elements: (parCoupure.get(iv.apresTransmissionId) ?? []).slice().sort(triDebut),
+      })
+    }
+    return dates.map((date) => [date, parJour.get(date)]).filter(([, sections]) => sections.length > 0)
+  }, [dates, diffusions, elementsPeriode, programmesParId])
 
   function naviguer(delta) {
     setDateReference((d) => ajouterJours(d, vue === 'SEMAINE' ? 7 * delta : delta))
@@ -368,6 +420,15 @@ export default function PlanMedia({ chaineActive }) {
   function fermerInsertion() {
     setInsertionOuverte(false)
     setSpotPreselectionne(null)
+    setInsertionCible(null)
+  }
+
+  // "+" en bout de coupure (ou du bloc hors coupure) : ouvre l'insertion
+  // manuelle avec la date + la coupure figées, prête à enchaîner des BA/spots
+  // jusqu'au programme suivant.
+  function ouvrirInsertionDansCoupure(date, coupureId) {
+    setInsertionCible({ date, coupureId })
+    setInsertionOuverte(true)
   }
 
   // Import Plan média (P26) : le document créé n'est jamais live par défaut
@@ -879,49 +940,72 @@ export default function PlanMedia({ chaineActive }) {
         <div className="space-y-6">
           {!chargement && planMediaActif && (
             <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">Éléments placés — {planMediaActif.nom}</h3>
-              {elementsPeriode.length === 0 ? (
-                <p className="text-sm text-slate-500">Aucun élément sur cette période dans ce document.</p>
+              <h3 className="mb-3 text-sm font-semibold text-slate-900">Composition — {planMediaActif.nom}</h3>
+              {sectionsComposition.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Aucun programme sur cette période dans la grille linéaire live, et aucun élément hors coupure.
+                  Utilisez « Insertion manuelle » (option « Hors coupure ») pour ajouter des BA / spots.
+                </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                        {selectionActive && <th className="w-8 py-1.5" />}
-                        <th className="py-1.5 pr-3">Date</th>
-                        <th className="py-1.5 pr-3">Heure</th>
-                        <th className="py-1.5 pr-3">Type</th>
-                        <th className="py-1.5 pr-3">Libellé</th>
-                        <th className="py-1.5">Campagne</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {elementsPeriode.map((e) => {
-                        const campagne = e.campagne_id ? campagnesParId.get(e.campagne_id) : null
-                        const titrePromu = campagne ? programmesParId.get(campagne.programme_id)?.titre : null
-                        return (
-                          <tr key={e.id} className="border-b border-slate-100 text-slate-700 last:border-0">
-                            {selectionActive && (
-                              <td className="py-1.5">
-                                <input
-                                  type="checkbox"
-                                  checked={elementsSelectionnesIds.has(e.id)}
-                                  onChange={() => toggleSelectionElement(e.id)}
-                                />
-                              </td>
+                <div className="space-y-5">
+                  {sectionsComposition.map(([date, sections]) => (
+                    <div key={date}>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {formaterDateLongue(date)}
+                      </div>
+                      <div className="space-y-3">
+                        {sections.map((s) => (
+                          <div key={s.cle} className="rounded-md border border-slate-200">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                              <span className="text-sm font-medium text-slate-800">{s.contexte}</span>
+                              <span className="font-mono text-xs text-slate-500">{s.fenetre}</span>
+                            </div>
+                            {s.elements.length > 0 ? (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {s.elements.map((e) => {
+                                    const campagne = e.campagne_id ? campagnesParId.get(e.campagne_id) : null
+                                    const titrePromu = campagne ? programmesParId.get(campagne.programme_id)?.titre : null
+                                    return (
+                                      <tr key={e.id} className="border-b border-slate-100 text-slate-700 last:border-0">
+                                        {selectionActive && (
+                                          <td className="w-8 py-1.5 pl-3">
+                                            <input
+                                              type="checkbox"
+                                              checked={elementsSelectionnesIds.has(e.id)}
+                                              onChange={() => toggleSelectionElement(e.id)}
+                                            />
+                                          </td>
+                                        )}
+                                        <td className="py-1.5 pl-3 pr-3 font-mono text-xs">
+                                          {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
+                                        </td>
+                                        <td className="py-1.5 pr-3">{LIBELLES_TYPE[e.type] ?? e.type}</td>
+                                        <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
+                                        <td className="py-1.5 pr-3 text-slate-500">{titrePromu ?? '—'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <p className="px-3 py-2 text-xs text-slate-400">Aucun élément dans cette coupure.</p>
                             )}
-                            <td className="py-1.5 pr-3">{formaterJourCourt(e.date)}</td>
-                            <td className="py-1.5 pr-3 font-mono text-xs">
-                              {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
-                            </td>
-                            <td className="py-1.5 pr-3">{LIBELLES_TYPE[e.type] ?? e.type}</td>
-                            <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
-                            <td className="py-1.5">{titrePromu ?? '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                            <div className="border-t border-slate-100 px-3 py-1.5">
+                              <button
+                                type="button"
+                                onClick={() => ouvrirInsertionDansCoupure(date, s.coupureId)}
+                                className="flex items-center gap-1.5 text-xs font-medium text-snrt-navy hover:underline"
+                              >
+                                <PlusSquare size={14} />
+                                Insérer une BA / un spot ici
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -994,6 +1078,8 @@ export default function PlanMedia({ chaineActive }) {
           spots={spots}
           programmesParId={programmesParId}
           spotIdInitial={spotPreselectionne}
+          dateInitiale={insertionCible?.date}
+          coupureIdInitiale={insertionCible?.coupureId}
           onFermer={fermerInsertion}
           onElementCree={ajouterElementLocal}
         />

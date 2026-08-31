@@ -15,7 +15,7 @@ import Modal from './Modal.jsx'
 // une transmission (P31) : l'élément est rattaché à la seule journée d'antenne
 // (06:00 → 06:00). Toujours proposée, en dernière option — indispensable quand
 // la grille linéaire live est encore incomplète (aucune coupure calculable).
-const COUPURE_LIBRE = '__LIBRE__'
+export const COUPURE_LIBRE = '__LIBRE__'
 // Bornes de la journée d'antenne en minutes d'horloge, même base que
 // minutesDepuisDebutAntenne / heureHMSEnSecondes (le pré-06:00 est décalé de
 // +24 h) : 06:00 aujourd'hui → 06:00 le lendemain.
@@ -213,7 +213,9 @@ export default function PanneauInsertionManuelle({
         ) : (
           intervalleSelectionne && (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Insertion {libelleCoupure(intervalleSelectionne)}
+              {modeLibre
+                ? "Insertion hors coupure — journée d'antenne (06:00 → 06:00)"
+                : `Insertion ${libelleCoupure(intervalleSelectionne)}`}
             </p>
           )
         )}
