@@ -495,6 +495,13 @@ export default function PlanMedia({ chaineActive }) {
     setElementsSelectionnesIds(new Set())
   }
 
+  // Tout sélectionner / tout désélectionner les éléments de la période affichée.
+  function basculerToutSelectionner() {
+    setElementsSelectionnesIds((prev) =>
+      prev.size === elementsPeriode.length ? new Set() : new Set(elementsPeriode.map((e) => e.id))
+    )
+  }
+
   function toggleSelectionElement(id) {
     setElementsSelectionnesIds((prev) => {
       const next = new Set(prev)
@@ -522,9 +529,18 @@ export default function PlanMedia({ chaineActive }) {
     const intervalles = calculerIntervalles(dates, diffusions)
     const creees = []
     for (const item of presseGaPapier) {
-      const intervalle = intervalles.find((iv) => iv.apresTransmissionId === item.apres_transmission_id)
+      // P31 : un élément « hors coupure » (apres_transmission_id null) se colle
+      // dans la journée d'antenne de sa date, sans dépendre de la grille live.
+      const intervalle =
+        item.apres_transmission_id == null
+          ? { date: item.date, debut: 6 * 60, fin: 30 * 60, apresTransmissionId: null }
+          : intervalles.find((iv) => iv.apresTransmissionId === item.apres_transmission_id)
       if (!intervalle) continue
-      const elementsCoupureCible = elementsSecondairesActifs.filter((e) => e.apres_transmission_id === item.apres_transmission_id)
+      const elementsCoupureCible = elementsSecondairesActifs.filter((e) =>
+        item.apres_transmission_id == null
+          ? e.apres_transmission_id == null && e.date === item.date
+          : e.apres_transmission_id === item.apres_transmission_id
+      )
       const heureDebutSecondes = heureHMSEnSecondes(item.heure_debut)
       if (!estPlacementValide(heureDebutSecondes, item.duree_secondes, intervalle, elementsCoupureCible)) continue
       const cree = await creerElementSecondaire({ ...item, chaine_id: chaineActive.id, plan_media_id: planMediaActif.id })
@@ -745,6 +761,16 @@ export default function PlanMedia({ chaineActive }) {
             {ongletPanneau === 'COMPOSITION' && selectionActive && (
               <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
                 <span>{elementsSelectionnesIds.size} sélectionné(s)</span>
+                <button
+                  type="button"
+                  onClick={basculerToutSelectionner}
+                  disabled={elementsPeriode.length === 0}
+                  className="font-medium underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {elementsSelectionnesIds.size === elementsPeriode.length && elementsPeriode.length > 0
+                    ? 'Tout désélectionner'
+                    : 'Tout sélectionner'}
+                </button>
                 <button
                   type="button"
                   onClick={copierSelection}

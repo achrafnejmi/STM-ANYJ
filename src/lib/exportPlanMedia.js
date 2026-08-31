@@ -45,38 +45,54 @@ export function construireLignesPlanMedia(dates, diffusions, elementsSecondaires
   const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
 
   const parCoupure = new Map()
+  const horsCoupureParDate = new Map() // P31 : éléments non ancrés à une transmission
   for (const e of elementsSecondaires) {
     if (!datesRetenues.has(e.date)) continue
+    if (e.apres_transmission_id == null) {
+      if (!horsCoupureParDate.has(e.date)) horsCoupureParDate.set(e.date, [])
+      horsCoupureParDate.get(e.date).push(e)
+      continue
+    }
     if (!parCoupure.has(e.apres_transmission_id)) parCoupure.set(e.apres_transmission_id, [])
     parCoupure.get(e.apres_transmission_id).push(e)
   }
 
-  const coupures = []
+  // Segments = groupes de lignes d'une même journée partageant un contexte :
+  // une coupure (repère = la transmission qui la précède, heure_fin) ou le bloc
+  // « Hors coupure » (P31, aucun repère horaire, placé en tête de journée).
+  const segments = []
   for (const [transmissionId, elements] of parCoupure) {
-    // Repère = la transmission elle-même (heure_fin), jamais le 1er élément
-    // survivant : robuste même si des éléments ont été supprimés
-    // individuellement depuis (EXG-M5-06).
     const transmission = diffusionsParId.get(transmissionId)
     if (!transmission) continue
     elements.sort((a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0))
-    coupures.push({ transmission, elements })
+    segments.push({
+      date: transmission.date,
+      // '' trie avant toute heure → « Hors coupure » en tête de journée.
+      heureTri: transmission.heure_fin,
+      heureFin: transmission.heure_fin,
+      contexte: programmesParId.get(transmission.programme_id)?.titre ?? '',
+      elements,
+    })
   }
-  coupures.sort((a, b) => {
-    if (a.transmission.date !== b.transmission.date) return a.transmission.date < b.transmission.date ? -1 : 1
-    return a.transmission.heure_fin < b.transmission.heure_fin ? -1 : a.transmission.heure_fin > b.transmission.heure_fin ? 1 : 0
+  for (const [date, elements] of horsCoupureParDate) {
+    elements.sort((a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0))
+    segments.push({ date, heureTri: '', heureFin: null, contexte: 'Hors coupure', elements })
+  }
+  segments.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1
+    return a.heureTri < b.heureTri ? -1 : a.heureTri > b.heureTri ? 1 : 0
   })
 
   const lignes = []
   const cellulesHeure = []
-  for (const { transmission, elements } of coupures) {
-    const contexte = programmesParId.get(transmission.programme_id)?.titre ?? ''
+  for (const { date, heureFin, contexte, elements } of segments) {
     elements.forEach((e, i) => {
       const indexLigne = lignes.length
-      if (i === 0) cellulesHeure.push([indexLigne, 1]) // H.FIN
+      if (i === 0 && heureFin != null) cellulesHeure.push([indexLigne, 1]) // H.FIN
       cellulesHeure.push([indexLigne, 4]) // DUREE
       lignes.push([
-        formaterDateJJMMAAAA(transmission.date),
-        i === 0 ? fractionJourneeDepuisHMS(transmission.heure_fin) : '',
+        formaterDateJJMMAAAA(date),
+        i === 0 && heureFin != null ? fractionJourneeDepuisHMS(heureFin) : '',
         i === 0 ? contexte : '',
         libelleContenu(e, campagnesParId, programmesParId),
         fractionJourneeDepuisSecondes(e.duree_secondes),

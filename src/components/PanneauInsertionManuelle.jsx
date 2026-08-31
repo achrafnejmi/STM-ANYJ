@@ -11,6 +11,17 @@ import {
 import { formaterDateLongue, minutesEnHeure } from '../lib/semaine.js'
 import Modal from './Modal.jsx'
 
+// Valeur sentinelle du sélecteur « Coupure » pour une insertion NON ancrée à
+// une transmission (P31) : l'élément est rattaché à la seule journée d'antenne
+// (06:00 → 06:00). Toujours proposée, en dernière option — indispensable quand
+// la grille linéaire live est encore incomplète (aucune coupure calculable).
+const COUPURE_LIBRE = '__LIBRE__'
+// Bornes de la journée d'antenne en minutes d'horloge, même base que
+// minutesDepuisDebutAntenne / heureHMSEnSecondes (le pré-06:00 est décalé de
+// +24 h) : 06:00 aujourd'hui → 06:00 le lendemain.
+const DEBUT_JOURNEE_ANTENNE_MINUTES = 6 * 60
+const FIN_JOURNEE_ANTENNE_MINUTES = 30 * 60
+
 // Insertion manuelle dans une coupure (P16b) : date → coupure (recalculée en
 // direct depuis `diffusions`, jamais un objet intervalle figé dans le state —
 // seul apresTransmissionId est retenu comme sélection, pour ne jamais valider
@@ -56,10 +67,27 @@ export default function PanneauInsertionManuelle({
   const diffusionsParId = useMemo(() => new Map(diffusions.map((d) => [d.id, d])), [diffusions])
   const intervalles = useMemo(() => calculerIntervalles(dates, diffusions), [dates, diffusions])
   const coupuresDuJour = useMemo(() => intervalles.filter((iv) => iv.date === dateChoisie), [intervalles, dateChoisie])
-  const intervalleSelectionne = coupuresDuJour.find((iv) => iv.apresTransmissionId === coupureId) ?? null
+  // Zone « hors coupure » (P31) : toute la journée d'antenne, non ancrée à une
+  // transmission. Recalculée en direct comme les vraies coupures, jamais figée.
+  const intervalleLibre = useMemo(
+    () => ({
+      date: dateChoisie,
+      debut: DEBUT_JOURNEE_ANTENNE_MINUTES,
+      fin: FIN_JOURNEE_ANTENNE_MINUTES,
+      apresTransmissionId: null,
+    }),
+    [dateChoisie]
+  )
+  const modeLibre = coupureId === COUPURE_LIBRE
+  const intervalleSelectionne = modeLibre
+    ? intervalleLibre
+    : coupuresDuJour.find((iv) => iv.apresTransmissionId === coupureId) ?? null
   const elementsDansCoupure = useMemo(
-    () => elementsSecondaires.filter((e) => e.apres_transmission_id === coupureId),
-    [elementsSecondaires, coupureId]
+    () =>
+      modeLibre
+        ? elementsSecondaires.filter((e) => e.apres_transmission_id == null && e.date === dateChoisie)
+        : elementsSecondaires.filter((e) => e.apres_transmission_id === coupureId),
+    [elementsSecondaires, coupureId, modeLibre, dateChoisie]
   )
 
   // Valeur par défaut : juste après le dernier élément déjà présent dans la
@@ -107,7 +135,7 @@ export default function PanneauInsertionManuelle({
         heure_debut: secondesEnHeureHMS(heureDebutSecondes),
         heure_fin: secondesEnHeureHMS(heureDebutSecondes + duree),
         duree_secondes: duree,
-        apres_transmission_id: coupureId,
+        apres_transmission_id: modeLibre ? null : coupureId,
         type,
         libelle,
         campagne_id: sourceType === 'BANDE_ANNONCE' ? campagneId : null,
@@ -123,12 +151,13 @@ export default function PanneauInsertionManuelle({
         operations: [{ table: 'element_secondaire', type: 'INSERT', id: cree.id, apres: cree }],
       })
       onElementCree(cree)
-      // Coupure pré-remplie (P17, Conducteur) : pas de sélecteur vers lequel
-      // retomber, on la garde pour permettre d'enchaîner plusieurs insertions
-      // dans la même coupure. Sinon (Plan média), on revient au sélecteur.
-      if (!coupureIdInitiale) setCoupureId('')
+      // On garde la coupure/zone sélectionnée pour enchaîner plusieurs
+      // insertions à la suite (le « + » demandé) : seuls le spot/la campagne
+      // sont remis à zéro, et l'heure de début avance juste après l'élément
+      // qui vient d'être posé.
       setSpotId('')
       setCampagneId('')
+      setHeureDebutSaisie(secondesEnHeureHMS(heureDebutSecondes + duree))
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -173,8 +202,13 @@ export default function PanneauInsertionManuelle({
                   {libelleCoupure(iv)}
                 </option>
               ))}
+              <option value={COUPURE_LIBRE}>Hors coupure — journée d'antenne (06:00 → 06:00)</option>
             </select>
-            {coupuresDuJour.length === 0 && <p className="mt-1 text-xs text-slate-500">Aucune coupure ce jour-là.</p>}
+            {coupuresDuJour.length === 0 && (
+              <p className="mt-1 text-xs text-slate-500">
+                Aucune coupure ce jour-là (grille linéaire incomplète) — utilisez « Hors coupure » pour insérer librement.
+              </p>
+            )}
           </div>
         ) : (
           intervalleSelectionne && (
@@ -188,7 +222,9 @@ export default function PanneauInsertionManuelle({
           <>
             {elementsDansCoupure.length > 0 && (
               <div className="rounded-md border border-slate-200 p-2 text-xs text-slate-500">
-                <div className="mb-1 font-medium text-slate-700">Déjà dans cette coupure :</div>
+                <div className="mb-1 font-medium text-slate-700">
+                  {modeLibre ? 'Déjà hors coupure ce jour-là :' : 'Déjà dans cette coupure :'}
+                </div>
                 {elementsDansCoupure
                   .slice()
                   .sort((a, b) => (a.heure_debut < b.heure_debut ? -1 : 1))
