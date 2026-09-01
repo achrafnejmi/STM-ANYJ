@@ -129,6 +129,43 @@ export function calculerIndicateursApprofondis({
   }
 }
 
+// Statistiques du non-linéaire (P31) : posts réseaux sociaux + mises en ligne
+// VOD confondus. `joursPeriode` = dates ISO de la semaine de référence (pour
+// « publié cette semaine »). Aucune notion d'épisode à ce niveau.
+export function calculerStatsNonLineaire(publicationsReseau, publicationsVod, joursPeriode = []) {
+  const periode = new Set(joursPeriode)
+  const toutes = [
+    ...publicationsReseau.map((p) => ({ ...p, canal: 'RESEAU' })),
+    ...publicationsVod.map((p) => ({ ...p, canal: 'VOD', plateforme: p.plateforme ?? 'FORJA' })),
+  ]
+
+  const parStatut = { BROUILLON: 0, PROGRAMME: 0, PUBLIE: 0, ANNULE: 0 }
+  const parPlateforme = new Map()
+  let publieesPeriode = 0
+  for (const p of toutes) {
+    parStatut[p.statut] = (parStatut[p.statut] ?? 0) + 1
+    parPlateforme.set(p.plateforme, (parPlateforme.get(p.plateforme) ?? 0) + 1)
+    if (p.statut === 'PUBLIE' && periode.has(p.date_publication)) publieesPeriode += 1
+  }
+
+  const total = toutes.length
+  const actives = total - parStatut.ANNULE
+  const tauxPublie = actives > 0 ? Math.round((parStatut.PUBLIE / actives) * 100) : 0
+
+  return {
+    total,
+    nbReseau: publicationsReseau.length,
+    nbVod: publicationsVod.length,
+    parStatut,
+    publieesPeriode,
+    tauxPublie,
+    // ordonné du plus fréquent au moins fréquent, pour un graphe lisible
+    parPlateforme: [...parPlateforme.entries()]
+      .map(([plateforme, nb]) => ({ plateforme, nb }))
+      .sort((a, b) => b.nb - a.nb),
+  }
+}
+
 // Répartition par genre (§4.10.2) : les 9 genres de la liste fermée, dans cet
 // ordre — « nombre d'épisodes prêts » compte exactement les épisodes qui
 // contribuent au volume de la ligne (PAD + droits ouverts), pas un simple

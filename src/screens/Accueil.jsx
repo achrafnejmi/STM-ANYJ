@@ -12,6 +12,8 @@ import {
   obtenirGrilleLiveParChaine,
   listerElementsSecondairesParPlanMedia,
   obtenirPlanMediaLiveParChaine,
+  listerPublicationsReseauParChaine,
+  listerPublicationsVodParChaine,
 } from '../lib/db.js'
 import { aujourdHuiISO, lundiDeLaSemaine, joursDeLaSemaine, formaterPlageSemaine } from '../lib/semaine.js'
 import { GENRES } from '../lib/genres.js'
@@ -20,6 +22,7 @@ import { estProgrammable } from '../lib/droits.js'
 import {
   calculerIndicateursTete,
   calculerIndicateursApprofondis,
+  calculerStatsNonLineaire,
   calculerRepartitionParGenre,
   calculerTitresFinsDeDroits,
   estProgrammeNonProgramme,
@@ -33,6 +36,31 @@ const STATUTS = [
   { code: 'HORS_DROITS', label: 'Hors droits' },
   { code: 'FINS_DE_DROITS', label: 'Fins de droits proches' },
   { code: 'NON_PROGRAMMES', label: 'Non programmés sur la période' },
+]
+
+// Palette non-linéaire — une teinte sobre par plateforme / par statut, réutilisée
+// par les cartes et le diagramme (première impression : cohérence visuelle).
+const COULEUR_PLATEFORME = {
+  FACEBOOK: 'bg-indigo-500',
+  INSTAGRAM: 'bg-rose-500',
+  TIKTOK: 'bg-slate-800',
+  SNAPCHAT: 'bg-amber-400',
+  YOUTUBE: 'bg-red-500',
+  FORJA: 'bg-emerald-500',
+}
+const LIBELLE_PLATEFORME = {
+  FACEBOOK: 'Facebook',
+  INSTAGRAM: 'Instagram',
+  TIKTOK: 'TikTok',
+  SNAPCHAT: 'Snapchat',
+  YOUTUBE: 'YouTube',
+  FORJA: 'Forja (VOD)',
+}
+const STATUTS_NL = [
+  { code: 'PUBLIE', label: 'Publié', couleur: 'bg-emerald-500' },
+  { code: 'PROGRAMME', label: 'Programmé', couleur: 'bg-indigo-400' },
+  { code: 'BROUILLON', label: 'Brouillon', couleur: 'bg-slate-300' },
+  { code: 'ANNULE', label: 'Annulé', couleur: 'bg-rose-300' },
 ]
 
 // Variable CSS Tailwind v4 correspondant à une classe `bg-snrt-*` (couleursGenre.js)
@@ -104,6 +132,8 @@ export default function Accueil({ chaineActive }) {
   const [fenetresDroits, setFenetresDroits] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [elementsSecondaires, setElementsSecondaires] = useState([])
+  const [publicationsReseau, setPublicationsReseau] = useState([])
+  const [publicationsVod, setPublicationsVod] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -126,14 +156,18 @@ export default function Accueil({ chaineActive }) {
           listerToutesLesFenetresDroits(),
           grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
           planMediaLive ? listerElementsSecondairesParPlanMedia(planMediaLive.id) : Promise.resolve([]),
+          listerPublicationsReseauParChaine(chaineActive.id),
+          listerPublicationsVodParChaine(chaineActive.id),
         ])
       )
-      .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesElements]) => {
+      .then(([lignesProgrammes, lignesEpisodes, lignesFenetres, lignesDiffusions, lignesElements, lignesReseau, lignesVod]) => {
         setProgrammes(lignesProgrammes)
         setEpisodes(lignesEpisodes)
         setFenetresDroits(lignesFenetres)
         setDiffusions(lignesDiffusions)
         setElementsSecondaires(lignesElements)
+        setPublicationsReseau(lignesReseau)
+        setPublicationsVod(lignesVod)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -193,6 +227,10 @@ export default function Accueil({ chaineActive }) {
         dateReference,
       }),
     [programmes, programmesFiltres, episodesParProgrammeId, fenetresDroits, diffusionsPeriode, elementsSecondaires, dateReference]
+  )
+  const statsNonLineaire = useMemo(
+    () => calculerStatsNonLineaire(publicationsReseau, publicationsVod, joursSemaine),
+    [publicationsReseau, publicationsVod, joursSemaine]
   )
   const repartition = useMemo(
     () => calculerRepartitionParGenre(programmesFiltresStatut, episodesParProgrammeId, fenetresDroits, dateReference),
@@ -427,6 +465,107 @@ export default function Accueil({ chaineActive }) {
                 sousTexte={`${approfondis.parTypeSecondaire.HABILLAGE ?? 0} habillage${(approfondis.parTypeSecondaire.HABILLAGE ?? 0) > 1 ? 's' : ''}`}
               />
             </div>
+          </div>
+
+          <div>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Non-linéaire (réseaux sociaux &amp; VOD)</h2>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <CarteIndicateur
+                libelle="Publications"
+                valeur={statsNonLineaire.total}
+                ton="info"
+                sousTexte={`${statsNonLineaire.nbReseau} réseaux · ${statsNonLineaire.nbVod} VOD`}
+              />
+              <CarteIndicateur
+                libelle="Taux de publication"
+                valeur={`${statsNonLineaire.tauxPublie} %`}
+                ton={statsNonLineaire.tauxPublie >= 70 ? 'favorable' : statsNonLineaire.tauxPublie >= 40 ? 'vigilance' : 'alerte'}
+                sousTexte={`${statsNonLineaire.parStatut.PUBLIE} publié${statsNonLineaire.parStatut.PUBLIE > 1 ? 's' : ''}`}
+              />
+              <CarteIndicateur
+                libelle="Publié cette semaine"
+                valeur={statsNonLineaire.publieesPeriode}
+                ton="favorable"
+                sousTexte={`semaine du ${formaterPlageSemaine(lundi)}`}
+              />
+              <CarteIndicateur
+                libelle="En préparation"
+                valeur={statsNonLineaire.parStatut.PROGRAMME + statsNonLineaire.parStatut.BROUILLON}
+                ton={statsNonLineaire.parStatut.BROUILLON > 0 ? 'vigilance' : 'neutre'}
+                sousTexte={`${statsNonLineaire.parStatut.PROGRAMME} programmés · ${statsNonLineaire.parStatut.BROUILLON} brouillons`}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-6">
+            <h2 className="mb-4 text-base font-semibold text-slate-900">Diffusion non-linéaire par plateforme</h2>
+            {statsNonLineaire.total === 0 ? (
+              <p className="text-sm text-slate-500">Aucune publication non-linéaire enregistrée pour cette chaîne.</p>
+            ) : (
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <div>
+                  <div className="mb-2 text-xs font-medium text-slate-500">Volume par plateforme</div>
+                  <div className="space-y-2.5">
+                    {statsNonLineaire.parPlateforme.map(({ plateforme, nb }) => {
+                      const pct = Math.round((nb / statsNonLineaire.total) * 100)
+                      return (
+                        <div key={plateforme}>
+                          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                            <span>{LIBELLE_PLATEFORME[plateforme] ?? plateforme}</span>
+                            <span className="tabular-nums text-slate-400">{nb} · {pct}%</span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-slate-100">
+                            <div
+                              className={`h-2.5 rounded-full ${COULEUR_PLATEFORME[plateforme] ?? 'bg-slate-400'}`}
+                              style={{ width: `${Math.max(pct, 2)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-medium text-slate-500">Cycle de publication</div>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+                    {STATUTS_NL.map((s) => {
+                      const nb = statsNonLineaire.parStatut[s.code] ?? 0
+                      if (nb === 0) return null
+                      return (
+                        <div
+                          key={s.code}
+                          className={s.couleur}
+                          style={{ width: `${(nb / statsNonLineaire.total) * 100}%` }}
+                          title={`${s.label} : ${nb}`}
+                        />
+                      )
+                    })}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {STATUTS_NL.map((s) => (
+                      <div key={s.code} className="flex items-center justify-between text-xs text-slate-600">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`inline-block h-2 w-2 rounded-full ${s.couleur}`} />
+                          {s.label}
+                        </span>
+                        <span className="tabular-nums text-slate-400">{statsNonLineaire.parStatut[s.code] ?? 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center gap-4 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />
+                      Réseaux sociaux <span className="tabular-nums font-semibold text-slate-700">{statsNonLineaire.nbReseau}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                      VOD <span className="tabular-nums font-semibold text-slate-700">{statsNonLineaire.nbVod}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
