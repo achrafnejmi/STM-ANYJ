@@ -1,0 +1,255 @@
+// Helpers de date vanilla pour la grille linéaire (aucune lib de date dans le
+// projet). Les dates manipulées sont des chaînes "YYYY-MM-DD" (format produit
+// par stm-import.js). On utilise systématiquement les méthodes UTC de Date,
+// car `new Date("YYYY-MM-DD")` parse en UTC minuit — mélanger UTC et local
+// décalerait le jour affiché selon le fuseau du navigateur.
+
+const JOURS_COURTS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+// Exportés (P26) : réutilisés par importPlanMedia.js pour reconnaître la date
+// en toutes lettres du titre d'un fichier Plan média importé.
+export const JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+export const MOIS_LONGS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+]
+
+export function aujourdHuiISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function ajouterJours(dateISO, n) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+export function lundiDeLaSemaine(dateISO) {
+  const jour = new Date(`${dateISO}T00:00:00Z`).getUTCDay() // 0=dimanche..6=samedi
+  const decalage = jour === 0 ? -6 : 1 - jour
+  return ajouterJours(dateISO, decalage)
+}
+
+export function joursDeLaSemaine(lundiISO) {
+  return Array.from({ length: 7 }, (_, i) => ajouterJours(lundiISO, i))
+}
+
+// --- Mois/Année (P25, vues calendrier de GrilleLineaire.jsx) ---
+
+export function premierJourMois(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+export function dernierJourMois(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  // Jour 0 du mois suivant = dernier jour du mois courant.
+  const dernier = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
+  return dernier.toISOString().slice(0, 10)
+}
+
+export function estMemeMois(dateISO, dateReferenceISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const r = new Date(`${dateReferenceISO}T00:00:00Z`)
+  return d.getUTCFullYear() === r.getUTCFullYear() && d.getUTCMonth() === r.getUTCMonth()
+}
+
+// Grille calendrier complète du mois de `dateISO` : semaines entières
+// (lundi→dimanche), débordant sur le mois précédent/suivant pour ne jamais
+// avoir de semaine incomplète — même esprit que joursDeLaSemaine.
+export function joursDuMoisAffiches(dateISO) {
+  const debut = lundiDeLaSemaine(premierJourMois(dateISO))
+  const finSemaineDuDernier = ajouterJours(lundiDeLaSemaine(dernierJourMois(dateISO)), 6)
+  const jours = []
+  for (let d = debut; d <= finSemaineDuDernier; d = ajouterJours(d, 1)) jours.push(d)
+  return jours
+}
+
+// Tous les jours (365/366) de l'année de `dateISO` — pour que le pipeline
+// diffusionsParJour/anomalies reste uniforme quelle que soit la vue (pas de
+// cas particulier à gérer côté anomalies pour la vue Année).
+export function joursDeLAnnee(dateISO) {
+  const annee = new Date(`${dateISO}T00:00:00Z`).getUTCFullYear()
+  const dernier = `${annee}-12-31`
+  const jours = []
+  for (let d = `${annee}-01-01`; d <= dernier; d = ajouterJours(d, 1)) jours.push(d)
+  return jours
+}
+
+// Ajoute n mois, en bornant le jour au dernier jour du mois cible (31 janvier
+// + 1 mois = 28/29 février, jamais un débordement sur mars).
+export function ajouterMois(dateISO, n) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const cible = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1))
+  const dernierJourCible = new Date(Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth() + 1, 0)).getUTCDate()
+  cible.setUTCDate(Math.min(d.getUTCDate(), dernierJourCible))
+  return cible.toISOString().slice(0, 10)
+}
+
+export function ajouterAnnees(dateISO, n) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  d.setUTCFullYear(d.getUTCFullYear() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+// "Août 2026" — période affichée en vue Mois.
+export function formaterMoisAnnee(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  const nom = MOIS_LONGS[d.getUTCMonth()]
+  return `${nom.charAt(0).toUpperCase()}${nom.slice(1)} ${d.getUTCFullYear()}`
+}
+
+// "2026" — période affichée en vue Année.
+export function formaterAnnee(dateISO) {
+  return String(new Date(`${dateISO}T00:00:00Z`).getUTCFullYear())
+}
+
+// Les 12 mois de l'année de `dateISO`, pour les tuiles de la vue Année.
+export function moisDeLAnnee(dateISO) {
+  const annee = new Date(`${dateISO}T00:00:00Z`).getUTCFullYear()
+  return Array.from({ length: 12 }, (_, i) => ({
+    mois: i,
+    annee,
+    premierJour: `${annee}-${String(i + 1).padStart(2, '0')}-01`,
+  }))
+}
+
+// Jour de semaine d'une date ISO, 0=lundi..6=dimanche (convention utilisée
+// pour `jours` sur bloc_grille_type comme sur la répétition P11).
+export function jourAntenneLundi0(dateISO) {
+  return (new Date(`${dateISO}T00:00:00Z`).getUTCDay() + 6) % 7
+}
+
+export function formaterJourCourt(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${JOURS_COURTS[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+export function formaterDateLongue(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${d.getUTCDate()} ${MOIS_COURTS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// Nom de jour complet + date à chasse fixe (jour sur 2 chiffres, mois en
+// toutes lettres) — utilisé pour le nom de fichier de l'export Plan média
+// (ex. "mercredi 05 août 2026"), distinct de formaterDateLongue (pas de nom
+// de jour, jour non zéro-préfixé) qui reste utilisé pour l'affichage écran.
+export function formaterJourDateLongue(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${JOURS_LONGS[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')} ${MOIS_LONGS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// Comme formaterJourDateLongue mais sans le nom de jour (ex. "05 août 2026")
+// — pour les bornes "du <x> au <y>" du nom de fichier vue Semaine.
+export function formaterDateLonguePadded(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MOIS_LONGS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+// JJ/MM/AAAA — colonne JOUR de l'export Plan média (texte libre, le fichier
+// réel ne stocke pas de vraie date Excel dans cette colonne, voir
+// src/lib/stm-import.js:147 : lecture brute sans conversion).
+export function formaterDateJJMMAAAA(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
+}
+
+export function formaterPlageSemaine(lundiISO) {
+  const dimancheISO = ajouterJours(lundiISO, 6)
+  const d1 = new Date(`${lundiISO}T00:00:00Z`)
+  const d2 = new Date(`${dimancheISO}T00:00:00Z`)
+  if (d1.getUTCMonth() === d2.getUTCMonth() && d1.getUTCFullYear() === d2.getUTCFullYear()) {
+    return `${d1.getUTCDate()} – ${d2.getUTCDate()} ${MOIS_COURTS[d2.getUTCMonth()]} ${d2.getUTCFullYear()}`
+  }
+  return `${formaterDateLongue(lundiISO)} – ${formaterDateLongue(dimancheISO)}`
+}
+
+export function heureEnMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+
+export function minutesEnHeure(minutes) {
+  const h = Math.floor(minutes / 60) % 24
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+// Formate une durée (minutes) en "Xh MM" ou "M min" — pour une durée, pas une
+// heure de la journée (contrairement à minutesEnHeure, pas de modulo 24).
+export function formaterDureeMinutes(minutes) {
+  if (!minutes || minutes <= 0) return '—'
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`
+}
+
+// Journée d'antenne (RG-19/20 du cahier) : 06:00 → 06:00 le lendemain. La
+// `date` stockée d'une transmission est celle du jour d'antenne, pas du jour
+// calendaire de l'heure d'horloge — un programme entre 00:00 et 05:59
+// appartient à la journée d'antenne de la veille.
+export const DEBUT_JOURNEE_ANTENNE = 6 * 60 // 360 = 06:00
+export const FIN_JOURNEE_ANTENNE = DEBUT_JOURNEE_ANTENNE + 24 * 60 // 1800 = 06:00 le lendemain
+
+// Position d'une heure HH:MM sur l'axe de LA journée d'antenne à laquelle elle
+// appartient (pas celle de son jour calendaire) : une heure avant 06:00 est
+// comprise comme la fin de la journée d'antenne précédente (ex. "01:00" → 1500,
+// pas 60). `minutesEnHeure` fait déjà l'inverse (modulo 24h) pour l'affichage.
+export function minutesDepuisDebutAntenne(hhmm) {
+  const m = heureEnMinutes(hhmm)
+  return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
+}
+
+// Comparateur (date, minute d'antenne) — vrai si (dateA, minutesA) est
+// strictement postérieur à (dateB, minutesB). Pas une concaténation de
+// chaînes (déjà fausse pour comparer des heures d'antenne, voir autoprog.js) :
+// compare la date en premier, la minute seulement en cas d'égalité. Utilisé
+// par planMedia.js (RG-M5-01 : diffusion à venir, postérieure à l'instant
+// considéré) mais générique, réutilisable au-delà.
+export function estPosterieur(dateA, minutesA, dateB, minutesB) {
+  if (dateA !== dateB) return dateA > dateB
+  return minutesA > minutesB
+}
+
+// Nombre de jours calendaires entre deux dates ISO, signé (positif si dateB
+// est après dateA). Même précédent UTC que le reste du fichier — utilisé par
+// autoprog.js pour la règle de séparation (P15), qui doit fonctionner dans
+// les deux sens (une diffusion existante peut être avant OU après la date en
+// cours de traitement).
+export function joursEntre(dateA, dateB) {
+  const a = new Date(`${dateA}T00:00:00Z`)
+  const b = new Date(`${dateB}T00:00:00Z`)
+  return Math.round((b - a) / 86400000)
+}
+
+// Reconnaît une date "JJ MOIS AAAA" (mois en toutes lettres, FR, insensible à
+// la casse/aux accents) n'importe où dans un texte libre — ex. le titre d'un
+// fichier Plan média importé ("Plan Média Autopromotion Al Aoula MARDI 07
+// JUILLET 2026" → "2026-07-07", P26). Renvoie null si aucune date reconnue
+// (l'appelant retombe alors sur une valeur par défaut, jamais un import
+// silencieusement daté au hasard).
+export function parserDateFrancaiseLongue(texte) {
+  if (!texte) return null
+  const normaliser = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+  const correspondance = texte.match(/(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/)
+  if (!correspondance) return null
+  const jour = Number(correspondance[1])
+  const indexMois = MOIS_LONGS.findIndex((m) => normaliser(m) === normaliser(correspondance[2]))
+  if (indexMois === -1 || jour < 1 || jour > 31) return null
+  return `${correspondance[3]}-${String(indexMois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`
+}
+
+// Dates ISO entre deux bornes (incluses), en partant de `debutISO` et en
+// avançant de `pas` jours à chaque tour (P27, onglet Répéter de l'Inspecteur —
+// remplace l'ancien mode par jours de semaine cochés, joursSelonJoursSemaine,
+// retiré car il n'avait aucun autre appelant).
+export function datesParPas(debutISO, finISO, pas) {
+  const dates = []
+  let d = debutISO
+  while (d <= finISO) {
+    dates.push(d)
+    d = ajouterJours(d, pas)
+  }
+  return dates
+}

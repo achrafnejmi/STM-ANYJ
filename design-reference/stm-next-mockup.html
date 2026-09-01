@@ -1,0 +1,2622 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STM Next — Espaces de travail par chaîne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>html,body,#root{margin:0;padding:0;min-height:100%;background:#F2F4F7}body{font-family:Inter,system-ui,sans-serif}
+#boot{display:flex;align-items:center;justify-content:center;height:100vh;color:#7C8899;font-size:13px}</style>
+<script type="importmap">
+{"imports":{"react":"https://esm.sh/react@18.3.1","react/jsx-runtime":"https://esm.sh/react@18.3.1/jsx-runtime",
+"react-dom":"https://esm.sh/react-dom@18.3.1","react-dom/client":"https://esm.sh/react-dom@18.3.1/client",
+"lucide-react":"https://esm.sh/lucide-react@0.383.0?deps=react@18.3.1"}}
+</script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+</head><body>
+<div id="root"><div id="boot">Chargement de STM Next…</div></div>
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  CalendarRange, Layers3, Library, ListOrdered, Boxes, Search, Undo2, Redo2,
+  ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck, X, Plus, Trash2, FileDown,
+  Tv, Radio, Check, AlertTriangle, History, Filter, CornerDownLeft, Wand2,
+  Play, Settings2, ZoomIn, ZoomOut, Clock, Bell, Copy, ArrowRight, Languages,
+  SplitSquareHorizontal, Table2, LayoutGrid, Sparkles, CircleAlert, Info
+} from "lucide-react";
+
+/* ═══════════════════════════════════════════════════════ 1. DESIGN TOKENS */
+const T = {
+  paper: "#F2F4F7", surface: "#FFFFFF", sunk: "#FAFBFC",
+  ink: "#0F1A2A", ink2: "#3B4A5E", muted: "#7C8899",
+  line: "#E1E6EC", line2: "#EDF0F4",
+  rail: "#0F1A2A", railInk: "#8B99AB",
+  signal: "#D92D20", warn: "#B54708", ok: "#067647",
+  gold: "#94660A", goldSoft: "#FCF4E3", goldLine: "#EEDFBB",
+  focus: "#1F4FD8",
+};
+
+const GENRES = {
+  Information:    { c: "#2563EB", ar: "أخبار" },
+  Magazine:       { c: "#7C3AED", ar: "مجلة" },
+  Série:          { c: "#DB2777", ar: "مسلسل" },
+  Film:           { c: "#EA580C", ar: "فيلم" },
+  Documentaire:   { c: "#0E9384", ar: "وثائقي" },
+  Sport:          { c: "#0284C7", ar: "رياضة" },
+  Jeunesse:       { c: "#CA8A04", ar: "أطفال" },
+  Religieux:      { c: "#4F46E5", ar: "ديني" },
+  Divertissement: { c: "#C026D3", ar: "ترفيه" },
+};
+const gc = (g) => GENRES[g]?.c ?? T.muted;
+
+const CHANNELS = ["Al Aoula", "Arryadia", "Athaqafia", "Assadissa", "Tamazight"];
+const DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const DAY_ABBR  = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+/* La journée d'antenne va de 06:00 à 06:00 le lendemain — convention broadcast. */
+const DAY_START = 6 * 60;
+const DAY_END   = 30 * 60;
+
+/* ══════════════════════════════════════════════════════ 2. GRILLE TYPE     */
+/* Inspiré du « Channel layout definition » : des blocs nommés, pas des cases. */
+const LAYOUT_DEFAULT = [
+  { id: "L1", nom: "Matinale",          start: 6 * 60,      end: 9 * 60,       freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Magazine" },
+  { id: "L2", nom: "Jeunesse",          start: 9 * 60,      end: 11 * 60,      freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Jeunesse" },
+  { id: "L3", nom: "Doc de la mi-journée", start: 11 * 60,  end: 12 * 60,      freq: "Quotidien", days: [0,1,2,3,4],     genre: "Documentaire" },
+  { id: "L4", nom: "Info midi",         start: 12 * 60 + 45, end: 13 * 60 + 30, freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Information" },
+  { id: "L5", nom: "Feuilleton après-midi", start: 14 * 60, end: 15 * 60,      freq: "Quotidien", days: [0,1,2,3,4],     genre: "Série" },
+  { id: "L6", nom: "Religieux",         start: 17 * 60,     end: 17 * 60 + 30, freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Religieux" },
+  { id: "L7", nom: "Access",            start: 18 * 60 + 30, end: 19 * 60 + 45, freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Magazine" },
+  { id: "L8", nom: "JT 20h45",          start: 20 * 60 + 45, end: 21 * 60 + 30, freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Information" },
+  { id: "L9", nom: "Prime A — Série",   start: 21 * 60 + 30, end: 22 * 60 + 15, freq: "Hebdo",     days: [0,1,2,3,4],     genre: "Série" },
+  { id: "L10", nom: "Prime B — Divertissement", start: 21 * 60 + 30, end: 23 * 60, freq: "Hebdo",  days: [5],             genre: "Divertissement" },
+  { id: "L11", nom: "Ciné dimanche",    start: 21 * 60 + 30, end: 23 * 60 + 15, freq: "Hebdo",     days: [6],             genre: "Film" },
+  { id: "L12", nom: "Deuxième partie",  start: 23 * 60 + 30, end: 24 * 60 + 30, freq: "Quotidien", days: [0,1,2,3,4,5,6], genre: "Documentaire" },
+];
+
+
+/* ═════════════════════════════ 2 bis. ESPACES DE TRAVAIL PAR CHAÎNE        */
+/* Chaque chaîne a sa grille type, son plan, ses campagnes et sa couleur.     */
+const CH_META = {
+  "Al Aoula":  { code: "AW", couleur: "#C8102E", ar: "الأولى",   ligne: "Généraliste nationale" },
+  "Arryadia":  { code: "AR", couleur: "#0E7C3A", ar: "الرياضية", ligne: "Sport" },
+  "Athaqafia": { code: "AT", couleur: "#6D28D9", ar: "الثقافية", ligne: "Culture et savoirs" },
+  "Assadissa": { code: "AS", couleur: "#0F766E", ar: "السادسة",  ligne: "Religieux" },
+  "Tamazight": { code: "TM", couleur: "#B45309", ar: "تمازيغت",  ligne: "Amazighe" },
+};
+
+const mkLayout = (rows) => rows.map((r, i) => ({
+  id: `L${i}_${r[0].slice(0, 3)}`, nom: r[0], start: r[1], end: r[2], freq: r[3], days: r[4], genre: r[5],
+}));
+
+const LAYOUTS = {
+  "Al Aoula": LAYOUT_DEFAULT,
+  "Arryadia": mkLayout([
+    ["Réveil sportif", 7 * 60, 9 * 60, "Quotidien", [0,1,2,3,4,5,6], "Sport"],
+    ["Doc du sport", 11 * 60, 12 * 60, "Quotidien", [0,1,2,3,4], "Documentaire"],
+    ["Info sport midi", 13 * 60, 13 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Information"],
+    ["Magazine d'après-midi", 15 * 60, 16 * 60 + 15, "Quotidien", [0,1,2,3,4], "Magazine"],
+    ["Avant-match", 18 * 60 + 30, 19 * 60 + 30, "Hebdo", [5,6], "Sport"],
+    ["Prime sport", 20 * 60 + 45, 21 * 60 + 45, "Quotidien", [0,1,2,3,4,5,6], "Sport"],
+    ["Deuxième partie", 22 * 60 + 30, 23 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Documentaire"],
+  ]),
+  "Athaqafia": mkLayout([
+    ["Matinale culturelle", 8 * 60, 9 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Magazine"],
+    ["Jeunesse & savoir", 10 * 60, 11 * 60, "Quotidien", [0,1,2,3,4,5,6], "Jeunesse"],
+    ["Grand documentaire", 12 * 60, 13 * 60, "Quotidien", [0,1,2,3,4,5,6], "Documentaire"],
+    ["Débat d'idées", 17 * 60, 18 * 60 + 15, "Hebdo", [1,3,5], "Magazine"],
+    ["Info culture", 20 * 60, 20 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Information"],
+    ["Soirée patrimoine", 21 * 60, 22 * 60, "Quotidien", [0,1,2,3,4,5,6], "Documentaire"],
+    ["Scène et musique", 22 * 60 + 30, 24 * 60, "Hebdo", [4,5,6], "Divertissement"],
+  ]),
+  "Assadissa": mkLayout([
+    ["Lever du jour", 6 * 60, 7 * 60, "Quotidien", [0,1,2,3,4,5,6], "Religieux"],
+    ["Leçon du matin", 9 * 60, 9 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Religieux"],
+    ["Doc de la foi", 11 * 60, 12 * 60, "Quotidien", [0,1,2,3,4], "Documentaire"],
+    ["Info", 13 * 60, 13 * 60 + 45, "Quotidien", [0,1,2,3,4,5,6], "Information"],
+    ["Jeunesse", 16 * 60, 17 * 60, "Quotidien", [0,1,2,3,4,5,6], "Jeunesse"],
+    ["Veillée", 21 * 60, 21 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Religieux"],
+    ["Magazine du soir", 22 * 60, 23 * 60 + 15, "Hebdo", [2,5], "Magazine"],
+  ]),
+  "Tamazight": mkLayout([
+    ["Matinale", 7 * 60, 8 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Magazine"],
+    ["Jeunesse", 10 * 60, 11 * 60, "Quotidien", [0,1,2,3,4,5,6], "Jeunesse"],
+    ["Territoires", 12 * 60, 13 * 60, "Quotidien", [0,1,2,3,4,5,6], "Documentaire"],
+    ["Info", 19 * 60, 19 * 60 + 30, "Quotidien", [0,1,2,3,4,5,6], "Information"],
+    ["Feuilleton", 20 * 60, 20 * 60 + 45, "Quotidien", [0,1,2,3,4], "Série"],
+    ["Soirée", 21 * 60, 22 * 60 + 30, "Hebdo", [4,5,6], "Divertissement"],
+  ]),
+};
+
+/* Tranches d'antenne — servent à cibler les campagnes d'autopromotion. */
+const TRANCHES = [
+  { k: "matin",   label: "Matin",     from: 6 * 60,  to: 12 * 60 },
+  { k: "journee", label: "Journée",   from: 12 * 60, to: 18 * 60 },
+  { k: "access",  label: "Access",    from: 18 * 60, to: 20 * 60 + 45 },
+  { k: "prime",   label: "Prime",     from: 20 * 60 + 45, to: 24 * 60 },
+  { k: "nuit",    label: "Nuit",      from: 24 * 60, to: DAY_END },
+];
+const trancheDe = (min) => TRANCHES.find((t) => min >= t.from && min < t.to)?.k ?? "nuit";
+
+/* ═══════════════════════════════════════════════════════ 3. CATALOGUE      */
+const mkEps = (n, base, baseAr, dur, padFrom = 0) =>
+  Array.from({ length: n }, (_, i) => ({
+    num: i + 1,
+    titre: `${base} — Épisode ${i + 1}`,
+    titreAr: `${baseAr} — الحلقة ${i + 1}`,
+    duree: dur,
+    pad: i >= padFrom && i < n - 2,
+    support: `SUP-${1000 + i * 3}`,
+    tc: `10:00:0${i % 10}:00`,
+  }));
+
+function hist(lastISO, count, chaine) {
+  const out = []; const d = new Date(lastISO);
+  for (let i = 0; i < count; i++) {
+    out.push({
+      date: d.toISOString().slice(0, 10),
+      heure: ["20:45", "14:00", "09:00", "23:45", "18:30"][i % 5],
+      chaine, ep: ((i * 3) % 12) + 1,
+      type: i % 3 === 0 ? "Diffusion" : "Rediffusion",
+      vecteur: i % 4 === 1 ? "TNT" : "TNT + SAT",
+      part: (4 + ((i * 7) % 90) / 10).toFixed(1),
+    });
+    d.setDate(d.getDate() - (7 + (i % 4)));
+  }
+  return out;
+}
+
+const PROGRAMS = [
+  {
+    id: "P01", titre: "Sabahiyat Al Aoula", titreAr: "صباحيات الأولى", titreEn: "Al Aoula Morning",
+    genre: "Magazine", sousGenre: "Magazine matinal", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "K. Bennani", casting: "—", annee: 2026,
+    synopsisFr: "Magazine quotidien mêlant actualité de service, chroniques pratiques et invités.",
+    synopsisAr: "برنامج يومي يجمع بين الأخبار الخدماتية والفقرات العملية والضيوف.",
+    tags: ["Direct", "Quotidien", "Studio"], contrat: "CT-2026-014",
+    droits: [{ from: "2026-01-01", to: "2026-12-31", vecteur: "TNT + SAT", passages: 300, used: 148, exclusif: null }],
+    episodes: mkEps(24, "Sabahiyat", "صباحيات", 90), diffusions: hist("2026-08-07", 11, "Al Aoula"),
+  },
+  {
+    id: "P02", titre: "Journal Télévisé 20h45", titreAr: "النشرة الإخبارية", titreEn: "Main Evening News",
+    genre: "Information", sousGenre: "Édition principale", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "Régie information", casting: "—", annee: 2026,
+    synopsisFr: "Édition principale d'information nationale et internationale.",
+    synopsisAr: "النشرة الرئيسية للأخبار الوطنية والدولية.",
+    tags: ["Direct", "Info"], contrat: "CT-2026-001",
+    droits: [{ from: "2026-01-01", to: "2026-12-31", vecteur: "TNT + SAT", passages: 999, used: 221, exclusif: null }],
+    episodes: mkEps(8, "JT 20h45", "النشرة", 45), diffusions: hist("2026-08-09", 12, "Al Aoula"),
+  },
+  {
+    id: "P03", titre: "Dar Lwarata", titreAr: "دار الورثة", titreEn: "The Heirs' House",
+    genre: "Série", sousGenre: "Sitcom", typeProd: "Coproduction",
+    producteur: "Maroc Vision", realisateur: "S. Alaoui", casting: "H. Rachdi, N. Berrada, Y. Idrissi", annee: 2025,
+    synopsisFr: "Trois générations sous un même toit à Fès, entre héritage et modernité.",
+    synopsisAr: "ثلاثة أجيال تحت سقف واحد بفاس، بين الإرث والحداثة.",
+    tags: ["Comédie", "Famille", "Fès"], contrat: "CT-2025-207",
+    droits: [{ from: "2025-09-01", to: "2026-09-15", vecteur: "TNT + SAT", passages: 60, used: 51, exclusif: "Al Aoula" }],
+    episodes: mkEps(30, "Dar Lwarata", "دار الورثة", 30), diffusions: hist("2026-07-18", 9, "Al Aoula"),
+  },
+  {
+    id: "P04", titre: "Kounouz Al Maghrib", titreAr: "كنوز المغرب", titreEn: "Treasures of Morocco",
+    genre: "Documentaire", sousGenre: "Patrimoine", typeProd: "Acquisition",
+    producteur: "Atlas Films", realisateur: "L. Chraibi", casting: "—", annee: 2024,
+    synopsisFr: "Série documentaire sur le patrimoine matériel et immatériel du Royaume.",
+    synopsisAr: "سلسلة وثائقية حول التراث المادي واللامادي للمملكة.",
+    tags: ["Patrimoine", "4K"], contrat: "CT-2024-088",
+    droits: [{ from: "2024-06-01", to: "2026-07-31", vecteur: "TNT + SAT", passages: 12, used: 12, exclusif: null }],
+    episodes: mkEps(8, "Kounouz", "كنوز", 52), diffusions: hist("2026-06-02", 7, "Athaqafia"),
+  },
+  {
+    id: "P05", titre: "Botola Pro — Le Résumé", titreAr: "ملخص البطولة", titreEn: "Botola Pro Highlights",
+    genre: "Sport", sousGenre: "Magazine sportif", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "Régie sport", casting: "—", annee: 2026,
+    synopsisFr: "Résumés, analyses et classement de la journée de championnat.",
+    synopsisAr: "ملخصات وتحليلات وترتيب دورة البطولة.",
+    tags: ["Sport", "Hebdo"], contrat: "CT-2026-033",
+    droits: [{ from: "2026-01-01", to: "2026-06-30", vecteur: "TNT + SAT", passages: 40, used: 26, exclusif: "Arryadia" }],
+    episodes: mkEps(14, "Botola", "البطولة", 60), diffusions: hist("2026-06-28", 8, "Arryadia"),
+  },
+  {
+    id: "P06", titre: "Nadi Assghar", titreAr: "نادي الصغار", titreEn: "Little Ones Club",
+    genre: "Jeunesse", sousGenre: "Animation", typeProd: "Acquisition",
+    producteur: "Rabat Anim", realisateur: "—", casting: "—", annee: 2026,
+    synopsisFr: "Programme jeunesse mêlant animation doublée en darija et ateliers.",
+    synopsisAr: "برنامج للأطفال يجمع بين الرسوم المدبلجة بالدارجة والورشات.",
+    tags: ["Doublage darija", "Jeunesse"], contrat: "CT-2026-052",
+    droits: [{ from: "2026-02-01", to: "2027-01-31", vecteur: "TNT + SAT", passages: 120, used: 34, exclusif: null }],
+    episodes: mkEps(40, "Nadi Assghar", "نادي الصغار", 45), diffusions: hist("2026-08-05", 10, "Al Aoula"),
+  },
+  {
+    id: "P07", titre: "Fi Rihab Al Iman", titreAr: "في رحاب الإيمان", titreEn: "In the Realm of Faith",
+    genre: "Religieux", sousGenre: "Émission religieuse", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "A. Tazi", casting: "—", annee: 2026,
+    synopsisFr: "Lecture et commentaire de textes, en présence d'oulémas.",
+    synopsisAr: "قراءة وشرح للنصوص بحضور العلماء.",
+    tags: ["Religieux"], contrat: "CT-2026-009",
+    droits: [{ from: "2026-01-01", to: "2026-12-31", vecteur: "TNT + SAT", passages: 200, used: 77, exclusif: null }],
+    episodes: mkEps(20, "Fi Rihab", "في رحاب", 30), diffusions: hist("2026-08-01", 6, "Assadissa"),
+  },
+  {
+    id: "P08", titre: "Ayyam Zahra", titreAr: "أيام زهرة", titreEn: "Zahra's Days",
+    genre: "Série", sousGenre: "Feuilleton doublé", typeProd: "Acquisition",
+    producteur: "Levant Média", realisateur: "—", casting: "R. Habib, M. Saleh", annee: 2025,
+    synopsisFr: "Feuilleton familial doublé, diffusé en quotidienne.",
+    synopsisAr: "مسلسل عائلي مدبلج يبث بشكل يومي.",
+    tags: ["Doublé", "Quotidienne"], contrat: "CT-2026-061",
+    droits: [{ from: "2026-03-01", to: "2026-08-25", vecteur: "TNT + SAT", passages: 90, used: 62, exclusif: null }],
+    episodes: mkEps(45, "Ayyam Zahra", "أيام زهرة", 45), diffusions: hist("2026-08-08", 12, "Al Aoula"),
+  },
+  {
+    id: "P09", titre: "Moudawala", titreAr: "مداولة", titreEn: "Deliberation",
+    genre: "Magazine", sousGenre: "Débat", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "F. Sbaï", casting: "—", annee: 2026,
+    synopsisFr: "Débat hebdomadaire sur une question de société, en plateau.",
+    synopsisAr: "نقاش أسبوعي حول قضية مجتمعية في الاستوديو.",
+    tags: ["Débat", "Direct"], contrat: "CT-2026-021",
+    droits: [{ from: "2026-01-01", to: "2026-12-31", vecteur: "TNT + SAT", passages: 60, used: 19, exclusif: null }],
+    episodes: mkEps(12, "Moudawala", "مداولة", 75), diffusions: hist("2026-07-24", 5, "Al Aoula"),
+  },
+  {
+    id: "P10", titre: "Ciné Dimanche", titreAr: "سينما الأحد", titreEn: "Sunday Cinema",
+    genre: "Film", sousGenre: "Long métrage", typeProd: "Acquisition",
+    producteur: "Catalogue MENA", realisateur: "Divers", casting: "Divers", annee: 2025,
+    synopsisFr: "Case cinéma du dimanche soir, longs métrages arabes et internationaux.",
+    synopsisAr: "سهرة سينمائية مساء الأحد، أفلام عربية ودولية.",
+    tags: ["Cinéma", "Prime"], contrat: "CT-2025-190",
+    droits: [{ from: "2025-01-01", to: "2026-10-31", vecteur: "TNT + SAT", passages: 24, used: 9, exclusif: null }],
+    episodes: mkEps(10, "Ciné Dimanche", "سينما الأحد", 105), diffusions: hist("2026-07-12", 8, "Al Aoula"),
+  },
+  {
+    id: "P11", titre: "Tarab Chaabi", titreAr: "طرب شعبي", titreEn: "Chaabi Music Night",
+    genre: "Divertissement", sousGenre: "Musique", typeProd: "Coproduction",
+    producteur: "Studio Anfa", realisateur: "M. Ouazzani", casting: "Divers", annee: 2026,
+    synopsisFr: "Soirée musicale enregistrée en public, répertoire chaabi et melhoun.",
+    synopsisAr: "سهرة موسيقية مسجلة أمام الجمهور، من التراث الشعبي والملحون.",
+    tags: ["Musique", "Public"], contrat: "CT-2026-045",
+    droits: [{ from: "2026-04-01", to: "2027-03-31", vecteur: "TNT + SAT", passages: 50, used: 8, exclusif: null }],
+    episodes: mkEps(16, "Tarab Chaabi", "طرب شعبي", 90), diffusions: hist("2026-07-05", 4, "Al Aoula"),
+  },
+  {
+    id: "P12", titre: "Tighri N Watan", titreAr: "نداء الوطن", titreEn: "Call of the Homeland",
+    genre: "Documentaire", sousGenre: "Société", typeProd: "Production interne",
+    producteur: "SNRT", realisateur: "I. Amazigh", casting: "—", annee: 2026,
+    synopsisFr: "Portraits de territoires et de métiers dans les provinces du Sud.",
+    synopsisAr: "بورتريهات لمجالات ومهن في الأقاليم الجنوبية.",
+    tags: ["Société", "Amazigh"], contrat: "CT-2026-070",
+    droits: [{ from: "2026-05-01", to: "2026-08-20", vecteur: "TNT + SAT", passages: 15, used: 14, exclusif: "Tamazight" }],
+    episodes: mkEps(6, "Tighri", "نداء", 52), diffusions: hist("2026-07-28", 6, "Tamazight"),
+  },
+];
+
+/* La durée unitaire du titre sert au calcul des blocs : on la dérive des épisodes. */
+PROGRAMS.forEach((p) => { p.duree = p.episodes[0].duree; });
+
+/* ═══════════════════════════════════════════════════════ 4. UTILITAIRES    */
+const pad2 = (n) => String(n).padStart(2, "0");
+const iso = (d) => d.toISOString().slice(0, 10);
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const mondayOf = (d) => { const x = new Date(d); return addDays(x, -((x.getDay() + 6) % 7)); };
+const fmtDate = (d) => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+const fmtShort = (d) => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+const clock = (min) => `${pad2(Math.floor((min % 1440) / 60))}:${pad2(Math.round(min) % 60)}`;
+const dur = (min) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? pad2(min % 60) : ""}` : `${min} min`);
+const prog = (id) => PROGRAMS.find((p) => p.id === id);
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+/** Contrôle des droits interrogé depuis la grille — jamais dans un écran séparé. */
+function rightsAt(p, dateISO, channel) {
+  if (!p) return { level: "block", label: "Programme inconnu" };
+  const d = new Date(dateISO);
+  const w = p.droits[0];
+  const from = new Date(w.from), to = new Date(w.to);
+  if (d < from) return { level: "block", label: `Droits ouverts à partir du ${fmtDate(from)}`, code: "AVANT" };
+  if (d > to)   return { level: "block", label: `Droits expirés le ${fmtDate(to)}`, code: "EXPIRE" };
+  if (w.used >= w.passages) return { level: "block", label: "Passages contractuels épuisés", code: "PASSAGES" };
+  if (w.exclusif && w.exclusif !== channel) return { level: "block", label: `Exclusivité ${w.exclusif}`, code: "EXCL" };
+  const j = Math.round((to - d) / 86400000);
+  if (j <= 45) return { level: "warn", label: `Fin de droits dans ${j} jours`, code: "FIN", j };
+  if (w.passages - w.used <= 5) return { level: "warn", label: `${w.passages - w.used} passages restants`, code: "RESTE" };
+  return { level: "ok", label: `Droits ouverts jusqu'au ${fmtDate(to)}`, code: "OK", j };
+}
+const lastDiff = (p) => p.diffusions[0]?.date ?? null;
+const daysSince = (a, b) => (a ? Math.round((new Date(b) - new Date(a)) / 86400000) : 9999);
+const initials = (t) => t.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+/* ═══════════════════════════════════════════════════════ 5. PRIMITIVES     */
+const F_DISPLAY = "'Space Grotesk', system-ui, sans-serif";
+const F_MONO = "'IBM Plex Mono', ui-monospace, monospace";
+
+function Btn({ children, onClick, variant = "ghost", size = "md", disabled, title, style, active }) {
+  const v = {
+    ghost:  { background: active ? T.paper : "transparent", color: T.ink2, borderColor: T.line },
+    solid:  { background: T.ink, color: "#fff", borderColor: T.ink },
+    gold:   { background: T.goldSoft, color: T.gold, borderColor: T.goldLine },
+    danger: { background: "#FEF3F2", color: T.signal, borderColor: "#FDA29B" },
+    bare:   { background: "transparent", color: T.muted, borderColor: "transparent" },
+  }[variant];
+  return (
+    <button title={title} disabled={disabled} onClick={onClick} style={{
+      display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8, border: "1px solid transparent",
+      fontFamily: "Inter, sans-serif", fontWeight: 500, whiteSpace: "nowrap",
+      cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.42 : 1,
+      padding: size === "sm" ? "4px 8px" : size === "xs" ? "2px 6px" : "7px 12px",
+      fontSize: size === "sm" ? 12 : size === "xs" ? 11 : 13, ...v, ...style,
+    }}>{children}</button>
+  );
+}
+
+const Tag = ({ color = T.muted, children, solid, style }) => (
+  <span style={{
+    display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700,
+    letterSpacing: ".03em", padding: "2px 5px", borderRadius: 4, lineHeight: 1.35,
+    background: solid ? color : color + "1A", color: solid ? "#fff" : color, ...style,
+  }}>{children}</span>
+);
+
+const Mono = ({ children, style }) => <span style={{ fontFamily: F_MONO, ...style }}>{children}</span>;
+
+const Panel = ({ children, style }) => (
+  <section style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 12, overflow: "hidden", ...style }}>
+    {children}
+  </section>
+);
+
+const PanelHead = ({ icon: Ico, title, sub, right }) => (
+  <div style={{
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+    padding: "9px 12px", borderBottom: `1px solid ${T.line}`, background: T.surface, minHeight: 44,
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      {Ico && <Ico size={14} style={{ color: T.ink2, flexShrink: 0 }} />}
+      <span style={{ fontFamily: F_DISPLAY, fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }}>{title}</span>
+      {sub && <span style={{ fontSize: 11, color: T.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
+    </div>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>{right}</div>
+  </div>
+);
+
+const Field = ({ label, value, mono }) => (
+  <div style={{ display: "flex", justifyContent: "space-between", gap: 14, padding: "6px 0", borderBottom: `1px solid ${T.line2}` }}>
+    <span style={{ fontSize: 11.5, color: T.muted, flexShrink: 0 }}>{label}</span>
+    <span style={{ fontSize: 11.5, color: T.ink, fontWeight: 500, textAlign: "right", fontFamily: mono ? F_MONO : "inherit" }}>{value}</span>
+  </div>
+);
+
+const Sec = ({ title, children, right }) => (
+  <div style={{ marginBottom: 16 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", color: T.muted }}>{title.toUpperCase()}</span>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
+/** Vignette de titre : à défaut de jaquette, les initiales sur la couleur du genre. */
+const Poster = ({ p, size = 40 }) => (
+  <div style={{
+    width: size, height: size * 1.36, borderRadius: 4, flexShrink: 0,
+    background: `linear-gradient(160deg, ${gc(p.genre)}, ${gc(p.genre)}AA)`,
+    color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+    fontFamily: F_DISPLAY, fontWeight: 700, fontSize: size * 0.34, letterSpacing: "-.02em",
+  }}>{initials(p.titre)}</div>
+);
+
+const RightsDot = ({ level, size = 11 }) =>
+  level === "ok" ? <ShieldCheck size={size} style={{ color: T.ok }} />
+  : level === "warn" ? <AlertTriangle size={size} style={{ color: T.warn }} />
+  : <ShieldAlert size={size} style={{ color: T.signal }} />;
+
+const Tabs = ({ items, value, onChange, compact }) => (
+  <div style={{ display: "flex", borderBottom: `1px solid ${T.line}`, background: T.surface, overflowX: "auto" }}>
+    {items.map(([k, label, badge]) => (
+      <button key={k} onClick={() => onChange(k)} style={{
+        padding: compact ? "8px 12px" : "10px 14px", border: "none", background: "transparent", cursor: "pointer",
+        borderBottom: value === k ? `2px solid ${T.ink}` : "2px solid transparent",
+        color: value === k ? T.ink : T.muted, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+        display: "flex", alignItems: "center", gap: 6,
+      }}>
+        {label}
+        {badge != null && badge !== 0 && (
+          <span style={{
+            background: value === k ? T.ink : T.line, color: value === k ? "#fff" : T.ink2,
+            fontSize: 9.5, fontWeight: 700, borderRadius: 20, padding: "1px 5px", minWidth: 15, textAlign: "center",
+          }}>{badge}</span>
+        )}
+      </button>
+    ))}
+  </div>
+);
+
+function Modal({ title, sub, children, onClose, width = 900 }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(15,26,42,.36)", zIndex: 120,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: `min(${width}px, 96vw)`, maxHeight: "88vh", display: "flex", flexDirection: "column",
+        background: T.surface, borderRadius: 14, boxShadow: "0 28px 70px rgba(15,26,42,.3)", overflow: "hidden",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${T.line}` }}>
+          <div>
+            <div style={{ fontFamily: F_DISPLAY, fontSize: 14.5, fontWeight: 700 }}>{title}</div>
+            {sub && <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{sub}</div>}
+          </div>
+          <Btn size="sm" variant="bare" onClick={onClose}><X size={15} /></Btn>
+        </div>
+        <div style={{ padding: 18, overflowY: "auto" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const Empty = ({ children, icon: Ico = Info }) => (
+  <div style={{ padding: 36, textAlign: "center", color: T.muted, fontSize: 12.5, lineHeight: 1.5 }}>
+    <Ico size={22} style={{ opacity: .5, marginBottom: 8 }} />
+    <div>{children}</div>
+  </div>
+);
+
+/* ═══════════════════════════════════════════ 6. PLAN DE DIFFUSION (timeline) */
+/* Le cœur du produit : un axe horaire réel, des blocs proportionnels à la durée.
+   Les trous et les chevauchements deviennent visibles à l'œil nu.              */
+
+const vecMatch = (ev, vecteur) =>
+  vecteur === "unifie" ? ev.vec !== "sat"
+  : vecteur === "tnt"   ? ev.vec === "both" || ev.vec === "tnt"
+  :                       ev.vec === "both" || ev.vec === "sat";
+
+function dayEvents(events, dateISO, vecteur) {
+  return events
+    .filter((e) => e.date === dateISO && vecMatch(e, vecteur))
+    .sort((a, b) => a.start - b.start);
+}
+
+/** Analyse d'une journée : chevauchements et trous d'antenne. */
+function analyseDay(list) {
+  const conflicts = new Set(); const gaps = [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i], aEnd = a.start + a.duree;
+    const b = list[i + 1];
+    if (!b) continue;
+    if (b.start < aEnd - 0.5) { conflicts.add(a.id); conflicts.add(b.id); }
+    else if (b.start - aEnd >= 5) gaps.push({ start: aEnd, end: b.start });
+  }
+  return { conflicts, gaps };
+}
+
+function TransmissionPlan({
+  events, layout, range, channel, vecteur, zoom, selectedId,
+  onSelect, onDropNew, onMoveEvent, dragRef, showLayout,
+}) {
+  const H = (DAY_END - DAY_START) * zoom;
+  const hours = [];
+  for (let m = DAY_START; m <= DAY_END; m += 60) hours.push(m);
+
+  const minuteFromY = (y) => {
+    const raw = DAY_START + y / zoom;
+    return Math.max(DAY_START, Math.min(DAY_END - 5, Math.round(raw / 5) * 5));
+  };
+
+  return (
+    <div style={{ display: "flex", overflow: "auto", maxHeight: "calc(100vh - 168px)", background: T.sunk }}>
+      {/* ————— colonne des heures, collante */}
+      <div style={{ position: "sticky", left: 0, zIndex: 3, background: T.sunk, borderRight: `1px solid ${T.line}` }}>
+        <div style={{ height: 44, borderBottom: `1px solid ${T.line}`, background: T.surface }} />
+        <div style={{ position: "relative", height: H, width: 52 }}>
+          {hours.map((m) => (
+            <div key={m} style={{ position: "absolute", top: (m - DAY_START) * zoom, right: 6, transform: "translateY(-50%)" }}>
+              <Mono style={{ fontSize: 10, color: m % 120 === 0 ? T.ink2 : T.muted, fontWeight: m % 120 === 0 ? 600 : 400 }}>
+                {clock(m)}
+              </Mono>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ————— colonnes des jours */}
+      <div style={{ display: "flex", flex: 1, minWidth: 0 }}>
+        {range.map((d, di) => {
+          const dISO = iso(d);
+          const list = dayEvents(events, dISO, vecteur).map((e) => ({ ...e, duree: prog(e.programId).duree ?? 0 }));
+          const { conflicts, gaps } = analyseDay(list);
+          const dow = (d.getDay() + 6) % 7;
+          const bands = showLayout ? layout.filter((b) => b.days.includes(dow)) : [];
+          const isToday = dISO === "2026-08-10";
+
+          return (
+            <div key={dISO} style={{ flex: 1, minWidth: range.length > 7 ? 132 : 156, borderRight: `1px solid ${T.line}` }}>
+              {/* en-tête */}
+              <div style={{
+                height: 44, borderBottom: `1px solid ${T.line}`, background: isToday ? "#F4F7FF" : T.surface,
+                display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px",
+                position: "sticky", top: 0, zIndex: 2,
+              }}>
+                <div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: isToday ? T.focus : T.ink }}>{DAY_ABBR[dow]}</div>
+                  <Mono style={{ fontSize: 10, color: T.muted }}>{fmtShort(d)}</Mono>
+                </div>
+                <Tag color={list.length ? T.ink2 : T.muted}>{list.length}</Tag>
+              </div>
+
+              {/* piste */}
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const box = e.currentTarget.getBoundingClientRect();
+                  const min = minuteFromY(e.clientY - box.top);
+                  const p = dragRef.current;
+                  if (!p) return;
+                  if (p.type === "move") onMoveEvent(p.id, dISO, min);
+                  else onDropNew(dISO, min, p);
+                  dragRef.current = null;
+                }}
+                style={{ position: "relative", height: H, background: T.surface }}
+              >
+                {/* bandes de grille type */}
+                {bands.map((b) => (
+                  <div key={b.id} style={{
+                    position: "absolute", left: 0, right: 0,
+                    top: (b.start - DAY_START) * zoom, height: (b.end - b.start) * zoom,
+                    background: gc(b.genre) + "0A", borderTop: `1px solid ${gc(b.genre)}26`,
+                    pointerEvents: "none",
+                  }}>
+                    <span style={{
+                      position: "absolute", left: 4, top: 2, fontSize: 8.5, fontWeight: 700,
+                      color: gc(b.genre), opacity: .75, letterSpacing: ".03em",
+                    }}>{b.nom.toUpperCase()}</span>
+                  </div>
+                ))}
+
+                {/* lignes horaires */}
+                {hours.map((m) => (
+                  <div key={m} style={{
+                    position: "absolute", left: 0, right: 0, top: (m - DAY_START) * zoom, height: 1,
+                    background: m % 120 === 0 ? T.line : T.line2, pointerEvents: "none",
+                  }} />
+                ))}
+
+                {/* trous d'antenne */}
+                {gaps.map((g, i) => (
+                  <div key={i} style={{
+                    position: "absolute", left: 3, right: 3, top: (g.start - DAY_START) * zoom,
+                    height: Math.max(10, (g.end - g.start) * zoom), border: `1px dashed #E3A008`,
+                    background: "#FFFBEB", borderRadius: 4, display: "flex", alignItems: "center",
+                    justifyContent: "center", pointerEvents: "none",
+                  }}>
+                    <Mono style={{ fontSize: 8.5, color: T.warn, fontWeight: 600 }}>
+                      TROU {Math.round(g.end - g.start)} min
+                    </Mono>
+                  </div>
+                ))}
+
+                {/* blocs */}
+                {list.map((ev) => (
+                  <EventBlock key={ev.id} ev={ev} zoom={zoom} channel={channel} dateISO={dISO}
+                    conflict={conflicts.has(ev.id)} selected={selectedId === ev.id}
+                    onSelect={() => onSelect(ev.id)} dragRef={dragRef} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EventBlock({ ev, zoom, channel, dateISO, conflict, selected, onSelect, dragRef }) {
+  const p = prog(ev.programId);
+  const h = Math.max(20, p.duree * zoom);
+  const r = rightsAt(p, dateISO, channel);
+  const c = gc(p.genre);
+  const dense = h < 46;
+  const epObj = p.episodes[ev.ep - 1];
+
+  return (
+    <div
+      draggable
+      onDragStart={() => { dragRef.current = { type: "move", id: ev.id }; }}
+      onClick={(e) => { e.stopPropagation(); onSelect(); }}
+      style={{
+        position: "absolute", left: 3, right: 3, top: (ev.start - DAY_START) * zoom, height: h - 2,
+        borderRadius: 5, cursor: "grab", overflow: "hidden", background: conflict ? "#FEF3F2" : c + "12",
+        border: `1px solid ${conflict ? T.signal : selected ? T.ink : c + "44"}`,
+        borderLeft: `3px solid ${conflict ? T.signal : c}`,
+        boxShadow: selected ? "0 0 0 2px rgba(15,26,42,.18)" : "none",
+        display: "flex", flexDirection: "column", padding: dense ? "2px 5px" : "4px 6px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+        <Mono style={{ fontSize: 9, fontWeight: 600, color: T.ink2, flexShrink: 0 }}>{clock(ev.start)}</Mono>
+        <span style={{
+          fontSize: dense ? 10 : 11, fontWeight: 600, color: T.ink, lineHeight: 1.2,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: dense ? "nowrap" : "normal",
+        }}>{p.titre}</span>
+      </div>
+      {!dense && (
+        <div style={{ fontSize: 9.5, color: T.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          ÉP.{pad2(ev.ep)} · {epObj?.titre?.split("—")[1]?.trim() ?? ""}
+        </div>
+      )}
+      <div style={{ flex: 1 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+        <Mono style={{ fontSize: 8.5, color: T.muted }}>Dur. {dur(p.duree)}</Mono>
+        {ev.vec === "sat" && <Tag color={T.gold} style={{ fontSize: 8 }}>SAT</Tag>}
+        {ev.vec === "tnt" && <Tag color={T.focus} style={{ fontSize: 8 }}>TNT</Tag>}
+        {conflict && <Tag color={T.signal} style={{ fontSize: 8 }}>CHEVAUCH.</Tag>}
+        {r.level !== "ok" && <RightsDot level={r.level} size={9} />}
+        {!epObj?.pad && <Tag color={T.signal} style={{ fontSize: 8 }}>NON PAD</Tag>}
+      </div>
+    </div>
+  );
+}
+
+/* ————— vue liste (« Transmission list ») */
+function TransmissionList({ events, range, channel, vecteur, onSelect, selectedId }) {
+  const rows = useMemo(() => {
+    const out = [];
+    range.forEach((d) => dayEvents(events, iso(d), vecteur).forEach((e) => out.push({ ...e, d })));
+    return out;
+  }, [events, range, vecteur]);
+
+  const th = { textAlign: "left", padding: "7px 10px", fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: ".04em", borderBottom: `1px solid ${T.line}`, whiteSpace: "nowrap" };
+  const td = { padding: "7px 10px", fontSize: 11.5, borderBottom: `1px solid ${T.line2}`, whiteSpace: "nowrap" };
+
+  return (
+    <div style={{ overflow: "auto", maxHeight: "calc(100vh - 168px)" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead style={{ position: "sticky", top: 0, background: T.sunk, zIndex: 1 }}>
+          <tr>{["Date", "Début", "Fin", "Titre", "Épisode", "Genre", "Durée", "Vecteur", "Support", "Droits"].map((h) => <th key={h} style={th}>{h.toUpperCase()}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((e) => {
+            const p = prog(e.programId); const r = rightsAt(p, e.date, channel); const ep = p.episodes[e.ep - 1];
+            return (
+              <tr key={e.id} onClick={() => onSelect(e.id)} style={{ cursor: "pointer", background: selectedId === e.id ? "#F4F7FF" : "transparent" }}>
+                <td style={td}><Mono style={{ fontSize: 11 }}>{fmtShort(e.d)}</Mono></td>
+                <td style={td}><Mono style={{ fontSize: 11, fontWeight: 600 }}>{clock(e.start)}</Mono></td>
+                <td style={td}><Mono style={{ fontSize: 11, color: T.muted }}>{clock(e.start + p.duree)}</Mono></td>
+                <td style={{ ...td, fontWeight: 600 }}>{p.titre}</td>
+                <td style={td}><Mono style={{ fontSize: 11 }}>{pad2(e.ep)}</Mono></td>
+                <td style={td}><Tag color={gc(p.genre)}>{p.genre}</Tag></td>
+                <td style={td}><Mono style={{ fontSize: 11 }}>{dur(p.duree)}</Mono></td>
+                <td style={td}><Tag color={e.vec === "both" ? T.ink2 : e.vec === "sat" ? T.gold : T.focus}>
+                  {e.vec === "both" ? "TNT + SAT" : e.vec === "sat" ? "SAT" : "TNT"}</Tag></td>
+                <td style={td}><Mono style={{ fontSize: 10.5, color: T.muted }}>{ep?.support}</Mono></td>
+                <td style={td}><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <RightsDot level={r.level} size={11} />
+                  <span style={{ fontSize: 10.5, color: r.level === "ok" ? T.ok : r.level === "warn" ? T.warn : T.signal }}>{r.label}</span>
+                </span></td>
+              </tr>
+            );
+          })}
+          {!rows.length && <tr><td colSpan={10}><Empty icon={CalendarRange}>Aucune transmission sur la période. Générez la programmation ou glissez un titre depuis le catalogue.</Empty></td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════ 7. CATALOGUE LATÉRAL (source) */
+function CataloguePanel({ channel, refDate, dragRef, onOpenTitle }) {
+  const [q, setQ] = useState("");
+  const [genre, setGenre] = useState("Tous");
+  const [hideBlocked, setHideBlocked] = useState(true);
+  const [open, setOpen] = useState(null);
+
+  const rows = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    return PROGRAMS.map((p) => {
+      const r = rightsAt(p, refDate, channel);
+      const hitEps = ql ? p.episodes.filter((e) => e.titre.toLowerCase().includes(ql) || String(e.num) === ql) : [];
+      const hitTitle = !ql || p.titre.toLowerCase().includes(ql) || p.titreAr.includes(q) || p.titreEn.toLowerCase().includes(ql);
+      return { p, r, hitEps, ok: hitTitle || hitEps.length > 0 };
+    }).filter((x) => x.ok)
+      .filter((x) => genre === "Tous" || x.p.genre === genre)
+      .filter((x) => !(hideBlocked && x.r.level === "block"));
+  }, [q, genre, hideBlocked, channel, refDate]);
+
+  return (
+    <Panel style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 90px)" }}>
+      <PanelHead icon={Library} title="Catalogue" right={<Mono style={{ fontSize: 10, color: T.muted }}>{rows.length}/{PROGRAMS.length}</Mono>} />
+      <div style={{ padding: 9, borderBottom: `1px solid ${T.line2}`, display: "flex", flexDirection: "column", gap: 7 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={13} style={{ position: "absolute", left: 8, top: 8, color: T.muted }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Titre, épisode, n°, arabe…" style={{
+            width: "100%", padding: "6px 8px 6px 26px", border: `1px solid ${T.line}`, borderRadius: 7, fontSize: 12.5, outline: "none",
+          }} />
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select value={genre} onChange={(e) => setGenre(e.target.value)} style={{
+            flex: 1, border: `1px solid ${T.line}`, borderRadius: 7, padding: "5px 6px", fontSize: 11.5, color: T.ink2,
+          }}>
+            <option>Tous</option>{Object.keys(GENRES).map((g) => <option key={g}>{g}</option>)}
+          </select>
+          <Btn size="sm" variant={hideBlocked ? "gold" : "ghost"} onClick={() => setHideBlocked((v) => !v)}
+            title="Masquer automatiquement les programmes hors droits">
+            <ShieldCheck size={12} />
+          </Btn>
+        </div>
+      </div>
+
+      <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map(({ p, r, hitEps }) => {
+          const eps = hitEps.length ? hitEps : p.episodes;
+          const isOpen = open === p.id;
+          return (
+            <div key={p.id} style={{ border: `1px solid ${T.line}`, borderRadius: 9, overflow: "hidden", background: T.surface }}>
+              <div style={{ display: "flex", gap: 8, padding: 8 }}>
+                <Poster p={p} size={34} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.25 }}>{p.titre}</div>
+                  <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 4 }}>{p.titreAr}</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                    <Tag color={gc(p.genre)}>{p.genre}</Tag>
+                    <Mono style={{ fontSize: 9.5, color: T.muted }}>{dur(p.duree ?? p.episodes[0].duree)}</Mono>
+                    {p.droits[0].exclusif && <Tag color={T.gold}>EXCL.</Tag>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5 }}>
+                    <RightsDot level={r.level} size={10} />
+                    <span style={{ fontSize: 10, color: r.level === "ok" ? T.ok : r.level === "warn" ? T.warn : T.signal }}>{r.label}</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4, padding: "0 8px 8px" }}>
+                <Btn size="sm" onClick={() => setOpen(isOpen ? null : p.id)} style={{ flex: 1, justifyContent: "center" }}>
+                  {isOpen ? "Masquer" : `${eps.length} épisodes`}
+                </Btn>
+                <Btn size="sm" variant="bare" onClick={() => onOpenTitle(p.id)} title="Ouvrir la fiche titre"><ArrowRight size={13} /></Btn>
+              </div>
+              {isOpen && (
+                <div style={{ maxHeight: 190, overflowY: "auto", borderTop: `1px solid ${T.line2}` }}>
+                  {eps.map((e) => {
+                    const can = r.level !== "block" && e.pad;
+                    return (
+                      <div key={e.num} draggable={can}
+                        onDragStart={() => { dragRef.current = { type: "new", programId: p.id, ep: e.num }; }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6, padding: "5px 8px",
+                          borderBottom: `1px solid ${T.line2}`, cursor: can ? "grab" : "not-allowed",
+                          opacity: can ? 1 : .5, background: can ? "transparent" : T.sunk,
+                        }}>
+                        <Mono style={{ fontSize: 9.5, color: T.muted, width: 20 }}>{pad2(e.num)}</Mono>
+                        <span style={{ fontSize: 11, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {e.titre.split("—")[1]?.trim() || e.titre}
+                        </span>
+                        <Mono style={{ fontSize: 9, color: T.muted }}>{dur(e.duree)}</Mono>
+                        <Tag color={e.pad ? T.ok : T.signal}>{e.pad ? "PAD" : "NON PAD"}</Tag>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!rows.length && <Empty icon={Search}>Aucun titre. Élargissez les filtres ou affichez les programmes hors droits.</Empty>}
+      </div>
+    </Panel>
+  );
+}
+
+/* ═════════════════════════════════════════════════ 8. INSPECTEUR DE BLOC   */
+function Inspector({ ev, channel, range, onClose, onUpdate, onDelete, onDuplicate, onSplitSat, onOpenTitle }) {
+  const [tab, setTab] = useState("bloc");
+  const [days, setDays] = useState([]);
+  const p = prog(ev.programId);
+  const r = rightsAt(p, ev.date, channel);
+  const epObj = p.episodes[ev.ep - 1];
+  const d = new Date(ev.date);
+
+  return (
+    <Panel style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 90px)" }}>
+      <PanelHead icon={Settings2} title="Inspecteur" sub={`${DAY_ABBR[(d.getDay() + 6) % 7]} ${fmtShort(d)}`}
+        right={<Btn size="sm" variant="bare" onClick={onClose}><X size={14} /></Btn>} />
+      <Tabs compact value={tab} onChange={setTab} items={[["bloc", "Bloc"], ["repeat", "Répéter"], ["vec", "Vecteur"]]} />
+
+      <div style={{ padding: 12, overflowY: "auto" }}>
+        {tab === "bloc" && (
+          <>
+            <div style={{ display: "flex", gap: 9, marginBottom: 10 }}>
+              <Poster p={p} size={44} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.25 }}>{p.titre}</div>
+                <div style={{ fontSize: 11, color: T.muted }}>{epObj?.titre}</div>
+                <div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
+                  <Tag color={gc(p.genre)}>{p.genre}</Tag>
+                  <Tag color={epObj?.pad ? T.ok : T.signal}>{epObj?.pad ? "PAD" : "NON PAD"}</Tag>
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              padding: "7px 9px", borderRadius: 7, fontSize: 11, marginBottom: 12, display: "flex", alignItems: "center", gap: 6,
+              background: r.level === "ok" ? "#ECFDF3" : r.level === "warn" ? "#FFFAEB" : "#FEF3F2",
+              color: r.level === "ok" ? T.ok : r.level === "warn" ? T.warn : T.signal,
+            }}><RightsDot level={r.level} size={12} />{r.label}</div>
+
+            <Sec title="Horaire">
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="time" value={clock(ev.start)} onChange={(e) => {
+                  const [h, m] = e.target.value.split(":").map(Number);
+                  let v = h * 60 + m; if (v < DAY_START) v += 1440;
+                  onUpdate(ev.id, { start: v });
+                }} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "5px 7px", fontSize: 12, fontFamily: F_MONO }} />
+                <ArrowRight size={13} style={{ color: T.muted }} />
+                <Mono style={{ fontSize: 12, color: T.ink2 }}>{clock(ev.start + p.duree)}</Mono>
+                <Tag color={T.ink2} style={{ marginLeft: "auto" }}>{dur(p.duree)}</Tag>
+              </div>
+            </Sec>
+
+            <Sec title="Épisode diffusé">
+              <div style={{ maxHeight: 160, overflowY: "auto", border: `1px solid ${T.line}`, borderRadius: 8 }}>
+                {p.episodes.filter((e) => e.pad).map((e) => (
+                  <button key={e.num} onClick={() => onUpdate(ev.id, { ep: e.num })} style={{
+                    display: "flex", width: "100%", gap: 6, alignItems: "center", padding: "5px 8px", textAlign: "left",
+                    border: "none", borderBottom: `1px solid ${T.line2}`, cursor: "pointer",
+                    background: e.num === ev.ep ? "#F4F7FF" : "transparent",
+                  }}>
+                    <Mono style={{ fontSize: 9.5, color: T.muted, width: 20 }}>{pad2(e.num)}</Mono>
+                    <span style={{ fontSize: 11, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {e.titre.split("—")[1]?.trim()}
+                    </span>
+                    <Mono style={{ fontSize: 9, color: T.muted }}>{e.support}</Mono>
+                    {e.num === ev.ep && <Check size={11} style={{ color: T.ok }} />}
+                  </button>
+                ))}
+              </div>
+            </Sec>
+
+            <div style={{ display: "flex", gap: 6 }}>
+              <Btn size="sm" onClick={() => onOpenTitle(p.id)} style={{ flex: 1, justifyContent: "center" }}>
+                <Library size={12} /> Fiche titre
+              </Btn>
+              <Btn size="sm" variant="danger" onClick={() => onDelete(ev.id)} style={{ flex: 1, justifyContent: "center" }}>
+                <Trash2 size={12} /> Déprogrammer
+              </Btn>
+            </div>
+          </>
+        )}
+
+        {tab === "repeat" && (
+          <>
+            <div style={{ fontSize: 11.5, color: T.ink2, lineHeight: 1.5, marginBottom: 10 }}>
+              La répétition part de la date du bloc sélectionné, incrémente les épisodes et écarte
+              automatiquement les dates où les droits ne sont pas ouverts.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 9 }}>
+              {range.map((rd, i) => {
+                const on = days.includes(i); const same = iso(rd) === ev.date;
+                return (
+                  <button key={i} disabled={same} onClick={() => setDays((s) => on ? s.filter((x) => x !== i) : [...s, i])}
+                    style={{
+                      border: `1px solid ${on ? T.ink : T.line}`, background: on ? T.ink : "transparent",
+                      color: same ? "#C3CAD4" : on ? "#fff" : T.ink2, borderRadius: 6, padding: "3px 7px",
+                      fontSize: 10.5, fontWeight: 600, cursor: same ? "default" : "pointer",
+                    }}>{DAY_ABBR[(rd.getDay() + 6) % 7]} {fmtShort(rd).slice(0, 2)}</button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <Btn size="sm" onClick={() => setDays(range.map((_, i) => i).filter((i) => iso(range[i]) !== ev.date))}
+                style={{ flex: 1, justifyContent: "center" }}>Toute la période</Btn>
+              <Btn size="sm" variant="solid" disabled={!days.length}
+                onClick={() => { onDuplicate(ev.id, days.map((i) => iso(range[i]))); setDays([]); }}
+                style={{ flex: 1, justifyContent: "center" }}>Appliquer ({days.length})</Btn>
+            </div>
+          </>
+        )}
+
+        {tab === "vec" && (
+          <>
+            <Sec title="Diffusion actuelle">
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["both", "TNT + SAT", Layers3], ["tnt", "TNT seul", Tv], ["sat", "SAT seul", Radio]].map(([k, l, Ico]) => (
+                  <Btn key={k} size="sm" variant={ev.vec === k ? "solid" : "ghost"} onClick={() => onUpdate(ev.id, { vec: k })}
+                    style={{ flex: 1, justifyContent: "center" }}><Ico size={12} />{l}</Btn>
+                ))}
+              </div>
+            </Sec>
+            <div style={{
+              background: T.goldSoft, border: `1px solid ${T.goldLine}`, borderRadius: 9, padding: 10,
+              fontSize: 11, color: T.ink2, lineHeight: 1.5,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: T.gold, fontWeight: 700, marginBottom: 5 }}>
+                <SplitSquareHorizontal size={13} /> Grille unique, exceptions par vecteur
+              </div>
+              Une seule grille est saisie. Là où le satellite diffère, créez une exception : le bloc est scindé
+              en une version TNT et une version SAT que vous modifiez indépendamment.
+              <Btn size="sm" variant="gold" onClick={() => onSplitSat(ev.id)} style={{ marginTop: 8, width: "100%", justifyContent: "center" }}>
+                <SplitSquareHorizontal size={12} /> Créer une exception satellite
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/* ═════════════════════════════════ 9. CENTRE D'ANOMALIES (par exception)   */
+function computeIssues(events, range, layout, channel, vecteur) {
+  const out = [];
+  range.forEach((d) => {
+    const dISO = iso(d); const dow = (d.getDay() + 6) % 7;
+    const list = dayEvents(events, dISO, vecteur).map((e) => ({ ...e, duree: prog(e.programId).duree }));
+    const { conflicts, gaps } = analyseDay(list);
+    const bands = layout.filter((b) => b.days.includes(dow));
+
+    list.forEach((ev) => {
+      const p = prog(ev.programId);
+      const r = rightsAt(p, dISO, channel);
+      if (r.level !== "ok") out.push({ id: ev.id, dISO, at: ev.start, level: r.level === "block" ? "block" : "warn", type: "Droits", msg: `${p.titre} — ${r.label}` });
+      if (conflicts.has(ev.id)) out.push({ id: ev.id, dISO, at: ev.start, level: "block", type: "Chevauchement", msg: `${p.titre} chevauche le bloc suivant` });
+      if (!p.episodes[ev.ep - 1]?.pad) out.push({ id: ev.id, dISO, at: ev.start, level: "block", type: "Matériel", msg: `${p.titre} ép.${ev.ep} — support non PAD` });
+      const band = bands.find((b) => ev.start >= b.start - 1 && ev.start < b.end);
+      if (band && band.genre !== p.genre) out.push({ id: ev.id, dISO, at: ev.start, level: "warn", type: "Grille type", msg: `${p.titre} dans « ${band.nom} » (genre attendu : ${band.genre})` });
+      if (!band) out.push({ id: ev.id, dISO, at: ev.start, level: "info", type: "Hors grille type", msg: `${p.titre} placé hors des blocs définis` });
+    });
+
+    gaps.forEach((g) => {
+      if (bands.some((b) => g.start >= b.start && g.start < b.end))
+        out.push({ id: null, dISO, at: g.start, level: "warn", type: "Trou d'antenne", msg: `${Math.round(g.end - g.start)} min sans programme à ${clock(g.start)}` });
+    });
+  });
+  return out.sort((a, b) => (a.dISO + pad2(a.at)).localeCompare(b.dISO + pad2(b.at)));
+}
+
+function IssuesPanel({ issues, onGo }) {
+  const [f, setF] = useState("Tous");
+  const shown = issues.filter((i) => f === "Tous" || (f === "Bloquants" ? i.level === "block" : f === "Alertes" ? i.level === "warn" : i.level === "info"));
+  const nb = (lvl) => issues.filter((i) => i.level === lvl).length;
+
+  return (
+    <Panel style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 90px)" }}>
+      <PanelHead icon={CircleAlert} title="Anomalies" right={
+        <div style={{ display: "flex", gap: 4 }}>
+          <Tag color={T.signal}>{nb("block")}</Tag><Tag color={T.warn}>{nb("warn")}</Tag><Tag color={T.muted}>{nb("info")}</Tag>
+        </div>
+      } />
+      <div style={{ display: "flex", gap: 4, padding: 8, borderBottom: `1px solid ${T.line2}`, flexWrap: "wrap" }}>
+        {["Tous", "Bloquants", "Alertes", "Infos"].map((k) => (
+          <Btn key={k} size="xs" variant={f === k ? "solid" : "ghost"} onClick={() => setF(k)}>{k}</Btn>
+        ))}
+      </div>
+      <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+        {shown.map((i, n) => (
+          <button key={n} onClick={() => i.id && onGo(i.id)} style={{
+            textAlign: "left", cursor: i.id ? "pointer" : "default", borderRadius: 8, padding: 8,
+            border: `1px solid ${i.level === "block" ? "#FDA29B" : i.level === "warn" ? "#FEDF89" : T.line}`,
+            background: i.level === "block" ? "#FEF3F2" : i.level === "warn" ? "#FFFAEB" : T.surface,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+              <Mono style={{ fontSize: 9.5, color: T.ink2 }}>{fmtShort(new Date(i.dISO))} · {clock(i.at)}</Mono>
+              <Tag color={i.level === "block" ? T.signal : i.level === "warn" ? T.warn : T.muted}>{i.type}</Tag>
+            </div>
+            <div style={{ fontSize: 11.5, color: T.ink, lineHeight: 1.4 }}>{i.msg}</div>
+          </button>
+        ))}
+        {!shown.length && (
+          <div style={{ padding: 30, textAlign: "center" }}>
+            <ShieldCheck size={24} style={{ color: T.ok }} />
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>Rien à signaler</div>
+            <div style={{ fontSize: 11.5, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
+              Droits, matériel, chevauchements et trous d'antenne : la période est conforme.
+            </div>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/* ═══════════════════════════════════════════ 10. VUE « PLAN DE DIFFUSION » */
+function PlanView({
+  events, layout, range, channel, vecteur, selectedId, setSelectedId, dragRef,
+  onDropNew, onMoveEvent, onUpdate, onDelete, onDuplicate, onSplitSat, onOpenTitle, issues,
+}) {
+  const [mode, setMode] = useState("plan");
+  const [zoom, setZoom] = useState(0.85);
+  const [showLayout, setShowLayout] = useState(true);
+  const [rightTab, setRightTab] = useState("issues");
+  const sel = events.find((e) => e.id === selectedId);
+
+  useEffect(() => { if (selectedId) setRightTab("inspector"); }, [selectedId]);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "266px minmax(0,1fr) 296px", gap: 10, alignItems: "start" }}>
+      <CataloguePanel channel={channel} refDate={iso(range[0])} dragRef={dragRef} onOpenTitle={onOpenTitle} />
+
+      <Panel>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${T.line}` }}>
+          <div style={{ display: "flex" }}>
+            {[["plan", "Plan de diffusion", LayoutGrid], ["liste", "Liste des transmissions", Table2]].map(([k, l, Ico]) => (
+              <button key={k} onClick={() => setMode(k)} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "11px 14px", border: "none", cursor: "pointer",
+                background: "transparent", borderBottom: mode === k ? `2px solid ${T.ink}` : "2px solid transparent",
+                color: mode === k ? T.ink : T.muted, fontSize: 12, fontWeight: 600,
+              }}><Ico size={13} />{l}</button>
+            ))}
+          </div>
+          {mode === "plan" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 10 }}>
+              <Btn size="sm" variant={showLayout ? "gold" : "ghost"} onClick={() => setShowLayout((v) => !v)}
+                title="Afficher les blocs de la grille type en fond"><Layers3 size={12} /> Grille type</Btn>
+              <div style={{ width: 1, height: 18, background: T.line }} />
+              <Btn size="sm" variant="bare" onClick={() => setZoom((z) => Math.max(0.4, z - 0.15))}><ZoomOut size={14} /></Btn>
+              <Mono style={{ fontSize: 10, color: T.muted, width: 30, textAlign: "center" }}>{Math.round(zoom * 100)}%</Mono>
+              <Btn size="sm" variant="bare" onClick={() => setZoom((z) => Math.min(2.2, z + 0.15))}><ZoomIn size={14} /></Btn>
+            </div>
+          )}
+        </div>
+
+        {mode === "plan" ? (
+          <TransmissionPlan {...{ events, layout, range, channel, vecteur, zoom, selectedId, dragRef, showLayout }}
+            onSelect={setSelectedId} onDropNew={onDropNew} onMoveEvent={onMoveEvent} />
+        ) : (
+          <TransmissionList {...{ events, range, channel, vecteur, selectedId }} onSelect={setSelectedId} />
+        )}
+      </Panel>
+
+      <div>
+        <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+          <Btn size="sm" variant={rightTab === "issues" ? "solid" : "ghost"} onClick={() => setRightTab("issues")}
+            style={{ flex: 1, justifyContent: "center" }}><CircleAlert size={12} /> Anomalies</Btn>
+          <Btn size="sm" variant={rightTab === "inspector" ? "solid" : "ghost"} onClick={() => setRightTab("inspector")}
+            disabled={!sel} style={{ flex: 1, justifyContent: "center" }}><Settings2 size={12} /> Inspecteur</Btn>
+        </div>
+        {rightTab === "inspector" && sel ? (
+          <Inspector ev={sel} channel={channel} range={range} onClose={() => { setSelectedId(null); setRightTab("issues"); }}
+            onUpdate={onUpdate} onDelete={onDelete} onDuplicate={onDuplicate} onSplitSat={onSplitSat} onOpenTitle={onOpenTitle} />
+        ) : (
+          <IssuesPanel issues={issues} onGo={(id) => { setSelectedId(id); setRightTab("inspector"); }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════ 11. GRILLE TYPE (channel layout definition)   */
+function GrilleTypeView({ layout, setLayout, toast }) {
+  const [sel, setSel] = useState(layout[0]?.id);
+  const b = layout.find((x) => x.id === sel);
+  const upd = (patch) => setLayout(layout.map((x) => (x.id === sel ? { ...x, ...patch } : x)));
+  const timeInput = (v, on) => (
+    <input type="time" value={clock(v)} onChange={(e) => { const [h, m] = e.target.value.split(":").map(Number); on(h * 60 + m); }}
+      style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "5px 7px", fontSize: 12, fontFamily: F_MONO }} />
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 10, alignItems: "start" }}>
+      <Panel>
+        <PanelHead icon={Layers3} title="Grille type — définition des blocs d'antenne"
+          sub="La grille type décrit la structure de la journée, pas les titres"
+          right={<>
+            <Btn size="sm" onClick={() => {
+              const nb = { id: uid(), nom: "Nouveau bloc", start: 15 * 60, end: 16 * 60, freq: "Quotidien", days: [0,1,2,3,4], genre: "Magazine" };
+              setLayout([...layout, nb]); setSel(nb.id);
+            }}><Plus size={12} /> Ajouter un bloc</Btn>
+            <Btn size="sm" variant="solid" onClick={() => toast("Grille type exportée (1 page, genres FR + AR).")}><FileDown size={12} /> Exporter</Btn>
+          </>} />
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr>{["Bloc", "Début", "Fin", "Durée", "Fréquence", "Jours", "Genre attendu"].map((h) => (
+              <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: ".04em", borderBottom: `1px solid ${T.line}` }}>{h.toUpperCase()}</th>
+            ))}</tr></thead>
+            <tbody>
+              {[...layout].sort((a, b2) => a.start - b2.start).map((x) => (
+                <tr key={x.id} onClick={() => setSel(x.id)} style={{ cursor: "pointer", background: sel === x.id ? "#F4F7FF" : "transparent", borderBottom: `1px solid ${T.line2}` }}>
+                  <td style={{ padding: "8px 10px", fontSize: 12, fontWeight: 600 }}>
+                    <span style={{ display: "inline-block", width: 3, height: 14, background: gc(x.genre), borderRadius: 2, marginRight: 7, verticalAlign: "-2px" }} />
+                    {x.nom}
+                  </td>
+                  <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11.5 }}>{clock(x.start)}</Mono></td>
+                  <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11.5 }}>{clock(x.end)}</Mono></td>
+                  <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11.5, color: T.muted }}>{dur(x.end - x.start)}</Mono></td>
+                  <td style={{ padding: "8px 10px", fontSize: 11.5 }}>{x.freq}</td>
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ display: "flex", gap: 2 }}>
+                      {DAY_ABBR.map((dn, i) => (
+                        <span key={i} style={{
+                          fontSize: 9, fontWeight: 700, width: 17, textAlign: "center", padding: "2px 0", borderRadius: 3,
+                          background: x.days.includes(i) ? gc(x.genre) + "22" : T.line2,
+                          color: x.days.includes(i) ? gc(x.genre) : "#B9C1CC",
+                        }}>{dn[0]}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ padding: "8px 10px" }}><Tag color={gc(x.genre)}>{x.genre}</Tag></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel style={{ position: "sticky", top: 68 }}>
+        <PanelHead icon={Settings2} title="Définition du bloc" />
+        {b ? (
+          <div style={{ padding: 12 }}>
+            <Sec title="Identité">
+              <input value={b.nom} onChange={(e) => upd({ nom: e.target.value })} style={{
+                width: "100%", border: `1px solid ${T.line}`, borderRadius: 7, padding: "6px 8px", fontSize: 12.5, fontWeight: 600,
+              }} />
+            </Sec>
+            <Sec title="Créneau">
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {timeInput(b.start, (v) => upd({ start: v }))}
+                <ArrowRight size={13} style={{ color: T.muted }} />
+                {timeInput(b.end, (v) => upd({ end: v }))}
+                <Tag color={T.ink2} style={{ marginLeft: "auto" }}>{dur(b.end - b.start)}</Tag>
+              </div>
+            </Sec>
+            <Sec title="Jours d'application">
+              <div style={{ display: "flex", gap: 3 }}>
+                {DAY_ABBR.map((dn, i) => {
+                  const on = b.days.includes(i);
+                  return (
+                    <button key={i} onClick={() => upd({ days: on ? b.days.filter((x) => x !== i) : [...b.days, i].sort() })}
+                      style={{
+                        flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 10.5, fontWeight: 600, cursor: "pointer",
+                        border: `1px solid ${on ? T.ink : T.line}`, background: on ? T.ink : "transparent", color: on ? "#fff" : T.ink2,
+                      }}>{dn}</button>
+                  );
+                })}
+              </div>
+            </Sec>
+            <Sec title="Fréquence">
+              <div style={{ display: "flex", gap: 5 }}>
+                {["Quotidien", "Hebdo"].map((f) => (
+                  <Btn key={f} size="sm" variant={b.freq === f ? "solid" : "ghost"} onClick={() => upd({ freq: f })}
+                    style={{ flex: 1, justifyContent: "center" }}>{f}</Btn>
+                ))}
+              </div>
+            </Sec>
+            <Sec title="Genre attendu">
+              <select value={b.genre} onChange={(e) => upd({ genre: e.target.value })} style={{
+                width: "100%", border: `1px solid ${T.line}`, borderRadius: 7, padding: "6px 8px", fontSize: 12,
+                color: gc(b.genre), fontWeight: 600,
+              }}>{Object.keys(GENRES).map((g) => <option key={g}>{g} — {GENRES[g].ar}</option>)}</select>
+            </Sec>
+            <Btn size="sm" variant="danger" onClick={() => { setLayout(layout.filter((x) => x.id !== b.id)); setSel(layout[0]?.id); }}
+              style={{ width: "100%", justifyContent: "center" }}><Trash2 size={12} /> Supprimer le bloc</Btn>
+          </div>
+        ) : <Empty>Sélectionnez un bloc dans le tableau.</Empty>}
+      </Panel>
+    </div>
+  );
+}
+
+/* ══════════════════ 12. AUTO-PROGRAMMATION (« scheduling artist »)          */
+/* Grille type + réservoir de contenus + règles → génération, puis rapport.   */
+
+function AutoView({ layout, range, channel, events, onGenerate, toast }) {
+  const [pool, setPool] = useState(() => PROGRAMS.map((p) => ({
+    programId: p.id, enabled: !["P04", "P05", "P12"].includes(p.id),
+    separation: p.genre === "Série" ? 1 : 7, maxTx: p.genre === "Série" ? 30 : 4,
+    ordre: p.genre === "Série" || p.genre === "Jeunesse" ? "Séquentiel" : "Aléatoire",
+  })));
+  const [blocks, setBlocks] = useState(() => layout.map((b) => b.id));
+  const [opts, setOpts] = useState({ contratValide: true, exclusivite: true, ecraser: false, respectGenre: true });
+  const [report, setReport] = useState(null);
+
+  const updPool = (id, patch) => setPool(pool.map((x) => (x.programId === id ? { ...x, ...patch } : x)));
+
+  const run = () => {
+    const created = []; const log = [];
+    const usedEp = {}; const txCount = {}; const lastPlanned = {};
+
+    const taken = new Set(events.filter((e) => e.vec !== "sat").map((e) => `${e.date}|${e.start}`));
+
+    range.forEach((d) => {
+      const dISO = iso(d); const dow = (d.getDay() + 6) % 7;
+      layout.filter((b) => blocks.includes(b.id) && b.days.includes(dow)).sort((a, b2) => a.start - b2.start).forEach((b) => {
+        const key = `${dISO}|${b.start}`;
+        if (taken.has(key) && !opts.ecraser) return;
+
+        const cands = pool.filter((x) => x.enabled).map((x) => {
+          const p = prog(x.programId);
+          if (opts.respectGenre && p.genre !== b.genre) return null;
+          const r = rightsAt(p, dISO, channel);
+          if (opts.contratValide && r.level === "block") { return { rejected: `${p.titre} — ${r.label}` }; }
+          if (opts.exclusivite && p.droits[0].exclusif && p.droits[0].exclusif !== channel) return null;
+          const lp = lastPlanned[p.id];
+          if (lp && Math.abs(daysSince(lp, dISO)) < x.separation) return null;
+          if ((txCount[p.id] || 0) >= x.maxTx) return null;
+          const padEps = p.episodes.filter((e) => e.pad);
+          if (!padEps.length) return null;
+          const idx = usedEp[p.id] ?? -1;
+          const ep = x.ordre === "Séquentiel"
+            ? padEps[(idx + 1) % padEps.length]
+            : padEps[Math.floor((idx + 3 + b.start) % padEps.length)];
+          const score = Math.min(daysSince(lastDiff(p), dISO), 200) * 0.5
+            + (r.level === "warn" ? 40 : 0) + padEps.length * 0.8 - (txCount[p.id] || 0) * 6;
+          return { x, p, ep, score, r, padEps };
+        }).filter(Boolean);
+
+        const viable = cands.filter((c) => !c.rejected).sort((a, b2) => b2.score - a.score);
+        cands.filter((c) => c.rejected).slice(0, 1).forEach((c) => log.push({ level: "warn", msg: `${fmtShort(d)} · ${b.nom} — ${c.rejected}` }));
+
+        if (!viable.length) {
+          log.push({ level: "block", msg: `${fmtShort(d)} · ${b.nom} — aucun titre éligible en ${b.genre}. Bloc laissé vide.` });
+          return;
+        }
+        const pick = viable[0];
+        created.push({ id: uid(), date: dISO, start: b.start, programId: pick.p.id, ep: pick.ep.num, vec: "both", auto: true });
+        usedEp[pick.p.id] = pick.padEps.findIndex((e) => e.num === pick.ep.num);
+        txCount[pick.p.id] = (txCount[pick.p.id] || 0) + 1;
+        lastPlanned[pick.p.id] = dISO;
+        if (pick.r.level === "warn") log.push({ level: "warn", msg: `${fmtShort(d)} · ${b.nom} — ${pick.p.titre} : ${pick.r.label}` });
+      });
+    });
+
+    onGenerate(created, opts.ecraser);
+    setReport({ created: created.length, log, blocs: blocks.length });
+    toast(`${created.length} transmissions générées sur ${range.length} jours.`);
+  };
+
+  const th = { textAlign: "left", padding: "7px 9px", fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: ".04em", borderBottom: `1px solid ${T.line}` };
+  const num = (v, on, w = 52) => (
+    <input type="number" value={v} min={0} onChange={(e) => on(Number(e.target.value))}
+      style={{ width: w, border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 6px", fontSize: 11.5, fontFamily: F_MONO }} />
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 10, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Panel>
+          <PanelHead icon={Boxes} title="Réservoir de contenus" sub="Les règles gouvernent la génération, titre par titre"
+            right={<Mono style={{ fontSize: 10.5, color: T.muted }}>{pool.filter((x) => x.enabled).length} titres actifs</Mono>} />
+          <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 330px)", overflowY: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead style={{ position: "sticky", top: 0, background: T.sunk, zIndex: 1 }}>
+                <tr>{["", "Titre", "Genre", "Séparation (j)", "Max diff.", "Déjà diff.", "Ordre épisodes", "Stock PAD", "Droits"].map((h) => <th key={h} style={th}>{h.toUpperCase()}</th>)}</tr>
+              </thead>
+              <tbody>
+                {pool.map((x) => {
+                  const p = prog(x.programId); const r = rightsAt(p, iso(range[0]), channel);
+                  const padN = p.episodes.filter((e) => e.pad).length;
+                  return (
+                    <tr key={x.programId} style={{ borderBottom: `1px solid ${T.line2}`, opacity: x.enabled ? 1 : .45 }}>
+                      <td style={{ padding: "6px 9px" }}>
+                        <input type="checkbox" checked={x.enabled} onChange={(e) => updPool(x.programId, { enabled: e.target.checked })} />
+                      </td>
+                      <td style={{ padding: "6px 9px", fontSize: 11.5, fontWeight: 600 }}>{p.titre}</td>
+                      <td style={{ padding: "6px 9px" }}><Tag color={gc(p.genre)}>{p.genre}</Tag></td>
+                      <td style={{ padding: "6px 9px" }}>{num(x.separation, (v) => updPool(x.programId, { separation: v }))}</td>
+                      <td style={{ padding: "6px 9px" }}>{num(x.maxTx, (v) => updPool(x.programId, { maxTx: v }))}</td>
+                      <td style={{ padding: "6px 9px" }}><Mono style={{ fontSize: 11, color: T.muted }}>{p.droits[0].used}</Mono></td>
+                      <td style={{ padding: "6px 9px" }}>
+                        <select value={x.ordre} onChange={(e) => updPool(x.programId, { ordre: e.target.value })}
+                          style={{ border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 5px", fontSize: 11 }}>
+                          <option>Séquentiel</option><option>Aléatoire</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: "6px 9px" }}><Mono style={{ fontSize: 11 }}>{padN}/{p.episodes.length}</Mono></td>
+                      <td style={{ padding: "6px 9px" }}><RightsDot level={r.level} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+
+        {report && (
+          <Panel>
+            <PanelHead icon={Sparkles} title="Rapport de génération"
+              right={<Tag color={T.ok}>{report.created} transmissions</Tag>} />
+            <div style={{ padding: 12, maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+              {report.log.length === 0 && <div style={{ fontSize: 12, color: T.ok }}>Génération complète, aucun bloc laissé vide.</div>}
+              {report.log.map((l, i) => (
+                <div key={i} style={{
+                  fontSize: 11.5, padding: "6px 9px", borderRadius: 7, lineHeight: 1.4,
+                  background: l.level === "block" ? "#FEF3F2" : "#FFFAEB",
+                  color: l.level === "block" ? T.signal : T.warn,
+                }}>{l.msg}</div>
+              ))}
+            </div>
+          </Panel>
+        )}
+      </div>
+
+      <div style={{ position: "sticky", top: 68, display: "flex", flexDirection: "column", gap: 10 }}>
+        <Panel>
+          <PanelHead icon={Wand2} title="Paramètres de génération" />
+          <div style={{ padding: 12 }}>
+            <Sec title="Période">
+              <div style={{ fontSize: 12, color: T.ink2 }}>
+                <Mono>{fmtDate(range[0])}</Mono> → <Mono>{fmtDate(range[range.length - 1])}</Mono>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{range.length} jours · {channel}</div>
+              </div>
+            </Sec>
+
+            <Sec title={`Blocs à remplir (${blocks.length}/${layout.length})`}>
+              <div style={{ maxHeight: 170, overflowY: "auto", border: `1px solid ${T.line}`, borderRadius: 8 }}>
+                {[...layout].sort((a, b) => a.start - b.start).map((b) => {
+                  const on = blocks.includes(b.id);
+                  return (
+                    <label key={b.id} style={{
+                      display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", cursor: "pointer",
+                      borderBottom: `1px solid ${T.line2}`, fontSize: 11.5,
+                    }}>
+                      <input type="checkbox" checked={on} onChange={() => setBlocks(on ? blocks.filter((x) => x !== b.id) : [...blocks, b.id])} />
+                      <Mono style={{ fontSize: 10, color: T.muted, width: 38 }}>{clock(b.start)}</Mono>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.nom}</span>
+                      <Tag color={gc(b.genre)}>{b.genre.slice(0, 4)}</Tag>
+                    </label>
+                  );
+                })}
+              </div>
+            </Sec>
+
+            <Sec title="Règles">
+              {[
+                ["contratValide", "Uniquement les contrats valides"],
+                ["exclusivite", "Respecter l'exclusivité de chaîne"],
+                ["respectGenre", "Respecter le genre de la grille type"],
+                ["ecraser", "Écraser la programmation existante"],
+              ].map(([k, l]) => (
+                <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 11.5, cursor: "pointer" }}>
+                  <input type="checkbox" checked={opts[k]} onChange={(e) => setOpts({ ...opts, [k]: e.target.checked })} />
+                  {l}
+                </label>
+              ))}
+            </Sec>
+
+            <Btn variant="solid" onClick={run} style={{ width: "100%", justifyContent: "center", padding: "10px 12px" }}>
+              <Play size={14} /> Lancer la génération
+            </Btn>
+            <div style={{ fontSize: 10.5, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+              Rien n'est écrit sans votre clic, et tout reste annulable avec ⌘Z. Le rapport détaille chaque bloc
+              laissé vide et la raison exacte du refus.
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════ 13. CATALOGUE & FICHE TITRE     */
+function CatalogueView({ focus, setFocus, channel, events, toast }) {
+  const [q, setQ] = useState(""); const [statut, setStatut] = useState("Tous"); const [genre, setGenre] = useState("Tous");
+  const today = "2026-08-10";
+
+  const rows = useMemo(() => PROGRAMS.filter((p) => {
+    const ql = q.toLowerCase();
+    if (ql && !(p.titre.toLowerCase().includes(ql) || p.titreAr.includes(q) || p.titreEn.toLowerCase().includes(ql)
+      || p.episodes.some((e) => e.titre.toLowerCase().includes(ql)))) return false;
+    if (genre !== "Tous" && p.genre !== genre) return false;
+    const r = rightsAt(p, today, channel);
+    if (statut === "Droits ouverts" && r.level !== "ok") return false;
+    if (statut === "Fin de droits" && r.level !== "warn") return false;
+    if (statut === "Hors droits" && r.level !== "block") return false;
+    return true;
+  }), [q, statut, genre, channel]);
+
+  const p = focus ? prog(focus) : null;
+  const th = { textAlign: "left", padding: "8px 10px", fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: ".04em", borderBottom: `1px solid ${T.line}` };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: p ? "minmax(0,1fr) 440px" : "minmax(0,1fr)", gap: 10, alignItems: "start" }}>
+      <Panel>
+        <PanelHead icon={Library} title="Catalogue" sub={`${rows.length} titres`} right={
+          <>
+            <select value={genre} onChange={(e) => setGenre(e.target.value)} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "4px 7px", fontSize: 11.5 }}>
+              <option>Tous</option>{Object.keys(GENRES).map((g) => <option key={g}>{g}</option>)}
+            </select>
+            <select value={statut} onChange={(e) => setStatut(e.target.value)} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "4px 7px", fontSize: 11.5 }}>
+              {["Tous", "Droits ouverts", "Fin de droits", "Hors droits"].map((s) => <option key={s}>{s}</option>)}
+            </select>
+            <Btn size="sm" variant="solid" onClick={() => toast("Extraction du catalogue exportée avec les filtres appliqués (Excel, Word, PDF).")}>
+              <FileDown size={12} /> Extraire
+            </Btn>
+          </>
+        } />
+        <div style={{ padding: 9, borderBottom: `1px solid ${T.line2}` }}>
+          <div style={{ position: "relative" }}>
+            <Search size={13} style={{ position: "absolute", left: 8, top: 8, color: T.muted }} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Titre français, arabe, anglais, ou titre d'épisode…"
+              style={{ width: "100%", padding: "6px 8px 6px 26px", border: `1px solid ${T.line}`, borderRadius: 7, fontSize: 12.5, outline: "none" }} />
+          </div>
+        </div>
+        <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 190px)", overflowY: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead style={{ position: "sticky", top: 0, background: T.sunk, zIndex: 1 }}>
+              <tr>{["Titre", "Genre", "Type", "Épisodes", "Dernière diff.", "Fenêtre de droits", "Passages"].map((h) => <th key={h} style={th}>{h.toUpperCase()}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const r = rightsAt(row, today, channel); const w = row.droits[0];
+                return (
+                  <tr key={row.id} onClick={() => setFocus(row.id)} style={{ cursor: "pointer", borderBottom: `1px solid ${T.line2}`, background: focus === row.id ? "#F4F7FF" : "transparent" }}>
+                    <td style={{ padding: "8px 10px" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <Poster p={row} size={26} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>{row.titre}</div>
+                          <div style={{ fontSize: 10.5, color: T.muted }}>{row.titreAr} · {row.contrat}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: "8px 10px" }}><Tag color={gc(row.genre)}>{row.genre}</Tag></td>
+                    <td style={{ padding: "8px 10px", fontSize: 11.5, color: T.ink2 }}>{row.typeProd}</td>
+                    <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11 }}>{row.episodes.filter((e) => e.pad).length}/{row.episodes.length}</Mono></td>
+                    <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11, color: T.ink2 }}>{lastDiff(row)}</Mono></td>
+                    <td style={{ padding: "8px 10px" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <RightsDot level={r.level} />
+                        <Mono style={{ fontSize: 10.5, color: T.ink2 }}>{w.from.slice(2)} → {w.to.slice(2)}</Mono>
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 10px" }}><Mono style={{ fontSize: 11 }}>{w.used}/{w.passages}</Mono></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {p && <FicheTitre p={p} channel={channel} events={events} onClose={() => setFocus(null)} />}
+    </div>
+  );
+}
+
+/* ————— timeline des fenêtres de droits, sur plusieurs années */
+function RightsTimeline({ p }) {
+  const y0 = 2024, y1 = 2027;
+  const span = new Date(`${y1}-12-31`) - new Date(`${y0}-01-01`);
+  const pos = (dISO) => Math.max(0, Math.min(100, ((new Date(dISO) - new Date(`${y0}-01-01`)) / span) * 100));
+  const years = []; for (let y = y0; y <= y1; y++) years.push(y);
+  const yPos = (y) => pos(y + "-01-01") + "%";
+
+  return (
+    <div style={{ border: `1px solid ${T.line}`, borderRadius: 9, padding: 10, background: T.sunk }}>
+      <div style={{ position: "relative", height: 16, marginBottom: 4 }}>
+        {years.map((y) => (
+          <span key={y} style={{ position: "absolute", left: yPos(y), fontSize: 9.5, color: T.muted, fontFamily: F_MONO }}>{y}</span>
+        ))}
+      </div>
+      <div style={{ position: "relative", height: 34, background: T.surface, border: `1px solid ${T.line2}`, borderRadius: 6 }}>
+        {years.map((y) => (
+          <div key={y} style={{ position: "absolute", left: yPos(y), top: 0, bottom: 0, width: 1, background: T.line2 }} />
+        ))}
+        {p.droits.map((w, i) => {
+          const l = pos(w.from), r = pos(w.to);
+          const expired = new Date(w.to) < new Date("2026-08-10");
+          return (
+            <div key={i} title={`${w.from} → ${w.to}`} style={{
+              position: "absolute", left: `${l}%`, width: `${Math.max(1.5, r - l)}%`, top: 6, height: 22,
+              background: expired ? T.muted + "33" : gc(p.genre) + "2E",
+              border: `1px solid ${expired ? T.muted : gc(p.genre)}`, borderRadius: 4,
+              display: "flex", alignItems: "center", paddingLeft: 6, overflow: "hidden",
+            }}>
+              <Mono style={{ fontSize: 9, color: expired ? T.muted : gc(p.genre), fontWeight: 600, whiteSpace: "nowrap" }}>
+                {w.vecteur} · {w.passages - w.used} restants
+              </Mono>
+            </div>
+          );
+        })}
+        {/* marqueur « aujourd'hui » */}
+        <div style={{ position: "absolute", left: `${pos("2026-08-10")}%`, top: -3, bottom: -3, width: 2, background: T.signal, borderRadius: 2 }} />
+        {/* diffusions passées */}
+        {p.diffusions.map((d, i) => (
+          <div key={i} title={`${d.date} · ${d.type}`} style={{
+            position: "absolute", left: `${pos(d.date)}%`, bottom: 2, width: 3, height: 5,
+            background: d.type === "Diffusion" ? T.ink : T.muted, borderRadius: 2,
+          }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 7, fontSize: 9.5, color: T.muted }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 2, height: 9, background: T.signal }} /> Aujourd'hui
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 3, height: 5, background: T.ink }} /> Diffusion passée
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FicheTitre({ p, channel, events, onClose }) {
+  const [tab, setTab] = useState("apercu");
+  const [lang, setLang] = useState("Français");
+  const r = rightsAt(p, "2026-08-10", channel);
+  const planned = events.filter((e) => e.programId === p.id);
+
+  const meta = {
+    "Français": [["Titre", p.titre], ["Genre", p.genre], ["Sous-genre", p.sousGenre], ["Synopsis", p.synopsisFr]],
+    "العربية":  [["العنوان", p.titreAr], ["النوع", GENRES[p.genre].ar], ["النوع الفرعي", p.sousGenre], ["الملخص", p.synopsisAr]],
+    "English":  [["Title", p.titreEn], ["Genre", p.genre], ["Sub-genre", p.sousGenre], ["Synopsis", "—"]],
+  };
+
+  return (
+    <Panel style={{ position: "sticky", top: 68, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 90px)" }}>
+      <div style={{ padding: 14, borderBottom: `1px solid ${T.line}`, display: "flex", gap: 12 }}>
+        <Poster p={p} size={62} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: F_DISPLAY, fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>{p.titre}</div>
+              <div style={{ fontSize: 12, color: T.muted }}>{p.titreAr} · {p.annee}</div>
+            </div>
+            <Btn size="sm" variant="bare" onClick={onClose}><X size={15} /></Btn>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 7, flexWrap: "wrap" }}>
+            <Tag color={gc(p.genre)}>{p.genre}</Tag>
+            {p.tags.map((t) => <Tag key={t} color={T.muted}>{t}</Tag>)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        padding: "8px 14px", display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontWeight: 500,
+        background: r.level === "ok" ? "#ECFDF3" : r.level === "warn" ? "#FFFAEB" : "#FEF3F2",
+        color: r.level === "ok" ? T.ok : r.level === "warn" ? T.warn : T.signal,
+        borderBottom: `1px solid ${T.line}`,
+      }}>
+        <RightsDot level={r.level} size={13} />{r.label} · {p.droits[0].passages - p.droits[0].used} passages restants
+      </div>
+
+      <Tabs compact value={tab} onChange={setTab} items={[
+        ["apercu", "Aperçu"], ["droits", "Droits", p.droits.length], ["diff", "Diffusions", p.diffusions.length],
+        ["eps", "Épisodes", p.episodes.length], ["meta", "Métadonnées"], ["plan", "Programmé", planned.length],
+      ]} />
+
+      <div style={{ padding: 14, overflowY: "auto" }}>
+        {tab === "apercu" && (
+          <>
+            <Sec title="Synopsis"><div style={{ fontSize: 12, lineHeight: 1.6, color: T.ink2 }}>{p.synopsisFr}</div></Sec>
+            <Sec title="Production">
+              <Field label="Type de production" value={p.typeProd} />
+              <Field label="Producteur" value={p.producteur} />
+              <Field label="Réalisation" value={p.realisateur} />
+              <Field label="Interprètes" value={p.casting} />
+              <Field label="Contrat" value={p.contrat} mono />
+            </Sec>
+            <Sec title="Technique">
+              <Field label="Durée unitaire" value={dur(p.episodes[0].duree)} />
+              <Field label="Épisodes PAD" value={`${p.episodes.filter((e) => e.pad).length} / ${p.episodes.length}`} />
+              <Field label="Volume disponible" value={dur(p.episodes.filter((e) => e.pad).length * p.episodes[0].duree)} />
+            </Sec>
+          </>
+        )}
+
+        {tab === "droits" && (
+          <>
+            <Sec title="Fenêtres de diffusion"><RightsTimeline p={p} /></Sec>
+            {p.droits.map((w, i) => (
+              <Sec key={i} title={`Fenêtre ${i + 1}`}>
+                <Field label="Période" value={`${fmtDate(new Date(w.from))} → ${fmtDate(new Date(w.to))}`} mono />
+                <Field label="Vecteurs" value={w.vecteur} />
+                <Field label="Exclusivité" value={w.exclusif || "Aucune"} />
+                <Field label="Passages" value={`${w.used} consommés / ${w.passages}`} mono />
+              </Sec>
+            ))}
+          </>
+        )}
+
+        {tab === "diff" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.muted, marginBottom: 9 }}>
+              <History size={13} /> Historique complet — plus de limite à trois entrées.
+            </div>
+            {p.diffusions.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${T.line2}` }}>
+                <Mono style={{ fontSize: 11, width: 76 }}>{d.date}</Mono>
+                <Mono style={{ fontSize: 11, color: T.muted, width: 38 }}>{d.heure}</Mono>
+                <Mono style={{ fontSize: 10.5, color: T.muted, width: 34 }}>ÉP.{pad2(d.ep)}</Mono>
+                <span style={{ fontSize: 11, flex: 1, minWidth: 0 }}>{d.chaine}</span>
+                <Tag color={d.type === "Diffusion" ? T.ok : T.muted}>{d.type === "Diffusion" ? "DIFF" : "REDIFF"}</Tag>
+                <Mono style={{ fontSize: 9.5, color: T.muted, width: 52, textAlign: "right" }}>{d.vecteur}</Mono>
+                <Mono style={{ fontSize: 10, color: T.ink2, width: 34, textAlign: "right" }}>{d.part}%</Mono>
+              </div>
+            ))}
+          </>
+        )}
+
+        {tab === "eps" && p.episodes.map((e) => (
+          <div key={e.num} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.line2}` }}>
+            <Mono style={{ fontSize: 10.5, color: T.muted, width: 22 }}>{pad2(e.num)}</Mono>
+            <span style={{ fontSize: 11.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {e.titre.split("—")[1]?.trim()}
+            </span>
+            <Mono style={{ fontSize: 9.5, color: T.muted }}>{e.tc}</Mono>
+            <Mono style={{ fontSize: 10, color: T.muted }}>{e.support}</Mono>
+            <Tag color={e.pad ? T.ok : T.signal}>{e.pad ? "PAD" : "NON PAD"}</Tag>
+          </div>
+        ))}
+
+        {tab === "meta" && (
+          <div style={{ display: "grid", gridTemplateColumns: "104px minmax(0,1fr)", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.muted, letterSpacing: ".06em", marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                <Languages size={11} /> LANGUES
+              </div>
+              {Object.keys(meta).map((l) => (
+                <button key={l} onClick={() => setLang(l)} style={{
+                  textAlign: "left", padding: "6px 8px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11.5,
+                  background: lang === l ? T.ink : "transparent", color: lang === l ? "#fff" : T.ink2, fontWeight: 500,
+                }}>{l}</button>
+              ))}
+            </div>
+            <div dir={lang === "العربية" ? "rtl" : "ltr"}>
+              {meta[lang].map(([k, v]) => (
+                <div key={k} style={{ paddingBottom: 9, marginBottom: 9, borderBottom: `1px solid ${T.line2}` }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: ".04em", marginBottom: 3 }}>{k.toUpperCase()}</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.55, color: T.ink }}>{v}</div>
+                </div>
+              ))}
+              <div style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.5 }}>
+                Ces champs alimentent l'export vers le site SNRT et les guides de programmes.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "plan" && (
+          planned.length ? planned.sort((a, b) => (a.date + a.start).toString().localeCompare(b.date + b.start)).map((e) => (
+            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${T.line2}` }}>
+              <Mono style={{ fontSize: 11, width: 76 }}>{e.date}</Mono>
+              <Mono style={{ fontSize: 11, fontWeight: 600, width: 42 }}>{clock(e.start)}</Mono>
+              <Mono style={{ fontSize: 10.5, color: T.muted, flex: 1 }}>ÉP.{pad2(e.ep)}</Mono>
+              <Tag color={e.vec === "sat" ? T.gold : e.vec === "tnt" ? T.focus : T.ink2}>
+                {e.vec === "both" ? "TNT + SAT" : e.vec.toUpperCase()}
+              </Tag>
+              {e.auto && <Tag color={T.gold}>AUTO</Tag>}
+            </div>
+          )) : <Empty icon={CalendarRange}>Ce titre n'est pas encore programmé sur la période affichée.</Empty>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/* ═══════════════════════════════════════════════════ 14. CONDUCTEUR        */
+const SECONDAIRES = [
+  { k: "BA", label: "Bande-annonce", d: 30, c: "#7C3AED" },
+  { k: "PUB", label: "Écran publicitaire", d: 180, c: "#0284C7" },
+  { k: "JINGLE", label: "Jingle / habillage", d: 10, c: "#64748B" },
+  { k: "AUTOPROMO", label: "Autopromo", d: 25, c: "#94660A" },
+];
+
+function ConducteurView({ events, range, channel, vecteur, inserts, setInserts, campagnes, toast }) {
+  const [di, setDi] = useState(0);
+  const [lastId, setLastId] = useState(null);
+  const [menu, setMenu] = useState(null);
+  const lastRef = useRef(null);
+  const dISO = iso(range[Math.min(di, range.length - 1)]);
+
+  useEffect(() => { if (lastRef.current) lastRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [lastId]);
+
+  const lines = useMemo(() => {
+    const base = dayEvents(events, dISO, vecteur);
+    const out = []; let tc = null;
+    base.forEach((e) => {
+      const p = prog(e.programId);
+      if (tc === null) tc = e.start;
+      out.push({ kind: "prog", key: e.id, tc, planned: e.start, ecart: Math.round(tc - e.start), p, ep: e.ep, d: p.duree });
+      tc += p.duree;
+      (inserts[e.id] || []).forEach((s2) => {
+        out.push({ kind: "sec", key: e.id, id: s2.id, tc, ...s2 });
+        tc += s2.d / 60;
+      });
+    });
+    return out;
+  }, [events, dISO, vecteur, inserts]);
+
+  const add = (evId, t) => {
+    const id = uid();
+    setInserts({ ...inserts, [evId]: [...(inserts[evId] || []), { id, type: t.k, label: t.label, d: t.d }] });
+    setLastId(id); setMenu(null);
+    toast(`${t.label} inséré — la vue reste sur votre dernière insertion.`);
+  };
+  const del = (evId, id) => setInserts({ ...inserts, [evId]: (inserts[evId] || []).filter((x) => x.id !== id) });
+
+  const totalMin = lines.reduce((a, l) => a + (l.kind === "prog" ? l.d : l.d / 60), 0);
+  const ecartMax = Math.max(0, ...lines.filter((l) => l.kind === "prog").map((l) => Math.abs(l.ecart)));
+  const autoN = lines.filter((l) => l.kind === "sec" && l.auto).length;
+  const manuN = lines.filter((l) => l.kind === "sec" && !l.auto).length;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 292px", gap: 10, alignItems: "start" }}>
+      <Panel>
+        <PanelHead icon={ListOrdered} title={`Conducteur d'antenne — ${channel}`} right={
+          <>
+            <select value={di} onChange={(e) => setDi(Number(e.target.value))} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "4px 7px", fontSize: 11.5 }}>
+              {range.map((d, i) => <option key={i} value={i}>{DAY_ABBR[(d.getDay() + 6) % 7]} {fmtShort(d)}</option>)}
+            </select>
+            <Btn size="sm" variant="solid" onClick={() => toast("Conducteur d'antenne transmis à la régie de diffusion.")}>
+              Envoyer à l'antenne
+            </Btn>
+          </>
+        } />
+        <div style={{ maxHeight: "calc(100vh - 168px)", overflowY: "auto", padding: 10 }}>
+          {!lines.length && <Empty icon={ListOrdered}>Rien au conducteur ce jour-là. Le conducteur se construit à partir du plan de diffusion.</Empty>}
+          {lines.map((l, idx) => {
+            const isLast = l.id && l.id === lastId;
+            const sec = l.kind === "sec" ? SECONDAIRES.find((s2) => s2.k === l.type) : null;
+            return (
+              <div key={idx} ref={isLast ? lastRef : null}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, marginBottom: 3,
+                  border: `1px solid ${isLast ? T.ink : T.line2}`,
+                  borderLeft: `3px solid ${l.kind === "prog" ? gc(l.p.genre) : sec.c}`,
+                  background: l.kind === "prog" ? gc(l.p.genre) + "0C" : T.sunk,
+                }}>
+                  <Mono style={{ fontSize: 11.5, fontWeight: 600, width: 44 }}>{clock(l.tc)}</Mono>
+                  {l.kind === "prog" ? (
+                    <>
+                      <Poster p={l.p} size={22} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{l.p.titre}</div>
+                        <div style={{ fontSize: 10.5, color: T.muted }}>
+                          ÉP.{pad2(l.ep)} · {l.p.episodes[l.ep - 1]?.support} · TC {l.p.episodes[l.ep - 1]?.tc}
+                        </div>
+                      </div>
+                      {l.ecart !== 0 && <Tag color={Math.abs(l.ecart) > 5 ? T.signal : T.warn}>{l.ecart > 0 ? "+" : ""}{l.ecart} min</Tag>}
+                      <Tag color={gc(l.p.genre)}>{l.p.genre}</Tag>
+                      <Mono style={{ fontSize: 10.5, color: T.muted, width: 46, textAlign: "right" }}>{dur(l.d)}</Mono>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ flex: 1, fontSize: 12 }}>{l.label}</div>
+                      {l.auto && <Tag color={T.gold}>AUTO</Tag>}
+                      <Tag color={sec.c}>{l.type}</Tag>
+                      <Mono style={{ fontSize: 10.5, color: T.muted, width: 46, textAlign: "right" }}>{l.d}s</Mono>
+                      <Btn size="xs" variant="bare" onClick={() => del(l.key, l.id)}><X size={12} /></Btn>
+                    </>
+                  )}
+                </div>
+
+                {menu === idx ? (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", padding: 8, border: `1px solid ${T.line}`, borderRadius: 8, marginBottom: 5 }}>
+                    {SECONDAIRES.map((s2) => (
+                      <Btn key={s2.k} size="sm" onClick={() => add(l.key, s2)}>
+                        <span style={{ width: 7, height: 7, borderRadius: 2, background: s2.c }} />{s2.label}
+                      </Btn>
+                    ))}
+                    <Btn size="sm" variant="bare" onClick={() => setMenu(null)}><X size={12} /></Btn>
+                  </div>
+                ) : (
+                  <button onClick={() => setMenu(idx)} style={{
+                    display: "flex", width: "100%", alignItems: "center", gap: 6, border: "none",
+                    background: "transparent", cursor: "pointer", color: "#C3CAD4", padding: "1px 0 4px",
+                  }}>
+                    <span style={{ flex: 1, height: 1, background: T.line2 }} />
+                    <Plus size={11} />
+                    <span style={{ flex: 1, height: 1, background: T.line2 }} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+
+      <Panel style={{ position: "sticky", top: 68, padding: 12 }}>
+        <div style={{ fontFamily: F_DISPLAY, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+          {fmtDate(range[Math.min(di, range.length - 1)])}
+        </div>
+        <Field label="Lignes au conducteur" value={lines.length} />
+        <Field label="Programmes" value={lines.filter((l) => l.kind === "prog").length} />
+        <Field label="Plan média généré" value={autoN} />
+        <Field label="Plan média manuel" value={manuN} />
+        <Field label="Volume total" value={dur(Math.round(totalMin))} mono />
+        <Field label="Écart maximal" value={`${ecartMax} min`} mono />
+        <div style={{ marginTop: 14, padding: 10, background: T.goldSoft, border: `1px solid ${T.goldLine}`, borderRadius: 8, fontSize: 11, color: T.ink2, lineHeight: 1.5 }}>
+          <b style={{ color: T.gold }}>Généré, puis modifiable.</b> Les éléments marqués AUTO viennent du plan média
+          automatique. Vous les supprimez ou en ajoutez d'autres ici sans rien casser : une nouvelle génération
+          conserve vos insertions manuelles.
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════ 15. STOCK & BILANS         */
+function StockView({ events, channel, toast }) {
+  const [genre, setGenre] = useState("Tous"); const [statut, setStatut] = useState("Tous");
+  const today = "2026-08-10";
+
+  const rows = useMemo(() => PROGRAMS.filter((p) => {
+    if (genre !== "Tous" && p.genre !== genre) return false;
+    const r = rightsAt(p, today, channel);
+    if (statut === "Droits ouverts" && r.level !== "ok") return false;
+    if (statut === "Fin de droits" && r.level !== "warn") return false;
+    if (statut === "Hors droits" && r.level !== "block") return false;
+    if (statut === "Non programmé" && events.some((e) => e.programId === p.id)) return false;
+    return true;
+  }), [genre, statut, channel, events]);
+
+  const byGenre = useMemo(() => {
+    const m = {};
+    rows.forEach((p) => {
+      const n = p.episodes.filter((e) => e.pad).length;
+      m[p.genre] = m[p.genre] || { nb: 0, h: 0, ep: 0 };
+      m[p.genre].nb++; m[p.genre].ep += n; m[p.genre].h += (n * p.episodes[0].duree) / 60;
+    });
+    return Object.entries(m).sort((a, b) => b[1].h - a[1].h);
+  }, [rows]);
+
+  const maxH = Math.max(1, ...byGenre.map(([, v]) => v.h));
+  const totalH = byGenre.reduce((a, [, v]) => a + v.h, 0);
+  const expiring = PROGRAMS.filter((p) => rightsAt(p, today, channel).level === "warn");
+  const blocked = PROGRAMS.filter((p) => rightsAt(p, today, channel).level === "block").length;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10 }}>
+        <Kpi label="Volume disponible" value={`${Math.round(totalH)} h`} sub="épisodes PAD, droits ouverts" />
+        <Kpi label="Titres retenus" value={rows.length} sub={`sur ${PROGRAMS.length} au catalogue`} />
+        <Kpi label="Fin de droits < 45 j" value={expiring.length} sub="à consommer en priorité" tone={T.warn} />
+        <Kpi label="Hors droits" value={blocked} sub="exclus de la programmation" tone={T.signal} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 10, alignItems: "start" }}>
+        <Panel>
+          <PanelHead icon={Boxes} title="Situation du stock par genre" right={
+            <>
+              <Filter size={13} style={{ color: T.muted }} />
+              <select value={genre} onChange={(e) => setGenre(e.target.value)} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "4px 7px", fontSize: 11.5 }}>
+                <option>Tous</option>{Object.keys(GENRES).map((g) => <option key={g}>{g}</option>)}
+              </select>
+              <select value={statut} onChange={(e) => setStatut(e.target.value)} style={{ border: `1px solid ${T.line}`, borderRadius: 7, padding: "4px 7px", fontSize: 11.5 }}>
+                {["Tous", "Droits ouverts", "Fin de droits", "Hors droits", "Non programmé"].map((s) => <option key={s}>{s}</option>)}
+              </select>
+              <Btn size="sm" variant="solid" onClick={() => toast("Bilan de stock exporté (Excel, Word, PDF) avec les filtres appliqués.")}>
+                <FileDown size={12} /> Bilan
+              </Btn>
+            </>
+          } />
+          <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 11 }}>
+            {byGenre.map(([g, v]) => (
+              <div key={g}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 600, color: gc(g) }}>{g} <span style={{ color: T.muted, fontWeight: 400 }}>{GENRES[g].ar}</span></span>
+                  <Mono style={{ color: T.ink2 }}>{Math.round(v.h)} h · {v.ep} ép. · {v.nb} titres</Mono>
+                </div>
+                <div style={{ height: 8, background: T.line2, borderRadius: 5, overflow: "hidden" }}>
+                  <div style={{ width: `${(v.h / maxH) * 100}%`, height: "100%", background: gc(g), borderRadius: 5 }} />
+                </div>
+              </div>
+            ))}
+            {!byGenre.length && <Empty icon={Boxes}>Aucun titre pour ces filtres.</Empty>}
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelHead icon={Bell} title="À consommer avant expiration" />
+          <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 7 }}>
+            {expiring.map((p) => {
+              const r = rightsAt(p, today, channel); const n = p.episodes.filter((e) => e.pad).length;
+              return (
+                <div key={p.id} style={{ border: "1px solid #FEDF89", background: "#FFFAEB", borderRadius: 9, padding: 9, display: "flex", gap: 9 }}>
+                  <Poster p={p} size={28} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{p.titre}</div>
+                    <div style={{ fontSize: 10.5, color: T.warn, marginTop: 2 }}>{r.label}</div>
+                    <Mono style={{ fontSize: 10, color: T.muted }}>{n} ép. PAD · {p.droits[0].passages - p.droits[0].used} passages</Mono>
+                  </div>
+                </div>
+              );
+            })}
+            {!expiring.length && <Empty icon={ShieldCheck}>Aucune fenêtre de droits ne se referme dans les 45 jours.</Empty>}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+const Kpi = ({ label, value, sub, tone }) => (
+  <Panel style={{ padding: 14 }}>
+    <div style={{ fontSize: 9.5, color: T.muted, fontWeight: 700, letterSpacing: ".06em" }}>{label.toUpperCase()}</div>
+    <div style={{ fontFamily: F_DISPLAY, fontSize: 27, fontWeight: 700, color: tone || T.ink, marginTop: 4, lineHeight: 1 }}>{value}</div>
+    <div style={{ fontSize: 11, color: T.muted, marginTop: 5 }}>{sub}</div>
+  </Panel>
+);
+
+
+/* ════════════════════════ 15 bis. PLAN MÉDIA AUTOMATIQUE                   */
+/* Campagnes d'autopromotion + règles d'habillage → génération des           */
+/* évènements secondaires dans le conducteur, avec rapport de couverture.    */
+
+function genererPlanMedia(events, range, campagnes, opts, existing) {
+  const out = {};
+  Object.entries(existing).forEach(([k, v]) => { const m = v.filter((x) => !x.auto); if (m.length) out[k] = m; });
+
+  const parJour = {}, total = {}, dernier = {}, parTranche = {};
+  campagnes.forEach((c) => { total[c.id] = 0; parTranche[c.id] = {}; });
+  const alerts = [];
+
+  range.forEach((d) => {
+    const dISO = iso(d);
+    const list = dayEvents(events, dISO, "unifie").map((e) => ({ ...e, duree: prog(e.programId).duree }));
+
+    list.forEach((ev, i) => {
+      const next = list[i + 1];
+      const fin = ev.start + ev.duree;
+      const gap = next ? next.start - fin : 0;
+      if (gap <= 0) return;
+      let reste = Math.round(gap * 60);
+      const tk = trancheDe(fin);
+      const items = [];
+
+      if (opts.jingle && reste >= 10) { items.push({ id: uid(), type: "JINGLE", label: "Habillage d'inter-programme", d: 10, auto: true }); reste -= 10; }
+
+      if (opts.pub && opts.tranchesPub.includes(tk) && reste >= opts.dureeEcran) {
+        items.push({ id: uid(), type: "PUB", label: `Écran publicitaire — ${TRANCHES.find((t) => t.k === tk).label}`, d: opts.dureeEcran, auto: true });
+        reste -= opts.dureeEcran;
+      }
+
+      let garde = 0;
+      while (reste >= 30 && garde++ < 6) {
+        const cand = campagnes.map((c) => {
+          if (dISO < c.from || dISO > c.to) return null;
+          if (total[c.id] >= c.objectif) return null;
+          const kj = `${c.id}|${dISO}`;
+          if ((parJour[kj] || 0) >= c.maxParJour) return null;
+          if (dernier[kj] != null && fin - dernier[kj] < c.separation) return null;
+          if (items.some((x) => x.campagneId === c.id)) return null;
+          if (opts.futurSeulement) {
+            const aVenir = events.some((e) => e.programId === c.programId &&
+              (e.date > dISO || (e.date === dISO && e.start > fin)));
+            if (!aVenir) return null;
+          }
+          const p = prog(c.programId);
+          const deficit = (c.objectif - total[c.id]) / c.objectif;
+          const score = c.priorite * 100 + deficit * 60 + (c.tranches.includes(tk) ? 45 : 0);
+          return { c, p, score };
+        }).filter(Boolean).sort((a, b) => b.score - a.score)[0];
+
+        if (!cand) break;
+        items.push({ id: uid(), type: cand.c.type || "BA", label: `Bande-annonce — ${cand.p.titre}`, d: 30, auto: true, campagneId: cand.c.id });
+        reste -= 30;
+        const kj = `${cand.c.id}|${dISO}`;
+        parJour[kj] = (parJour[kj] || 0) + 1;
+        total[cand.c.id] += 1;
+        dernier[kj] = fin;
+        parTranche[cand.c.id][tk] = (parTranche[cand.c.id][tk] || 0) + 1;
+      }
+
+      if (items.length) out[ev.id] = [...(out[ev.id] || []), ...items];
+    });
+  });
+
+  campagnes.forEach((c) => {
+    const p = prog(c.programId);
+    if (total[c.id] === 0) alerts.push({ level: "block", msg: `${p.titre} — aucune bande-annonce placée. Élargissez les tranches ciblées ou la période.` });
+    else if (total[c.id] < c.objectif) alerts.push({ level: "warn", msg: `${p.titre} — ${total[c.id]}/${c.objectif} bandes-annonces. Espace inter-programmes insuffisant sur les tranches visées.` });
+  });
+
+  const nbAuto = Object.values(out).flat().filter((x) => x.auto).length;
+  return { inserts: out, rapport: { total, parTranche, alerts, nbAuto } };
+}
+
+function PlanMediaView({ events, range, channel, campagnes, setCampagnes, inserts, setInserts, toast }) {
+  const [opts, setOpts] = useState({
+    jingle: true, pub: true, dureeEcran: 180, futurSeulement: true,
+    tranchesPub: ["journee", "access", "prime"],
+  });
+  const [rapport, setRapport] = useState(null);
+  const [ajout, setAjout] = useState(false);
+
+  const upd = (id, patch) => setCampagnes(campagnes.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const num = (v, on, w = 54) => (
+    <input type="number" min={0} value={v} onChange={(e) => on(Number(e.target.value))}
+      style={{ width: w, border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 6px", fontSize: 11.5, fontFamily: F_MONO }} />
+  );
+  const th = { textAlign: "left", padding: "7px 9px", fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: ".04em", borderBottom: `1px solid ${T.line}` };
+
+  const run = () => {
+    const res = genererPlanMedia(events, range, campagnes, opts, inserts);
+    setInserts(res.inserts); setRapport(res.rapport);
+    toast(`${res.rapport.nbAuto} évènements secondaires générés sur ${range.length} jours.`);
+  };
+
+  const dispo = PROGRAMS.filter((p) => !campagnes.some((c) => c.programId === p.id));
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 330px", gap: 10, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Panel>
+          <PanelHead icon={Sparkles} title="Campagnes d'autopromotion" sub={`${channel} · ${campagnes.length} campagnes`}
+            right={<Btn size="sm" onClick={() => setAjout(true)}><Plus size={12} /> Nouvelle campagne</Btn>} />
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Programme promu", "Du", "Au", "Objectif BA", "Priorité", "Max / jour", "Séparation", "Tranches ciblées", ""].map((h) => <th key={h} style={th}>{h.toUpperCase()}</th>)}</tr></thead>
+              <tbody>
+                {campagnes.map((c) => {
+                  const p = prog(c.programId); const place = rapport?.total?.[c.id] ?? null;
+                  return (
+                    <tr key={c.id} style={{ borderBottom: `1px solid ${T.line2}` }}>
+                      <td style={{ padding: "7px 9px" }}>
+                        <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                          <Poster p={p} size={22} />
+                          <div>
+                            <div style={{ fontSize: 11.5, fontWeight: 600 }}>{p.titre}</div>
+                            {place != null && (
+                              <div style={{ fontSize: 10, color: place >= c.objectif ? T.ok : T.warn }}>
+                                {place}/{c.objectif} placées
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <input type="date" value={c.from} onChange={(e) => upd(c.id, { from: e.target.value })}
+                          style={{ border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 5px", fontSize: 11, fontFamily: F_MONO }} />
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <input type="date" value={c.to} onChange={(e) => upd(c.id, { to: e.target.value })}
+                          style={{ border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 5px", fontSize: 11, fontFamily: F_MONO }} />
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>{num(c.objectif, (v) => upd(c.id, { objectif: Math.max(1, v) }))}</td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <select value={c.priorite} onChange={(e) => upd(c.id, { priorite: Number(e.target.value) })}
+                          style={{ border: `1px solid ${T.line}`, borderRadius: 6, padding: "3px 5px", fontSize: 11 }}>
+                          <option value={3}>Haute</option><option value={2}>Normale</option><option value={1}>Basse</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>{num(c.maxParJour, (v) => upd(c.id, { maxParJour: Math.max(1, v) }), 44)}</td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          {num(c.separation, (v) => upd(c.id, { separation: v }), 52)}
+                          <span style={{ fontSize: 10, color: T.muted }}>min</span>
+                        </span>
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                          {TRANCHES.map((t) => {
+                            const on = c.tranches.includes(t.k);
+                            return (
+                              <button key={t.k} onClick={() => upd(c.id, { tranches: on ? c.tranches.filter((x) => x !== t.k) : [...c.tranches, t.k] })}
+                                style={{
+                                  border: `1px solid ${on ? T.ink : T.line}`, background: on ? T.ink : "transparent",
+                                  color: on ? "#fff" : T.muted, borderRadius: 5, padding: "2px 6px", fontSize: 9.5,
+                                  fontWeight: 600, cursor: "pointer",
+                                }}>{t.label}</button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td style={{ padding: "7px 9px" }}>
+                        <Btn size="xs" variant="bare" onClick={() => setCampagnes(campagnes.filter((x) => x.id !== c.id))}><Trash2 size={12} /></Btn>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!campagnes.length && <tr><td colSpan={9}><Empty icon={Sparkles}>Aucune campagne. Créez-en une pour que la génération ait un objectif à remplir.</Empty></td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+
+        {rapport && (
+          <Panel>
+            <PanelHead icon={Table2} title="Couverture des campagnes" right={<Tag color={T.ok}>{rapport.nbAuto} éléments générés</Tag>} />
+            <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              {campagnes.map((c) => {
+                const p = prog(c.programId); const n = rapport.total[c.id] ?? 0;
+                const pct = Math.min(100, (n / c.objectif) * 100);
+                return (
+                  <div key={c.id}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{p.titre}</span>
+                      <Mono style={{ color: n >= c.objectif ? T.ok : T.warn }}>{n}/{c.objectif} BA</Mono>
+                    </div>
+                    <div style={{ height: 8, background: T.line2, borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: n >= c.objectif ? T.ok : gc(p.genre), borderRadius: 5 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      {TRANCHES.map((t) => (
+                        <Mono key={t.k} style={{ fontSize: 9.5, color: rapport.parTranche[c.id]?.[t.k] ? T.ink2 : "#C3CAD4" }}>
+                          {t.label} {rapport.parTranche[c.id]?.[t.k] ?? 0}
+                        </Mono>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {rapport.alerts.map((a, i) => (
+                <div key={i} style={{
+                  fontSize: 11.5, padding: "7px 9px", borderRadius: 7, lineHeight: 1.4,
+                  background: a.level === "block" ? "#FEF3F2" : "#FFFAEB",
+                  color: a.level === "block" ? T.signal : T.warn,
+                }}>{a.msg}</div>
+              ))}
+            </div>
+          </Panel>
+        )}
+      </div>
+
+      <div style={{ position: "sticky", top: 68, display: "flex", flexDirection: "column", gap: 10 }}>
+        <Panel>
+          <PanelHead icon={Wand2} title="Règles d'habillage" />
+          <div style={{ padding: 12 }}>
+            <Sec title="Période">
+              <div style={{ fontSize: 12, color: T.ink2 }}>
+                <Mono>{fmtDate(range[0])}</Mono> → <Mono>{fmtDate(range[range.length - 1])}</Mono>
+              </div>
+            </Sec>
+            <Sec title="Éléments générés">
+              {[["jingle", "Habillage à chaque inter-programme"], ["pub", "Écran publicitaire"],
+                ["futurSeulement", "Ne promouvoir qu'avant la diffusion"]].map(([k, l]) => (
+                <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 11.5, cursor: "pointer" }}>
+                  <input type="checkbox" checked={opts[k]} onChange={(e) => setOpts({ ...opts, [k]: e.target.checked })} />{l}
+                </label>
+              ))}
+            </Sec>
+            <Sec title="Durée d'un écran publicitaire">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {num(opts.dureeEcran, (v) => setOpts({ ...opts, dureeEcran: v }), 62)}
+                <span style={{ fontSize: 11, color: T.muted }}>secondes</span>
+              </span>
+            </Sec>
+            <Sec title="Tranches commercialisées">
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {TRANCHES.map((t) => {
+                  const on = opts.tranchesPub.includes(t.k);
+                  return (
+                    <button key={t.k} onClick={() => setOpts({ ...opts, tranchesPub: on ? opts.tranchesPub.filter((x) => x !== t.k) : [...opts.tranchesPub, t.k] })}
+                      style={{
+                        border: `1px solid ${on ? T.ink : T.line}`, background: on ? T.ink : "transparent",
+                        color: on ? "#fff" : T.ink2, borderRadius: 6, padding: "4px 8px", fontSize: 10.5, fontWeight: 600, cursor: "pointer",
+                      }}>{t.label}</button>
+                  );
+                })}
+              </div>
+            </Sec>
+            <Btn variant="solid" onClick={run} style={{ width: "100%", justifyContent: "center", padding: "10px 12px" }}>
+              <Play size={14} /> Générer le plan média
+            </Btn>
+            <div style={{ fontSize: 10.5, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+              La génération remplit les inter-programmes du conducteur. Vos insertions manuelles sont conservées,
+              et ⌘Z annule l'opération entière.
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      {ajout && (
+        <Modal title="Nouvelle campagne d'autopromotion" sub="Choisissez le programme à promouvoir" width={620} onClose={() => setAjout(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflowY: "auto" }}>
+            {dispo.map((p) => (
+              <button key={p.id} onClick={() => {
+                setCampagnes([...campagnes, {
+                  id: uid(), programId: p.id, from: iso(range[0]), to: iso(range[range.length - 1]),
+                  objectif: 8, priorite: 2, maxParJour: 2, separation: 120, tranches: ["access", "prime"], type: "BA",
+                }]);
+                setAjout(false);
+              }} style={{
+                display: "flex", alignItems: "center", gap: 10, padding: 9, border: `1px solid ${T.line}`,
+                borderRadius: 9, background: T.surface, cursor: "pointer", textAlign: "left",
+              }}>
+                <Poster p={p} size={28} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{p.titre}</div>
+                  <div style={{ fontSize: 10.5, color: T.muted }}>{p.genre} · {p.episodes.filter((e) => e.pad).length} épisodes PAD</div>
+                </div>
+                <Plus size={14} style={{ color: T.muted }} />
+              </button>
+            ))}
+            {!dispo.length && <Empty>Tous les titres ont déjà une campagne sur cette chaîne.</Empty>}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════ 16. RECHERCHE GLOBALE (⌘K)    */
+function CommandPalette({ onClose, onPickTitle, onGoView }) {
+  const [q, setQ] = useState("");
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+
+  const results = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    const out = [];
+    if (!ql) {
+      [["plan", "Aller au plan de diffusion"], ["auto", "Lancer l'auto-programmation"], ["stock", "Voir le stock"]]
+        .forEach(([k, l]) => out.push({ kind: "nav", k, label: l }));
+      return out;
+    }
+    PROGRAMS.forEach((p) => {
+      if (p.titre.toLowerCase().includes(ql) || p.titreAr.includes(q) || p.titreEn.toLowerCase().includes(ql))
+        out.push({ kind: "title", p });
+      p.episodes.forEach((e) => {
+        if (e.titre.toLowerCase().includes(ql) || e.titreAr.includes(q) || String(e.num) === ql || e.support.toLowerCase().includes(ql))
+          out.push({ kind: "ep", p, e });
+      });
+    });
+    return out.slice(0, 14);
+  }, [q]);
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(15,26,42,.36)", zIndex: 130,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "11vh",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "min(660px, 94vw)", background: T.surface, borderRadius: 14, overflow: "hidden",
+        boxShadow: "0 28px 70px rgba(15,26,42,.3)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 16px", borderBottom: `1px solid ${T.line}` }}>
+          <Search size={16} style={{ color: T.muted }} />
+          <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Un titre d'épisode, un numéro, un support, un titre en arabe…"
+            style={{ flex: 1, border: "none", outline: "none", fontSize: 14.5, color: T.ink }} />
+          <Mono style={{ fontSize: 10, color: T.muted }}>ESC</Mono>
+        </div>
+        <div style={{ maxHeight: 400, overflowY: "auto" }}>
+          {results.map((r, i) => (
+            <button key={i} onClick={() => r.kind === "nav" ? onGoView(r.k) : onPickTitle(r.p.id)} style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 16px", textAlign: "left",
+              border: "none", borderBottom: `1px solid ${T.line2}`, background: "transparent", cursor: "pointer",
+            }}>
+              {r.kind === "nav" ? <ArrowRight size={16} style={{ color: T.muted }} /> : <Poster p={r.p} size={24} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                  {r.kind === "nav" ? r.label : r.kind === "ep" ? r.e.titre : r.p.titre}
+                </div>
+                {r.kind !== "nav" && (
+                  <div style={{ fontSize: 10.5, color: T.muted }}>
+                    {r.kind === "ep" ? <>Épisode de <b>{r.p.titre}</b> · {r.e.support}</> : <>{r.p.titreAr} · {r.p.genre} · {r.p.episodes.length} épisodes</>}
+                  </div>
+                )}
+              </div>
+              {r.kind === "ep" && <Tag color={r.e.pad ? T.ok : T.signal}>{r.e.pad ? "PAD" : "NON PAD"}</Tag>}
+            </button>
+          ))}
+          {!results.length && <Empty icon={Search}>Rien trouvé. Essayez un numéro d'épisode ou un numéro de support.</Empty>}
+        </div>
+        <div style={{ padding: "8px 16px", background: T.sunk, fontSize: 10.5, color: T.muted }}>
+          La recherche part de l'épisode et remonte au programme — plus besoin d'ouvrir un titre pour dérouler sa liste.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════ 17. COQUILLE        */
+const VIEWS = [
+  ["plan", "Plan", CalendarRange],
+  ["layout", "Grille type", Layers3],
+  ["auto", "Auto-prog.", Wand2],
+  ["media", "Plan média", Sparkles],
+  ["catalogue", "Catalogue", Library],
+  ["conducteur", "Conducteur", ListOrdered],
+  ["stock", "Stock", Boxes],
+];
+
+function Rail({ view, setView, issues, channel }) {
+  const m = CH_META[channel];
+  return (
+    <nav style={{ width: 78, background: T.rail, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 10, gap: 3, flexShrink: 0 }}>
+      <div title={`${channel} — ${m.ligne}`} style={{
+        width: 34, height: 34, borderRadius: 9, background: m.couleur, color: "#fff", marginBottom: 8,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: F_DISPLAY, fontWeight: 700, fontSize: 13, letterSpacing: "-.02em",
+      }}>{m.code}</div>
+      {VIEWS.map(([k, l, Ico]) => (
+        <button key={k} onClick={() => setView(k)} style={{
+          width: 64, padding: "8px 3px", borderRadius: 9, border: "none", cursor: "pointer", position: "relative",
+          background: view === k ? "rgba(255,255,255,.11)" : "transparent",
+          color: view === k ? "#fff" : T.railInk,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+        }}>
+          <Ico size={17} />
+          <span style={{ fontSize: 9.5, fontWeight: 500, lineHeight: 1.1, textAlign: "center" }}>{l}</span>
+          {k === "plan" && issues > 0 && (
+            <span style={{ position: "absolute", top: 3, right: 8, background: T.signal, color: "#fff", fontSize: 8.5, fontWeight: 700, borderRadius: 20, padding: "1px 4px" }}>{issues}</span>
+          )}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/* ══════════════════════════════════════════════════════ 18. RACINE         */
+function seedEvents(ws, layout, channel) {
+  const evs = []; const byGenre = {}; const cnt = {};
+  PROGRAMS.forEach((p) => { (byGenre[p.genre] = byGenre[p.genre] || []).push(p); });
+  layout.forEach((b, bi) => {
+    for (let i = 0; i < 7; i++) {
+      if (!b.days.includes(i)) continue;
+      if (bi % 5 === 2 && i % 2 === 1) continue;              // trous d'antenne volontaires
+      const cands = (byGenre[b.genre] || []).filter((p) => {
+        const ex = p.droits[0].exclusif; return !ex || ex === channel;
+      });
+      if (!cands.length) continue;
+      cnt[b.genre] = (cnt[b.genre] || 0) + 1;
+      const p = cands[cnt[b.genre] % cands.length];
+      const padEps = p.episodes.filter((e) => e.pad); if (!padEps.length) continue;
+      const ep = padEps[(i + cnt[b.genre]) % padEps.length].num;
+      evs.push({ id: uid(), date: iso(addDays(ws, i)), start: b.start, programId: p.id, ep, vec: "both" });
+    }
+  });
+  if (channel === "Al Aoula") {
+    evs.push({ id: uid(), date: iso(ws), start: 21 * 60, programId: "P10", ep: 1, vec: "both" });
+    const t = evs.find((e) => e.programId === "P08"); if (t) t.ep = prog("P08").episodes.length;
+  }
+  return evs;
+}
+
+function initCampagnes(channel, layout, ws) {
+  const genres = new Set(layout.map((b) => b.genre));
+  return PROGRAMS.filter((p) => genres.has(p.genre) && (!p.droits[0].exclusif || p.droits[0].exclusif === channel))
+    .slice(0, 4)
+    .map((p, i) => ({
+      id: uid(), programId: p.id, from: iso(ws), to: iso(addDays(ws, 6)),
+      objectif: [12, 9, 6, 5][i] ?? 6, priorite: i === 0 ? 3 : i === 1 ? 2 : 1,
+      maxParJour: i === 0 ? 3 : 2, separation: 120,
+      tranches: i === 0 ? ["journee", "access", "prime"] : i === 1 ? ["access", "prime"] : ["journee", "access"],
+      type: "BA",
+    }));
+}
+
+function initWorkspaces(ws) {
+  const o = {};
+  CHANNELS.forEach((ch) => {
+    const layout = LAYOUTS[ch];
+    o[ch] = { layout, events: seedEvents(ws, layout, ch), inserts: {}, campagnes: initCampagnes(ch, layout, ws) };
+  });
+  return o;
+}
+
+function App() {
+  const WS0 = mondayOf(new Date("2026-08-10"));
+  const [view, setView] = useState("plan");
+  const [channel, setChannel] = useState("Al Aoula");
+  const [vecteur, setVecteur] = useState("unifie");
+  const [rangeStart, setRangeStart] = useState(WS0);
+  const [span, setSpan] = useState(7);
+
+  /* un seul historique, qui couvre tous les espaces de travail */
+  const [hist, setHist] = useState(() => [initWorkspaces(WS0)]);
+  const [hi, setHi] = useState(0);
+  const spaces = hist[hi];
+  const cur = spaces[channel];
+  const { layout, events, inserts, campagnes } = cur;
+
+  const commitWs = useCallback((patch) => {
+    setHist((h) => {
+      const base = h[Math.min(hi, h.length - 1)];
+      const next = { ...base, [channel]: { ...base[channel], ...patch } };
+      return [...h.slice(0, hi + 1), next];
+    });
+    setHi((i) => i + 1);
+  }, [hi, channel]);
+
+  const setLayout = (l) => commitWs({ layout: typeof l === "function" ? l(layout) : l });
+  const setEvents = (e) => commitWs({ events: e });
+  const setInserts = (m) => commitWs({ inserts: m });
+  const setCampagnes = (c) => commitWs({ campagnes: c });
+
+  const [selectedId, setSelectedId] = useState(null);
+  const [focusTitle, setFocusTitle] = useState(null);
+  const [palette, setPalette] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const dragRef = useRef(null);
+
+  const toast = useCallback((msg, kind = "ok") => {
+    const id = uid();
+    setToasts((t) => [...t, { id, msg, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
+  }, []);
+
+  const range = useMemo(() => Array.from({ length: span }, (_, i) => addDays(rangeStart, i)), [rangeStart, span]);
+  const issues = useMemo(() => computeIssues(events, range, layout, channel, vecteur), [events, range, layout, channel, vecteur]);
+
+  useEffect(() => { setSelectedId(null); }, [channel]);
+
+  useEffect(() => {
+    const h = (e) => {
+      const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && k === "k") { e.preventDefault(); setPalette((p) => !p); }
+      if ((e.metaKey || e.ctrlKey) && k === "z" && !e.shiftKey) { e.preventDefault(); setHi((i) => Math.max(0, i - 1)); }
+      if ((e.metaKey || e.ctrlKey) && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); setHi((i) => Math.min(hist.length - 1, i + 1)); }
+      if (e.key === "Escape") { setPalette(false); setSelectedId(null); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [hist.length]);
+
+  /* ————— opérations sur les transmissions */
+  const dropNew = (dateISO, start, payload) => {
+    const p = prog(payload.programId);
+    const r = rightsAt(p, dateISO, channel);
+    if (r.level === "block") { toast(`${p.titre} — ${r.label}. Placement refusé.`, "err"); return; }
+    const id = uid();
+    setEvents([...events, { id, date: dateISO, start, programId: p.id, ep: payload.ep, vec: vecteur === "sat" ? "sat" : "both" }]);
+    setSelectedId(id);
+    toast(`${p.titre} placé le ${fmtShort(new Date(dateISO))} à ${clock(start)} sur ${channel}.`);
+  };
+
+  const moveEvent = (id, dateISO, start) => {
+    const ev = events.find((e) => e.id === id); if (!ev) return;
+    const r = rightsAt(prog(ev.programId), dateISO, channel);
+    if (r.level === "block") { toast(`Déplacement refusé — ${r.label}.`, "err"); return; }
+    setEvents(events.map((e) => (e.id === id ? { ...e, date: dateISO, start } : e)));
+  };
+
+  const updateEvent = (id, patch) => setEvents(events.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const deleteEvent = (id) => {
+    const next = { ...inserts }; delete next[id];
+    commitWs({ events: events.filter((e) => e.id !== id), inserts: next });
+    setSelectedId(null);
+  };
+
+  const duplicateEvent = (id, dates) => {
+    const ev = events.find((e) => e.id === id); if (!ev) return;
+    const p = prog(ev.programId); const padEps = p.episodes.filter((x) => x.pad);
+    const base = padEps.findIndex((x) => x.num === ev.ep);
+    const add = []; const refused = [];
+    dates.forEach((d, i) => {
+      const r = rightsAt(p, d, channel);
+      if (r.level === "block") { refused.push(fmtShort(new Date(d))); return; }
+      const ep = padEps[(base + i + 1) % padEps.length]?.num ?? ev.ep;
+      add.push({ id: uid(), date: d, start: ev.start, programId: p.id, ep, vec: ev.vec });
+    });
+    setEvents([...events.filter((e) => !add.some((a) => a.date === e.date && a.start === e.start && a.vec === e.vec)), ...add]);
+    toast(refused.length
+      ? `${add.length} dates programmées. Écartées : ${refused.join(", ")} — droits non ouverts.`
+      : `${add.length} dates programmées, épisodes incrémentés.`, refused.length ? "err" : "ok");
+  };
+
+  const splitSat = (id) => {
+    const ev = events.find((e) => e.id === id); if (!ev || ev.vec !== "both") return;
+    const nid = uid();
+    setEvents([...events.map((e) => (e.id === id ? { ...e, vec: "tnt" } : e)), { ...ev, id: nid, vec: "sat" }]);
+    setVecteur("sat"); setSelectedId(nid);
+    toast("Exception satellite créée. Vous êtes basculé sur la vue Satellite pour la modifier.");
+  };
+
+  const generate = (created, overwrite) => {
+    const keys = new Set(created.map((c) => `${c.date}|${c.start}`));
+    const kept = overwrite ? events.filter((e) => e.vec === "sat" || !keys.has(`${e.date}|${e.start}`)) : events;
+    const existing = new Set(kept.filter((e) => e.vec !== "sat").map((e) => `${e.date}|${e.start}`));
+    setEvents([...kept, ...created.filter((c) => !existing.has(`${c.date}|${c.start}`))]);
+  };
+
+  const openTitle = (id) => { setFocusTitle(id); setView("catalogue"); };
+  const m = CH_META[channel];
+
+  return (
+    <div style={{ background: T.paper, minHeight: "100vh", fontFamily: "Inter, system-ui, sans-serif", color: T.ink }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        * { box-sizing: border-box; }
+        input, select, button { font-family: Inter, system-ui, sans-serif; }
+        ::-webkit-scrollbar { width: 9px; height: 9px; }
+        ::-webkit-scrollbar-thumb { background: #C9D1DB; border-radius: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #1F4FD8; outline-offset: 1px; }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+      `}</style>
+
+      <header style={{
+        height: 54, background: T.surface, borderBottom: `1px solid ${T.line}`,
+        borderTop: `3px solid ${m.couleur}`, display: "flex", alignItems: "center", gap: 12,
+        padding: "0 14px", position: "sticky", top: 0, zIndex: 60,
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+          <span style={{ fontFamily: F_DISPLAY, fontWeight: 700, fontSize: 17, letterSpacing: "-.02em" }}>STM</span>
+          <span style={{ fontFamily: F_MONO, fontSize: 9.5, fontWeight: 600, color: T.gold, background: T.goldSoft, padding: "2px 5px", borderRadius: 4, letterSpacing: ".06em" }}>NEXT</span>
+        </div>
+        <div style={{ width: 1, height: 22, background: T.line }} />
+
+        {/* sélecteur d'espace de travail */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${T.line}`, borderRadius: 9, padding: "3px 8px 3px 4px" }}>
+          <span style={{
+            width: 24, height: 24, borderRadius: 6, background: m.couleur, color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: F_DISPLAY, fontWeight: 700, fontSize: 10,
+          }}>{m.code}</span>
+          <div>
+            <select value={channel} onChange={(e) => setChannel(e.target.value)} style={{
+              border: "none", background: "transparent", fontSize: 12.5, fontWeight: 600, color: T.ink, padding: 0, cursor: "pointer",
+            }}>{CHANNELS.map((c) => <option key={c}>{c}</option>)}</select>
+            <div style={{ fontSize: 9.5, color: T.muted, marginTop: -2 }}>{m.ligne}</div>
+          </div>
+        </div>
+
+        {(view === "plan" || view === "conducteur") && (
+          <div style={{ display: "flex", background: T.paper, borderRadius: 8, padding: 2, border: `1px solid ${T.line}` }}>
+            {[["unifie", "Unifié", Layers3], ["tnt", "TNT", Tv], ["sat", "Satellite", Radio]].map(([k, l, Ico]) => (
+              <button key={k} onClick={() => setVecteur(k)} style={{
+                display: "flex", alignItems: "center", gap: 5, border: "none", cursor: "pointer", padding: "5px 10px",
+                borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+                background: vecteur === k ? T.surface : "transparent", color: vecteur === k ? T.ink : T.muted,
+                boxShadow: vecteur === k ? "0 1px 2px rgba(15,26,42,.1)" : "none",
+              }}><Ico size={12} />{l}</button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {view !== "layout" && view !== "stock" && (
+          <>
+            <Btn size="sm" onClick={() => setRangeStart(WS0)}>Aujourd'hui</Btn>
+            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Btn size="sm" variant="bare" onClick={() => setRangeStart(addDays(rangeStart, -span))}><ChevronLeft size={15} /></Btn>
+              <Mono style={{ fontSize: 11.5, color: T.ink2, minWidth: 148, textAlign: "center", fontWeight: 500 }}>
+                {fmtDate(range[0])} → {fmtDate(range[range.length - 1])}
+              </Mono>
+              <Btn size="sm" variant="bare" onClick={() => setRangeStart(addDays(rangeStart, span))}><ChevronRight size={15} /></Btn>
+            </div>
+            <select value={span} onChange={(e) => setSpan(Number(e.target.value))} style={{
+              border: `1px solid ${T.line}`, borderRadius: 8, padding: "5px 7px", fontSize: 11.5, color: T.ink2,
+            }}>
+              <option value={1}>1 jour</option><option value={7}>Semaine</option><option value={14}>2 semaines</option>
+            </select>
+            <div style={{ width: 1, height: 22, background: T.line }} />
+          </>
+        )}
+
+        <Btn size="sm" variant="bare" disabled={hi === 0} onClick={() => setHi((i) => Math.max(0, i - 1))} title="Annuler (⌘Z)"><Undo2 size={15} /></Btn>
+        <Btn size="sm" variant="bare" disabled={hi >= hist.length - 1} onClick={() => setHi((i) => Math.min(hist.length - 1, i + 1))} title="Rétablir (⌘⇧Z)"><Redo2 size={15} /></Btn>
+
+        <button onClick={() => setPalette(true)} style={{
+          display: "flex", alignItems: "center", gap: 8, border: `1px solid ${T.line}`, background: T.paper,
+          borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: T.muted, fontSize: 12,
+        }}>
+          <Search size={14} /> Rechercher
+          <Mono style={{ fontSize: 10, background: T.surface, border: `1px solid ${T.line}`, padding: "1px 5px", borderRadius: 4 }}>⌘K</Mono>
+        </button>
+      </header>
+
+      <div style={{ display: "flex", minHeight: "calc(100vh - 54px)" }}>
+        <Rail view={view} setView={setView} channel={channel} issues={issues.filter((i) => i.level === "block").length} />
+        <main style={{ flex: 1, minWidth: 0, padding: 12 }}>
+          {view === "plan" && (
+            <PlanView {...{ events, layout, range, channel, vecteur, selectedId, setSelectedId, dragRef, issues }}
+              onDropNew={dropNew} onMoveEvent={moveEvent} onUpdate={updateEvent} onDelete={deleteEvent}
+              onDuplicate={duplicateEvent} onSplitSat={splitSat} onOpenTitle={openTitle} />
+          )}
+          {view === "layout" && <GrilleTypeView layout={layout} setLayout={setLayout} toast={toast} />}
+          {view === "auto" && <AutoView layout={layout} range={range} channel={channel} events={events} onGenerate={generate} toast={toast} />}
+          {view === "media" && (
+            <PlanMediaView events={events} range={range} channel={channel} campagnes={campagnes}
+              setCampagnes={setCampagnes} inserts={inserts} setInserts={setInserts} toast={toast} />
+          )}
+          {view === "catalogue" && <CatalogueView focus={focusTitle} setFocus={setFocusTitle} channel={channel} events={events} toast={toast} />}
+          {view === "conducteur" && (
+            <ConducteurView events={events} range={range} channel={channel} vecteur={vecteur}
+              inserts={inserts} setInserts={setInserts} campagnes={campagnes} toast={toast} />
+          )}
+          {view === "stock" && <StockView events={events} channel={channel} toast={toast} />}
+        </main>
+      </div>
+
+      {palette && (
+        <CommandPalette onClose={() => setPalette(false)}
+          onPickTitle={(id) => { openTitle(id); setPalette(false); }}
+          onGoView={(v) => { setView(v); setPalette(false); }} />
+      )}
+
+      <div style={{ position: "fixed", right: 16, bottom: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 140 }}>
+        {toasts.map((t) => (
+          <div key={t.id} style={{
+            background: T.surface, border: `1px solid ${t.kind === "err" ? "#FDA29B" : T.line}`,
+            borderLeft: `3px solid ${t.kind === "err" ? T.signal : T.ok}`, padding: "10px 14px",
+            borderRadius: 9, fontSize: 12.5, maxWidth: 400, color: T.ink, boxShadow: "0 8px 26px rgba(15,26,42,.14)",
+          }}>{t.msg}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(React.createElement(App));
+</script></body></html>

@@ -1,0 +1,35 @@
+{
+  "name": "snomark",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "brand:icons": "node scripts/generate-brand-icons.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "docx": "^9.7.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^1.29.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
+    "uuid": "^14.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "playwright": "^1.62.1",
+    "sharp": "^0.35.3",
+    "vite": "^8.2.0"
+  }
+}
