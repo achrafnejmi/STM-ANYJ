@@ -6,16 +6,16 @@
 // Toutes les animations sont coupées si prefers-reduced-motion (voir index.css,
 // sélecteur [data-fondlogin]).
 
-// Trajectoire elliptique du satellite (orbite médiane), en coordonnées du
-// viewBox — reprise telle quelle par offset-path.
+// Trajectoires elliptiques (coordonnées viewBox) — reprises par offset-path.
 const ORBITE_SAT = 'path("M 210 560 a 590 150 0 1 0 1180 0 a 590 150 0 1 0 -1180 0")'
+const ORBITE_SAT2 = 'path("M 40 560 a 760 196 0 1 0 1520 0 a 760 196 0 1 0 -1520 0")'
 
 // Champ d'étoiles fixe (positions pseudo-aléatoires mais déterministes).
-const ETOILES = Array.from({ length: 60 }, (_, i) => {
+const ETOILES = Array.from({ length: 84 }, (_, i) => {
   const x = (i * 149.3) % 1600
-  const y = (i * 83.7 + (i % 7) * 37) % 620
+  const y = (i * 83.7 + (i % 7) * 37) % 640
   const r = 0.4 + ((i * 53) % 100) / 90
-  const scintille = i % 9 === 0
+  const scintille = i % 8 === 0
   return { x, y, r, scintille, delai: -(i % 5) * 0.9 }
 })
 
@@ -48,6 +48,20 @@ export default function FondLogin() {
         </defs>
 
         <rect width="1600" height="900" fill="url(#fl-espace)" />
+
+        {/* Lune lointaine */}
+        <g opacity="0.5">
+          <circle cx="1372" cy="146" r="46" fill="#8fa6bb" filter="url(#fl-glow)" />
+          <circle cx="1388" cy="138" r="42" fill="#1a2c40" />
+          <circle cx="1360" cy="150" r="7" fill="#7b91a6" opacity="0.6" />
+          <circle cx="1350" cy="134" r="4" fill="#7b91a6" opacity="0.6" />
+        </g>
+
+        {/* Étoiles filantes (rares) */}
+        <g stroke="#cfe6f2" strokeWidth="2" strokeLinecap="round">
+          <line x1="120" y1="90" x2="150" y2="102" style={{ animation: 'fondlogin-filante 11s ease-in -3s infinite' }} />
+          <line x1="980" y1="60" x2="1010" y2="74" style={{ animation: 'fondlogin-filante 14s ease-in -9s infinite' }} />
+        </g>
 
         {/* Champ d'étoiles */}
         <g fill="#cfe6f2">
@@ -96,6 +110,44 @@ export default function FondLogin() {
           <line x1="-7" y1="-16" x2="7" y2="-16" stroke="#3fb4dd" strokeWidth="1.5" />
           <line x1="-9" y1="-33" x2="9" y2="-33" stroke="#3fb4dd" strokeWidth="1.5" />
           <circle cx="0" cy="-52" r="3.4" fill="#cc2430" style={{ animation: 'fondlogin-balise 2.2s ease-in-out infinite' }} />
+          {/* Liaison montante (flux de données) */}
+          <line
+            x1="6"
+            y1="-50"
+            x2="150"
+            y2="-150"
+            stroke="#3fb4dd"
+            strokeWidth="1.4"
+            strokeOpacity="0.5"
+            strokeDasharray="2 8"
+            style={{ animation: 'fondlogin-flux 1.4s linear infinite' }}
+          />
+        </g>
+
+        {/* Seconde station au sol, à droite */}
+        <g transform="translate(1230 812) scale(0.82)">
+          <g fill="none" stroke="#3fb4dd" strokeWidth="2">
+            <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -0.6s infinite' }} />
+            <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -2.1s infinite' }} />
+            <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -3.6s infinite' }} />
+          </g>
+          <path d="M -11 0 L 11 0 L 4 -50 L -4 -50 Z" fill="#22405c" stroke="#3fb4dd" strokeWidth="1.5" />
+          <line x1="-8" y1="-24" x2="8" y2="-24" stroke="#3fb4dd" strokeWidth="1.5" />
+          <circle cx="0" cy="-52" r="3.4" fill="#cc2430" style={{ animation: 'fondlogin-balise 2.6s ease-in-out -0.7s infinite' }} />
+        </g>
+
+        {/* Second satellite — orbite externe, sens inverse, plus petit */}
+        <g style={{ offsetPath: ORBITE_SAT2, offsetRotate: '0deg', animation: 'fondlogin-orbite 46s linear infinite reverse' }}>
+          <g opacity="0.7" transform="scale(0.68)">
+            <g fill="#1f4e6b" stroke="#3fb4dd" strokeWidth="1">
+              <rect x="-64" y="-11" width="38" height="22" />
+              <rect x="26" y="-11" width="38" height="22" />
+            </g>
+            <line x1="-24" y1="0" x2="24" y2="0" stroke="#3fb4dd" strokeWidth="1" />
+            <rect x="-13" y="-14" width="26" height="28" rx="3" fill="#dfe8ee" stroke="#22405c" strokeWidth="1.5" />
+            <circle cx="0" cy="-14" r="2.2" fill="#cc2430" />
+            <ellipse cx="0" cy="22" rx="9" ry="4.5" fill="#3fb4dd" />
+          </g>
         </g>
 
         {/* Satellite en orbite + faisceau de liaison descendante */}

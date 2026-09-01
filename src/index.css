@@ -119,6 +119,14 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+@keyframes fondlogin-flux {
+  to { stroke-dashoffset: -20; }
+}
+@keyframes fondlogin-filante {
+  0%, 100% { opacity: 0; transform: translate(0, 0); }
+  4% { opacity: 0.9; }
+  14% { opacity: 0; transform: translate(260px, 104px); }
+}
 @media (prefers-reduced-motion: reduce) {
   [data-fondlogin] * {
     animation: none !important;
