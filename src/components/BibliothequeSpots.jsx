@@ -5,7 +5,7 @@ import { CHAINES } from '../lib/chaines.js'
 import Modal from './Modal.jsx'
 
 const TYPES = [
-  { valeur: 'BANDE_ANNONCE', libelle: 'Bande-annonce' },
+  { valeur: 'BANDE_ANNONCE', libelle:    'Bande-annonce' },
   { valeur: 'ECRAN_PUBLICITAIRE', libelle: 'Écran publicitaire' },
   { valeur: 'HABILLAGE', libelle: 'Habillage' },
   { valeur: 'AUTOPROMOTION', libelle: 'Autopromotion' },
