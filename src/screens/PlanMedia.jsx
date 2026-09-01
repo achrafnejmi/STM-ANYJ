@@ -55,9 +55,7 @@ import {
   genererElementsSecondaires,
   estPlacementValide,
   heureHMSEnSecondes,
-  DUREE_ECRAN_DEFAUT_SECONDES,
 } from '../lib/planMedia.js'
-import { calculerCouverture } from '../lib/couverture.js'
 import {
   construireLignesPlanMedia,
   construireLignesTextePlanMedia,
@@ -65,26 +63,15 @@ import {
   TITRE_FEUILLE_PLAN_MEDIA,
   ENTETE_PLAN_MEDIA,
 } from '../lib/exportPlanMedia.js'
-import { TRANCHES } from '../lib/tranches.js'
 import Modal from '../components/Modal.jsx'
-import TableauCampagnes from '../components/TableauCampagnes.jsx'
-import PanneauReglesHabillage from '../components/PanneauReglesHabillage.jsx'
+import PanneauReglesGeneration from '../components/PanneauReglesGeneration.jsx'
 import PanneauApercuPlanMedia from '../components/PanneauApercuPlanMedia.jsx'
-import PanneauCouvertureCampagnes from '../components/PanneauCouvertureCampagnes.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
 import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
 import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
 import PanneauFormulaireRegle from '../components/PanneauFormulaireRegle.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
-
-const OPTS_DEFAUT = {
-  habillageActif: true,
-  ecranPubActif: true,
-  bandesAnnoncesActives: true,
-  dureeEcranSecondes: DUREE_ECRAN_DEFAUT_SECONDES,
-  tranchesCommercialisees: TRANCHES.map((t) => t.code),
-}
 
 const LIBELLES_TYPE = {
   BANDE_ANNONCE: 'Bande-annonce',
@@ -140,14 +127,10 @@ export default function PlanMedia({ chaineActive }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
 
-  const [opts, setOpts] = useState(OPTS_DEFAUT)
   const [regles, setRegles] = useState([])
   const [formulaireRegle, setFormulaireRegle] = useState(null) // null | 'CREER' | objet règle en édition
   const [proposition, setProposition] = useState(null)
-  const [rapportEcrit, setRapportEcrit] = useState(null)
-  const [derniereActionId, setDerniereActionId] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
-  const [annulation, setAnnulation] = useState(false)
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
   const [insertionOuverte, setInsertionOuverte] = useState(false)
   const [importOuvert, setImportOuvert] = useState(false)
@@ -265,8 +248,6 @@ export default function PlanMedia({ chaineActive }) {
     () => elementsSecondairesActifs.filter((e) => dates.includes(e.date)).sort((a, b) => a.date.localeCompare(b.date) || a.heure_debut.localeCompare(b.heure_debut)),
     [elementsSecondairesActifs, dates]
   )
-  const couverture = useMemo(() => calculerCouverture(campagnes, elementsSecondairesActifs), [campagnes, elementsSecondairesActifs])
-
   // Vue Composition (P31) : le Plan média se lit désormais comme le fichier
   // réel — chaque coupure de la grille live devient une section titrée par le
   // programme qui la précède (CONTEXTE), ses BA/spots/écrans en dessous, et un
@@ -313,6 +294,7 @@ export default function PlanMedia({ chaineActive }) {
         coupureId: iv.apresTransmissionId,
         contexte: programmesParId.get(d?.programme_id)?.titre ?? '—',
         fenetre: `${d?.heure_fin?.slice(0, 5) ?? '?'} → ${minutesEnHeure(iv.fin)}`,
+        heureFinProg: d?.heure_fin ?? null,
         elements: (parCoupure.get(iv.apresTransmissionId) ?? []).slice().sort(triDebut),
       })
     }
@@ -364,23 +346,22 @@ export default function PlanMedia({ chaineActive }) {
     }
   }
 
-  // Aucune écriture ici — pure lecture + calcul (planMedia.js). L'écriture
-  // n'a lieu qu'après confirmation explicite dans confirmerGeneration().
+  // Aucune écriture ici — pure calcul (planMedia.js) : on applique les règles
+  // actives aux programmes du jour et on propose un aperçu. L'écriture n'a lieu
+  // qu'après confirmation dans confirmerGeneration().
   function generer() {
     if (!planMediaActif) return
     setErreur(null)
     const dateDebut = dates[0]
     const dateFin = dates[dates.length - 1]
-    const intervalles = calculerIntervalles(dates, diffusions)
+    const points = calculerPointsInsertion(dates, diffusions)
     const runId = crypto.randomUUID()
     const resultat = genererElementsSecondaires({
       dates,
-      intervalles,
-      campagnes,
+      points,
       programmesParId,
       diffusionsToutes: diffusions,
       elementsExistants: elementsSecondairesActifs,
-      opts,
       runId,
       chaineActive,
       planMediaId: planMediaActif.id,
@@ -390,15 +371,13 @@ export default function PlanMedia({ chaineActive }) {
     const nbAutomatiquesRemplaces = elementsSecondairesActifs.filter(
       (e) => e.origine === 'AUTOMATIQUE' && e.date >= dateDebut && e.date <= dateFin
     ).length
-    setRapportEcrit(null)
     setProposition({ ...resultat, runId, nbAutomatiquesRemplaces })
   }
 
-  // RG-M5-06 : inconditionnel, pas de case « Écraser » — chaque confirmation
-  // recalcule systématiquement les éléments AUTOMATIQUE de la période, ne
-  // touche jamais les MANUELLE. P24 : passe désormais par enregistrerAction
-  // (delete + insert groupés en une seule entrée) — exactement le pattern
-  // déjà utilisé par AutoProgrammation.jsx pour M4 (P23).
+  // Chaque confirmation recalcule systématiquement les éléments AUTOMATIQUE de
+  // la période, ne touche jamais les MANUELLE (ni les éléments posés à la main
+  // en Composition). P24 : enregistrerAction (delete + insert groupés) —
+  // annulable en un coup via l'Undo de la barre d'outils.
   async function confirmerGeneration(retenues) {
     if (!planMediaActif) return
     setEnregistrement(true)
@@ -408,7 +387,7 @@ export default function PlanMedia({ chaineActive }) {
       const dateFin = dates[dates.length - 1]
       const supprimes = await supprimerElementsSecondairesAutomatiquesParPeriode(chaineActive.id, dateDebut, dateFin, planMediaActif.id)
       const creees = retenues.length > 0 ? await creerElementsSecondaires(retenues) : []
-      const entree = await enregistrerAction({
+      await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'PLAN_MEDIA',
         documentId: planMediaActif.id,
@@ -420,41 +399,11 @@ export default function PlanMedia({ chaineActive }) {
       })
       const idsSupprimes = new Set(supprimes.map((e) => e.id))
       setElementsSecondaires((prev) => [...prev.filter((e) => !idsSupprimes.has(e.id)), ...creees])
-      setRapportEcrit({ causesNonCouvertes: proposition.rapport.causesNonCouvertes, runId: proposition.runId })
-      setDerniereActionId(entree.id)
       setProposition(null)
     } catch (err) {
       setErreur(err.message)
     } finally {
       setEnregistrement(false)
-    }
-  }
-
-  // Raccourci vers la pile générique PLAN_MEDIA — revérifie que cette
-  // génération représente toujours le sommet de la pile avant de déléguer
-  // (même pattern que AutoProgrammation.jsx pour M4, P23).
-  async function annulerGeneration() {
-    if (!rapportEcrit || !derniereActionId || !planMediaActif) return
-    setAnnulation(true)
-    setErreur(null)
-    try {
-      const { entreeActiveId } = await etatPile(chaineActive.id, 'PLAN_MEDIA', planMediaActif.id)
-      if (entreeActiveId !== derniereActionId) {
-        setErreur("Cette génération n'est plus la dernière action sur ce plan média — utilisez Annuler dans la barre d'outils.")
-        return
-      }
-      const resultat = await annulerDerniereAction(chaineActive.id, 'PLAN_MEDIA', planMediaActif.id)
-      if (!resultat.ok) {
-        setErreur(resultat.motif)
-        return
-      }
-      setElementsSecondaires((prev) => fusionnerChangements(prev, resultat.changements))
-      setRapportEcrit(null)
-      setDerniereActionId(null)
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setAnnulation(false)
     }
   }
 
@@ -1019,7 +968,12 @@ export default function PlanMedia({ chaineActive }) {
                                         <td className="py-1.5 pl-3 pr-3 font-mono text-xs">
                                           {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
                                         </td>
-                                        <td className="py-1.5 pr-3">{LIBELLES_TYPE[e.type] ?? e.type}</td>
+                                        <td className="py-1.5 pr-3">
+                                          {LIBELLES_TYPE[e.type] ?? e.type}
+                                          {s.heureFinProg && e.heure_debut < s.heureFinProg && (
+                                            <span className="ml-1.5 rounded bg-slate-100 px-1 text-[10px] text-slate-500">intra</span>
+                                          )}
+                                        </td>
                                         <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
                                         <td className="py-1.5 pr-3 text-slate-500">{titrePromu ?? '—'}</td>
                                       </tr>
@@ -1055,15 +1009,7 @@ export default function PlanMedia({ chaineActive }) {
       {ongletPanneau === 'GENERATION' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_1fr]">
           <div className="space-y-6">
-            <TableauCampagnes
-              chaineActive={chaineActive}
-              campagnes={campagnes}
-              programmes={programmes}
-              couverture={couverture}
-              onRafraichir={chargerTout}
-            />
-
-            {proposition && (
+            {proposition ? (
               <PanneauApercuPlanMedia
                 proposition={proposition}
                 nbAutomatiquesRemplaces={proposition.nbAutomatiquesRemplaces}
@@ -1071,25 +1017,19 @@ export default function PlanMedia({ chaineActive }) {
                 onAnnuler={() => setProposition(null)}
                 enregistrement={enregistrement}
               />
-            )}
-
-            {rapportEcrit && (
-              <PanneauCouvertureCampagnes
-                campagnes={campagnes}
-                programmesParId={programmesParId}
-                couverture={couverture}
-                causesNonCouvertes={rapportEcrit.causesNonCouvertes}
-                onAnnulerGeneration={annulerGeneration}
-                annulation={annulation}
-              />
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
+                Le Plan média est composé soit <strong>manuellement</strong> (onglet Composition), soit
+                <strong> par règles</strong> : active une ou plusieurs règles à droite puis clique « Générer ». Le
+                résultat — spots / bandes-annonces / écrans entre et dans les programmes — s'affiche ici en aperçu avant
+                écriture.
+              </div>
             )}
           </div>
 
           <div className="lg:sticky lg:top-6 lg:self-start">
-            <PanneauReglesHabillage
+            <PanneauReglesGeneration
               periodeLabel={formaterDateLongue(dateReference)}
-              opts={opts}
-              onChangerOpts={setOpts}
               onGenerer={generer}
               chargement={chargement}
               regles={regles}

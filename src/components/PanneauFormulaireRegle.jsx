@@ -11,7 +11,8 @@ export default function PanneauFormulaireRegle({ regleInitiale, spots = [], onEn
   const [dureeMin, setDureeMin] = useState(regleInitiale?.duree_min_minutes ?? 0)
   const [dureeMax, setDureeMax] = useState(regleInitiale?.duree_max_minutes ?? 30)
   const [genres, setGenres] = useState(() => new Set(regleInitiale?.genres ?? []))
-  const [nombreAnnonces, setNombreAnnonces] = useState(regleInitiale?.nombre_annonces ?? 1)
+  const [annoncesInter, setAnnoncesInter] = useState(regleInitiale?.nombre_annonces ?? 1)
+  const [annoncesIntra, setAnnoncesIntra] = useState(regleInitiale?.annonces_intra ?? 0)
   const [spotIds, setSpotIds] = useState(() => new Set(regleInitiale?.spot_ids ?? []))
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -41,7 +42,8 @@ export default function PanneauFormulaireRegle({ regleInitiale, spots = [], onEn
         duree_min_minutes: Number(dureeMin),
         duree_max_minutes: Number(dureeMax),
         genres: [...genres],
-        nombre_annonces: Number(nombreAnnonces),
+        nombre_annonces: Number(annoncesInter),
+        annonces_intra: Number(annoncesIntra),
         spot_ids: [...spotIds],
       })
     } catch (err) {
@@ -112,15 +114,29 @@ export default function PanneauFormulaireRegle({ regleInitiale, spots = [], onEn
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span>Nombre d'annonces à ajouter</span>
-          <input
-            type="number"
-            min="0"
-            value={nombreAnnonces}
-            onChange={(e) => setNombreAnnonces(e.target.value)}
-            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
-          />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-44">Annonces entre les programmes</span>
+            <input
+              type="number"
+              min="0"
+              value={annoncesInter}
+              onChange={(e) => setAnnoncesInter(e.target.value)}
+              className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
+            />
+            <span className="text-xs text-slate-400">dans la coupure qui suit</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-44">Annonces dans le programme</span>
+            <input
+              type="number"
+              min="0"
+              value={annoncesIntra}
+              onChange={(e) => setAnnoncesIntra(e.target.value)}
+              className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
+            />
+            <span className="text-xs text-slate-400">réparties sur sa durée</span>
+          </div>
         </div>
 
         <div>
