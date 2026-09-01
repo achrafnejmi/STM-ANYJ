@@ -11,13 +11,31 @@ const ORBITE_SAT = 'path("M 210 560 a 590 150 0 1 0 1180 0 a 590 150 0 1 0 -1180
 const ORBITE_SAT2 = 'path("M 40 560 a 760 196 0 1 0 1520 0 a 760 196 0 1 0 -1520 0")'
 
 // Champ d'étoiles fixe (positions pseudo-aléatoires mais déterministes).
-const ETOILES = Array.from({ length: 84 }, (_, i) => {
-  const x = (i * 149.3) % 1600
-  const y = (i * 83.7 + (i % 7) * 37) % 640
-  const r = 0.4 + ((i * 53) % 100) / 90
-  const scintille = i % 8 === 0
+const ETOILES = Array.from({ length: 150 }, (_, i) => {
+  const x = (i * 149.3 + (i % 11) * 13) % 1600
+  const y = (i * 83.7 + (i % 7) * 37) % 660
+  const r = 0.3 + ((i * 53) % 100) / 95
+  const scintille = i % 9 === 0
   return { x, y, r, scintille, delai: -(i % 5) * 0.9 }
 })
+
+// Réseau de lumières au sol sur le limbe terrestre (villes) — plusieurs bandes
+// de rayons, avec des « trous » (océans) pour un rendu de continent éclairé.
+const VILLES = Array.from({ length: 170 }, (_, i) => {
+  if ((i * 53) % 19 < 5) return null // ~1/4 sans lumière
+  const a = -1.32 + (i / 169) * 2.64
+  const rr = 806 + ((i * 61) % 3) * 19 + ((i * 29) % 15)
+  const hub = i % 17 === 0
+  return {
+    x: 800 + rr * Math.cos(a),
+    y: 1520 + rr * Math.sin(a),
+    r: hub ? 2 : (i % 5 === 0 ? 1.5 : 1),
+    fill: hub ? '#ffe7bb' : '#ffd9a0',
+    opacity: 0.28 + ((i * 17) % 52) / 100,
+    scintille: i % 4 === 0,
+    delai: -(i % 9) * 0.4,
+  }
+}).filter(Boolean)
 
 export default function FondLogin() {
   return (
@@ -144,23 +162,18 @@ export default function FondLogin() {
             <ellipse cx="1230" cy="676" rx="120" ry="22" />
           </g>
           {/* réseau de villes (lumières au sol) */}
-          <g fill="#ffd9a0">
-            {Array.from({ length: 46 }, (_, i) => {
-              const a = -Math.PI / 2 + (i / 45 - 0.5) * 2.35
-              const rr = 838 + ((i * 37) % 22)
-              const x = 800 + rr * Math.cos(a)
-              const y = 1520 + rr * Math.sin(a)
-              return (
-                <circle
-                  key={i}
-                  cx={x}
-                  cy={y}
-                  r={i % 6 === 0 ? 1.7 : 1.1}
-                  opacity={0.35 + ((i * 17) % 40) / 100}
-                  style={i % 5 === 0 ? { animation: `fondlogin-scintille 3.8s ease-in-out ${-i * 0.4}s infinite` } : undefined}
-                />
-              )
-            })}
+          <g>
+            {VILLES.map((v, i) => (
+              <circle
+                key={i}
+                cx={v.x}
+                cy={v.y}
+                r={v.r}
+                fill={v.fill}
+                opacity={v.opacity}
+                style={v.scintille ? { animation: `fondlogin-scintille 3.8s ease-in-out ${v.delai}s infinite` } : undefined}
+              />
+            ))}
           </g>
         </g>
 
