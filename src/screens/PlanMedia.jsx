@@ -298,17 +298,14 @@ export default function PlanMedia({ chaineActive }) {
     [dates, diffusions, elementsPeriode, programmesParId]
   )
 
-  // Aperçu de la génération par règles : même structure, avec les éléments
-  // existants + les propositions du run courant (marquées `_propose`). Sans
-  // proposition, c'est le Plan média « vide » = juste les programmes du jour.
+  // Aperçu de la génération par règles : uniquement les PROGRAMMES du jour
+  // issus de la grille linéaire live (sections vides), puis, après « Générer »,
+  // les propositions du run à leur place (marquées `_propose`). Ne montre PAS
+  // la composition manuelle du document — on part de la grille.
   const sectionsApercu = useMemo(() => {
-    if (!proposition) return grouperSectionsPlanMedia(dates, diffusions, elementsPeriode, programmesParId)
-    // La confirmation remplace tous les éléments AUTOMATIQUE de la période :
-    // l'aperçu montre donc le manuel conservé + les propositions du run.
-    const base = elementsPeriode.filter((e) => e.origine !== 'AUTOMATIQUE')
-    const proposees = proposition.propositions.map((p, i) => ({ ...p, id: `prop-${i}`, _propose: true }))
-    return grouperSectionsPlanMedia(dates, diffusions, [...base, ...proposees], programmesParId)
-  }, [dates, diffusions, elementsPeriode, programmesParId, proposition])
+    const proposees = (proposition?.propositions ?? []).map((p, i) => ({ ...p, id: `prop-${i}`, _propose: true }))
+    return grouperSectionsPlanMedia(dates, diffusions, proposees, programmesParId)
+  }, [dates, diffusions, programmesParId, proposition])
 
   function naviguer(delta) {
     setDateReference((d) => ajouterJours(d, delta))
