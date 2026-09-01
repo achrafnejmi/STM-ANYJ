@@ -201,6 +201,17 @@ export function minutesDepuisDebutAntenne(hhmm) {
   return m < DEBUT_JOURNEE_ANTENNE ? m + 24 * 60 : m
 }
 
+// Durée d'une transmission en minutes, sur l'axe de la journée d'antenne : une
+// fin « après minuit » (heure d'horloge < heure de début) reste positive.
+// `d` : ligne diffusion_lineaire avec heure_debut / heure_fin "HH:MM(:SS)".
+export function dureeTransmissionMinutes(d) {
+  if (!d?.heure_debut || !d?.heure_fin) return 0
+  const debut = minutesDepuisDebutAntenne(d.heure_debut.slice(0, 5))
+  const fin = minutesDepuisDebutAntenne(d.heure_fin.slice(0, 5))
+  const brut = fin - debut
+  return brut >= 0 ? brut : brut + 24 * 60
+}
+
 // Comparateur (date, minute d'antenne) — vrai si (dateA, minutesA) est
 // strictement postérieur à (dateB, minutesB). Pas une concaténation de
 // chaînes (déjà fausse pour comparer des heures d'antenne, voir autoprog.js) :

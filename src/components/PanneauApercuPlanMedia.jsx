@@ -7,6 +7,7 @@ const LIBELLES_TYPE = {
   ECRAN_PUBLICITAIRE: 'Écran publicitaire',
   HABILLAGE: 'Habillage',
   AUTOPROMOTION: 'Autopromotion',
+  SPOT: 'Spot',
 }
 
 // Aperçu avant écriture — rien n'est encore en base à ce stade (planMedia.js

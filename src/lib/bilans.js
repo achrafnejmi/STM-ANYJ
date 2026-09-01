@@ -2,7 +2,7 @@
 // famille que droits.js/couverture.js. Aucune écriture, aucun accès Supabase.
 import { estProgrammable, estEpisodePret, fenetresProchesDeLaFermeture } from './droits.js'
 import { GENRES } from './genres.js'
-import { minutesDepuisDebutAntenne, joursEntre } from './semaine.js'
+import { joursEntre, dureeTransmissionMinutes } from './semaine.js'
 
 // EXG-M9-01, définition littérale : un épisode compte dans le volume
 // disponible seulement s'il est prêt à diffuser ET que son titre a des
@@ -38,16 +38,6 @@ export function calculerIndicateursTete(programmesFiltres, episodesParProgrammeI
     nbTitresFinsDeDroits: idsFinsDeDroits.size,
     nbTitresHorsDroits,
   }
-}
-
-// Durée d'une transmission en minutes, sur l'axe de la journée d'antenne
-// (gère le passage 06:00 → 06:00 : une fin « après minuit » reste positive).
-function dureeTransmissionMinutes(d) {
-  if (!d.heure_debut || !d.heure_fin) return 0
-  const debut = minutesDepuisDebutAntenne(d.heure_debut.slice(0, 5))
-  const fin = minutesDepuisDebutAntenne(d.heure_fin.slice(0, 5))
-  const brut = fin - debut
-  return brut >= 0 ? brut : brut + 24 * 60
 }
 
 // Indicateurs approfondis du tableau de bord (P31) — même famille que

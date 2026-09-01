@@ -8,7 +8,7 @@
 // silencieusement les secondes (`hhmm.split(':').map(Number)` ne garde que
 // [h, m]) — des éléments de 10 s/30 s placés bout à bout se chevaucheraient
 // silencieusement si on repassait par ces helpers minute-only en interne.
-import { minutesDepuisDebutAntenne, estPosterieur } from './semaine.js'
+import { minutesDepuisDebutAntenne, estPosterieur, dureeTransmissionMinutes } from './semaine.js'
 import { trancheDe } from './tranches.js'
 
 // Durées non paramétrables à l'écran (le cahier ne rend configurable que la
@@ -256,6 +256,12 @@ function motifCouverture(motifsRencontres) {
 // `opts` : { habillageActif, ecranPubActif, bandesAnnoncesActives,
 // dureeEcranSecondes, tranchesCommercialisees: string[] }. `runId` : uuid
 // généré côté écran, posé sur chaque ligne proposée (annulation groupée).
+// `spots` : bibliothèque (spot_bibliotheque) — servent uniquement à la règle
+// P32. `regle` : { active, duree_min_minutes, duree_max_minutes,
+// nombre_annonces, spot_ids } ou null — si active, AJOUTE nombre_annonces
+// éléments (piochés dans le pool) dans chaque coupure dont le programme
+// précédent dure entre [min, max] minutes ; s'ajoute au remplissage par
+// défaut, ne le remplace pas.
 export function genererElementsSecondaires({
   dates,
   intervalles,
@@ -267,6 +273,8 @@ export function genererElementsSecondaires({
   runId,
   chaineActive,
   planMediaId,
+  spots = [],
+  regle = null,
 }) {
   const dateDebut = dates[0]
   const dateFin = dates[dates.length - 1]
@@ -293,6 +301,11 @@ export function genererElementsSecondaires({
     programmesParId,
     motifsParCampagne: new Map(),
   }
+
+  // Règle P32 : durée du programme précédent + pool d'items à piocher.
+  const diffusionsParId = new Map(diffusionsToutes.map((d) => [d.id, d]))
+  const poolRegle = regle?.spot_ids?.length ? spots.filter((s) => regle.spot_ids.includes(s.id)) : spots
+  let indexPiocheRegle = 0
 
   const placements = []
 
@@ -332,6 +345,22 @@ export function genererElementsSecondaires({
       resteSecondes >= opts.dureeEcranSecondes
     ) {
       placer('ECRAN_PUBLICITAIRE', opts.dureeEcranSecondes, null, `Écran publicitaire — ${tranche.label}`)
+    }
+
+    // Règle P32 (s'ajoute au défaut) : si le programme qui précède cette
+    // coupure dure entre [min, max] minutes, on pose nombre_annonces items
+    // piochés en rotation dans le pool, tant que le budget le permet.
+    if (regle?.active && regle.nombre_annonces > 0 && poolRegle.length > 0) {
+      const precedente = diffusionsParId.get(intervalle.apresTransmissionId)
+      const dureeProg = precedente ? dureeTransmissionMinutes(precedente) : null
+      if (dureeProg != null && dureeProg >= regle.duree_min_minutes && dureeProg <= regle.duree_max_minutes) {
+        for (let k = 0; k < regle.nombre_annonces; k++) {
+          const item = poolRegle[indexPiocheRegle % poolRegle.length]
+          indexPiocheRegle += 1
+          if (resteSecondes < item.duree_secondes) break
+          placer(item.type, item.duree_secondes, null, item.libelle)
+        }
+      }
     }
 
     if (opts.bandesAnnoncesActives) {

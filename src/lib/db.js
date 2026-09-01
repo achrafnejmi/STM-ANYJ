@@ -408,6 +408,19 @@ export async function supprimerCampagne(id) {
   verifie(await supabase.from('campagne').delete().eq('id', id).select())
 }
 
+// --- regle_plan_media (P32) : une règle par chaîne, partagée entre la
+// génération auto et l'application manuelle (onglet Composition) ---
+
+export async function obtenirReglePlanMedia(chaineId) {
+  return verifie(await supabase.from('regle_plan_media').select('*').eq('chaine_id', chaineId).maybeSingle())
+}
+
+export async function mettreAJourReglePlanMedia(chaineId, champs) {
+  return verifiePremiere(
+    await supabase.from('regle_plan_media').upsert({ chaine_id: chaineId, ...champs }, { onConflict: 'chaine_id' }).select()
+  )
+}
+
 // --- plan_media (P24) : plusieurs plans média nommés par chaîne, un seul live ---
 
 export async function listerPlanMediaParChaine(chaineId) {
