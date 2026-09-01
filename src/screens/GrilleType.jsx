@@ -819,9 +819,9 @@ export default function GrilleType({ chaineActive }) {
               type="button"
               onClick={nouveauBlocGenerique}
               disabled={!grilleTypeActive}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
             >
-              <Plus size={16} />
+              <Plus size={14} />
               Ajouter un bloc
             </button>
           </div>
