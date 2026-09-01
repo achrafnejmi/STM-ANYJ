@@ -231,7 +231,7 @@ export default function FondLogin() {
         <circle r="2.2" fill="#bfe9f7" style={{ offsetPath: "path('M 360 742 Q 800 700 1230 748')", animation: 'fondlogin-orbite 6s linear -3s infinite' }} />
 
         {/* Station au sol : pylône + balise + ondes + radar + empreinte */}
-        <g transform="translate(360 792)">
+        <g transform="translate(346 806) scale(2.2)">
           {/* empreinte de couverture au sol */}
           <ellipse
             cx="0"
@@ -277,7 +277,7 @@ export default function FondLogin() {
         </g>
 
         {/* Seconde station au sol, à droite, avec grappe de paraboles */}
-        <g transform="translate(1230 812) scale(0.82)">
+        <g transform="translate(1244 824) scale(1.95)">
           <ellipse cx="0" cy="6" rx="128" ry="32" fill="none" stroke="#3fb4dd" strokeOpacity="0.2" style={{ animation: 'fondlogin-balise 5.6s ease-in-out -1s infinite' }} />
           <g fill="none" stroke="#3fb4dd" strokeWidth="2">
             <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -0.6s infinite' }} />
