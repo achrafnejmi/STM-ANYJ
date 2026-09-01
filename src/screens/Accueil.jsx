@@ -418,12 +418,16 @@ export default function Accueil({ chaineActive }) {
                 ton="info"
                 sousTexte={`sur ${approfondis.nbTitresTotal} au catalogue`}
               />
+              {/* Cartes de risque : le liseré marque la NATURE du risque
+                  (orange = échéances, rouge = hors droits), pas l'état courant —
+                  la valeur et le sous-texte disent si c'est effectivement un
+                  problème. */}
               <CarteIndicateur
                 libelle="Fins de droits (< 45 j)"
                 valeur={indicateurs.nbTitresFinsDeDroits}
-                ton={indicateurs.nbTitresFinsDeDroits > 0 ? 'vigilance' : 'favorable'}
+                ton="vigilance"
                 sousTexte={
-                  approfondis.joursAvantEcheance != null
+                  indicateurs.nbTitresFinsDeDroits > 0 && approfondis.joursAvantEcheance != null
                     ? `prochaine échéance dans ${approfondis.joursAvantEcheance} j`
                     : 'aucune échéance proche'
                 }
@@ -431,7 +435,7 @@ export default function Accueil({ chaineActive }) {
               <CarteIndicateur
                 libelle="Titres hors droits"
                 valeur={indicateurs.nbTitresHorsDroits}
-                ton={indicateurs.nbTitresHorsDroits > 0 ? 'alerte' : 'favorable'}
+                ton="alerte"
                 sousTexte={indicateurs.nbTitresHorsDroits > 0 ? 'à régulariser' : 'tout le catalogue est couvert'}
               />
             </div>
