@@ -45,9 +45,29 @@ export default function FondLogin() {
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <filter id="fl-flou" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="14" />
+          </filter>
+          <radialGradient id="fl-nebuleuse" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#3a6fa8" stopOpacity="0.55" />
+            <stop offset="45%" stopColor="#2a4f86" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#2a4f86" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="fl-aurore" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#00a374" stopOpacity="0.32" />
+            <stop offset="60%" stopColor="#249ccc" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#249ccc" stopOpacity="0" />
+          </linearGradient>
+          <clipPath id="fl-terre-clip">
+            <circle cx="800" cy="1520" r="876" />
+          </clipPath>
         </defs>
 
         <rect width="1600" height="900" fill="url(#fl-espace)" />
+
+        {/* Nébuleuse lointaine — profondeur */}
+        <ellipse cx="300" cy="330" rx="440" ry="260" fill="url(#fl-nebuleuse)" />
+        <ellipse cx="1180" cy="250" rx="360" ry="200" fill="url(#fl-nebuleuse)" opacity="0.6" />
 
         {/* Lune lointaine */}
         <g opacity="0.5">
@@ -77,6 +97,22 @@ export default function FondLogin() {
           ))}
         </g>
 
+        {/* Constellation — motif « réseau de diffusion » */}
+        <g stroke="#8fd6ee" strokeWidth="0.8" strokeOpacity="0.35" fill="#dff1f9">
+          <polyline points="1180,110 1276,168 1352,120 1436,196 1392,286" fill="none" />
+          <polyline points="1276,168 1330,250" fill="none" />
+          {[
+            [1180, 110],
+            [1276, 168],
+            [1352, 120],
+            [1436, 196],
+            [1392, 286],
+            [1330, 250],
+          ].map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r="2" style={{ animation: `fondlogin-scintille 4s ease-in-out ${-i * 0.7}s infinite` }} />
+          ))}
+        </g>
+
         {/* Orbites en perspective (précession très lente) */}
         <g
           fill="none"
@@ -90,6 +126,51 @@ export default function FondLogin() {
 
         {/* Limbe terrestre + atmosphère */}
         <circle cx="800" cy="1520" r="880" fill="url(#fl-terre2)" />
+
+        {/* Détails du globe : méridiens/parallèles, nuages, réseau de villes */}
+        <g clipPath="url(#fl-terre-clip)">
+          <g fill="none" stroke="#3fb4dd" strokeOpacity="0.12" strokeWidth="1.4">
+            <circle cx="800" cy="1520" r="812" />
+            <circle cx="800" cy="1520" r="742" />
+            <circle cx="800" cy="1520" r="660" />
+            <ellipse cx="800" cy="1520" rx="300" ry="876" />
+            <ellipse cx="800" cy="1520" rx="560" ry="876" />
+            <ellipse cx="800" cy="1520" rx="770" ry="876" />
+          </g>
+          {/* nuages */}
+          <g fill="#dfeef5" opacity="0.10" filter="url(#fl-flou)">
+            <ellipse cx="520" cy="678" rx="150" ry="26" />
+            <ellipse cx="980" cy="700" rx="190" ry="30" />
+            <ellipse cx="1230" cy="676" rx="120" ry="22" />
+          </g>
+          {/* réseau de villes (lumières au sol) */}
+          <g fill="#ffd9a0">
+            {Array.from({ length: 46 }, (_, i) => {
+              const a = -Math.PI / 2 + (i / 45 - 0.5) * 2.35
+              const rr = 838 + ((i * 37) % 22)
+              const x = 800 + rr * Math.cos(a)
+              const y = 1520 + rr * Math.sin(a)
+              return (
+                <circle
+                  key={i}
+                  cx={x}
+                  cy={y}
+                  r={i % 6 === 0 ? 1.7 : 1.1}
+                  opacity={0.35 + ((i * 17) % 40) / 100}
+                  style={i % 5 === 0 ? { animation: `fondlogin-scintille 3.8s ease-in-out ${-i * 0.4}s infinite` } : undefined}
+                />
+              )
+            })}
+          </g>
+        </g>
+
+        {/* Aurore au-dessus de l'horizon */}
+        <path
+          d="M -60 690 C 380 636 620 664 800 650 C 1010 634 1250 664 1660 636 L 1660 736 L -60 736 Z"
+          fill="url(#fl-aurore)"
+          style={{ transformOrigin: '800px 700px', animation: 'fondlogin-aurore 14s ease-in-out infinite' }}
+        />
+
         <path
           d="M -80 705 A 880 880 0 0 1 1680 705"
           fill="none"
@@ -98,6 +179,11 @@ export default function FondLogin() {
           strokeOpacity="0.55"
           filter="url(#fl-glow)"
         />
+
+        {/* Liaison sol-sol le long de l'horizon + paquets de données */}
+        <path id="fl-lien-sol" d="M 360 742 Q 800 700 1230 748" fill="none" stroke="#3fb4dd" strokeOpacity="0.28" strokeWidth="1.2" strokeDasharray="3 9" />
+        <circle r="2.6" fill="#bfe9f7" style={{ offsetPath: "path('M 360 742 Q 800 700 1230 748')", animation: 'fondlogin-orbite 6s linear infinite' }} />
+        <circle r="2.2" fill="#bfe9f7" style={{ offsetPath: "path('M 360 742 Q 800 700 1230 748')", animation: 'fondlogin-orbite 6s linear -3s infinite' }} />
 
         {/* Station au sol : pylône + balise + ondes de diffusion */}
         <g transform="translate(360 792)">
@@ -110,7 +196,7 @@ export default function FondLogin() {
           <line x1="-7" y1="-16" x2="7" y2="-16" stroke="#3fb4dd" strokeWidth="1.5" />
           <line x1="-9" y1="-33" x2="9" y2="-33" stroke="#3fb4dd" strokeWidth="1.5" />
           <circle cx="0" cy="-52" r="3.4" fill="#cc2430" style={{ animation: 'fondlogin-balise 2.2s ease-in-out infinite' }} />
-          {/* Liaison montante (flux de données) */}
+          {/* Liaison montante (flux de données) + paquet */}
           <line
             x1="6"
             y1="-50"
@@ -122,6 +208,12 @@ export default function FondLogin() {
             strokeDasharray="2 8"
             style={{ animation: 'fondlogin-flux 1.4s linear infinite' }}
           />
+          <circle r="2.4" fill="#eaf8fe" style={{ offsetPath: "path('M 6 -50 L 150 -150')", animation: 'fondlogin-orbite 1.9s linear infinite' }} />
+          {/* petite parabole d'appoint */}
+          <g transform="translate(26 -6) rotate(-24)">
+            <line x1="0" y1="0" x2="0" y2="7" stroke="#3fb4dd" strokeWidth="1.4" />
+            <path d="M -8 -3 A 9 9 0 0 1 8 -3 Z" fill="#22405c" stroke="#3fb4dd" strokeWidth="1.2" />
+          </g>
         </g>
 
         {/* Seconde station au sol, à droite */}

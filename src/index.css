@@ -127,6 +127,10 @@
   4% { opacity: 0.9; }
   14% { opacity: 0; transform: translate(260px, 104px); }
 }
+@keyframes fondlogin-aurore {
+  0%, 100% { transform: skewX(0deg) translateY(0); opacity: 0.85; }
+  50% { transform: skewX(-5deg) translateY(-8px); opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   [data-fondlogin] * {
     animation: none !important;
