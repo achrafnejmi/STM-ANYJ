@@ -57,41 +57,37 @@ const STATUTS_NL = [
   { code: 'ANNULE', label: 'Annulé', couleur: 'bg-snrt-red' },
 ]
 
-// Petite ligne label / valeur — densité maîtrisée pour les blocs secondaires
-// (évite d'empiler des dizaines de grosses cartes).
-function Ligne({ libelle, valeur, precision }) {
+// Métrique d'un bloc secondaire : libellé + grande valeur, jauge optionnelle
+// (ratio 0–100, couleur SNRT) et une précision en légende. Plus lisible qu'une
+// simple ligne de texte, sans revenir à une grosse carte par indicateur.
+function Metrique({ libelle, valeur, precision, jauge, tonJauge = 'bg-snrt-blue' }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-0">
-      <span className="text-sm text-slate-600">{libelle}</span>
-      <span className="text-right">
-        <span className="text-sm font-semibold text-slate-900">{valeur}</span>
-        {precision && <span className="ml-1.5 text-xs text-slate-400">{precision}</span>}
-      </span>
+    <div className="border-b border-slate-100 py-2.5 last:border-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium text-slate-700">{libelle}</span>
+        <span className="text-base font-semibold tabular-nums text-slate-900">{valeur}</span>
+      </div>
+      {jauge != null && (
+        <div className="mt-1.5 h-1.5 rounded-full bg-slate-100">
+          <div className={`h-1.5 rounded-full ${tonJauge}`} style={{ width: `${Math.min(100, Math.max(2, jauge))}%` }} />
+        </div>
+      )}
+      {precision && <div className="mt-1 text-xs text-slate-400">{precision}</div>}
     </div>
   )
 }
 
-// Barre segmentée du cycle de publication d'un canal + légende compacte.
-function CyclePublication({ bilan }) {
+// Une barre empilée du cycle de publication (brouillon → programmé → publié →
+// annulé) pour un canal — la légende est mutualisée au niveau du panneau.
+function BarreCycle({ bilan }) {
   const total = bilan.total || 1
   return (
-    <div>
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
-        {STATUTS_NL.map((s) => {
-          const nb = bilan.parStatut[s.code] ?? 0
-          if (nb === 0) return null
-          return <div key={s.code} className={s.couleur} style={{ width: `${(nb / total) * 100}%` }} title={`${s.label} : ${nb}`} />
-        })}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-        {STATUTS_NL.map((s) => (
-          <span key={s.code} className="flex items-center gap-1.5">
-            <span className={`inline-block h-2 w-2 rounded-full ${s.couleur}`} />
-            {s.label}
-            <span className="tabular-nums text-slate-400">{bilan.parStatut[s.code] ?? 0}</span>
-          </span>
-        ))}
-      </div>
+    <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
+      {STATUTS_NL.map((s) => {
+        const nb = bilan.parStatut[s.code] ?? 0
+        if (nb === 0) return null
+        return <div key={s.code} className={s.couleur} style={{ width: `${(nb / total) * 100}%` }} title={`${s.label} : ${nb}`} />
+      })}
     </div>
   )
 }
@@ -405,7 +401,10 @@ export default function Accueil({ chaineActive }) {
       ) : (
         <>
           <div>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Stock &amp; droits</h2>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-snrt-orange" />
+              <h2 className="text-sm font-semibold text-slate-900">Stock &amp; droits</h2>
+            </div>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <CarteIndicateur
                 libelle="Volume disponible"
@@ -422,7 +421,7 @@ export default function Accueil({ chaineActive }) {
               <CarteIndicateur
                 libelle="Fins de droits (< 45 j)"
                 valeur={indicateurs.nbTitresFinsDeDroits}
-                ton={indicateurs.nbTitresFinsDeDroits > 0 ? 'vigilance' : 'neutre'}
+                ton={indicateurs.nbTitresFinsDeDroits > 0 ? 'vigilance' : 'favorable'}
                 sousTexte={
                   approfondis.joursAvantEcheance != null
                     ? `prochaine échéance dans ${approfondis.joursAvantEcheance} j`
@@ -432,59 +431,83 @@ export default function Accueil({ chaineActive }) {
               <CarteIndicateur
                 libelle="Titres hors droits"
                 valeur={indicateurs.nbTitresHorsDroits}
-                ton={indicateurs.nbTitresHorsDroits > 0 ? 'alerte' : 'neutre'}
+                ton={indicateurs.nbTitresHorsDroits > 0 ? 'alerte' : 'favorable'}
+                sousTexte={indicateurs.nbTitresHorsDroits > 0 ? 'à régulariser' : 'tout le catalogue est couvert'}
               />
             </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-slate-200 bg-white p-5">
-              <h2 className="mb-2 text-sm font-semibold text-slate-900">Antenne — semaine du {formaterPlageSemaine(lundi)}</h2>
-              <Ligne
+              <div className="mb-1 flex items-center gap-2">
+                <span className="h-4 w-1 rounded-full bg-snrt-cyan" />
+                <h2 className="text-sm font-semibold text-slate-900">Antenne — semaine du {formaterPlageSemaine(lundi)}</h2>
+              </div>
+              <Metrique
                 libelle="Rotation du catalogue"
                 valeur={`${approfondis.tauxRotation} %`}
+                jauge={approfondis.tauxRotation}
+                tonJauge="bg-snrt-cyan"
                 precision={`${approfondis.nbTitresAntenne}/${approfondis.nbTitresTotal} titres à l'antenne`}
               />
-              <Ligne libelle="Titres dormants" valeur={approfondis.nbTitresDormants} precision="jamais programmés" />
-              <Ligne
+              <Metrique
+                libelle="Titres dormants"
+                valeur={approfondis.nbTitresDormants}
+                precision="jamais programmés sur la période"
+              />
+              <Metrique
                 libelle="Passages programmés"
                 valeur={approfondis.nbPassagesSemaine}
-                precision={`${formaterVolumeHeures(approfondis.chargeAntenneMinutes)} d'antenne`}
+                precision={`${formaterVolumeHeures(approfondis.chargeAntenneMinutes)} d'antenne cumulées`}
               />
-              <Ligne
+              <Metrique
                 libelle="Maturité PAD"
                 valeur={`${approfondis.tauxPad} %`}
+                jauge={approfondis.tauxPad}
+                tonJauge={
+                  approfondis.tauxPad >= 80 ? 'bg-snrt-green' : approfondis.tauxPad >= 50 ? 'bg-snrt-orange' : 'bg-snrt-red'
+                }
                 precision={`${approfondis.nbEpisodesPrets}/${approfondis.nbEpisodesTotal} épisodes prêts`}
               />
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-5">
-              <h2 className="mb-2 text-sm font-semibold text-slate-900">Droits &amp; plan média</h2>
-              <Ligne
+              <div className="mb-1 flex items-center gap-2">
+                <span className="h-4 w-1 rounded-full bg-snrt-blue" />
+                <h2 className="text-sm font-semibold text-slate-900">Droits &amp; plan média</h2>
+              </div>
+              <Metrique
                 libelle="Passages restants (droits)"
-                valeur={approfondis.passagesRestantsCumul}
+                valeur={approfondis.passagesRestantsCumul.toLocaleString('fr-FR')}
                 precision={
                   approfondis.nbFenetresIllimitees > 0
-                    ? `+ ${approfondis.nbFenetresIllimitees} fenêtre(s) illimitée(s)`
-                    : 'cumul toutes fenêtres'
+                    ? `+ ${approfondis.nbFenetresIllimitees} fenêtre(s) à passages illimités`
+                    : 'cumul de toutes les fenêtres de droits'
                 }
               />
-              <Ligne
+              <Metrique
                 libelle="Éléments plan média (live)"
                 valeur={elementsSecondaires.length}
-                precision={`${formaterVolumeHeures(approfondis.volumeSecondaireMinutes)} placés`}
+                precision={`${formaterVolumeHeures(approfondis.volumeSecondaireMinutes)} de contenu secondaire placé`}
               />
-              <Ligne libelle="Bandes-annonces" valeur={approfondis.parTypeSecondaire.BANDE_ANNONCE ?? 0} />
-              <Ligne
+              <Metrique
+                libelle="Bandes-annonces"
+                valeur={approfondis.parTypeSecondaire.BANDE_ANNONCE ?? 0}
+                precision="dans le plan média live"
+              />
+              <Metrique
                 libelle="Écrans publicitaires"
                 valeur={approfondis.parTypeSecondaire.ECRAN_PUBLICITAIRE ?? 0}
-                precision={`${approfondis.parTypeSecondaire.HABILLAGE ?? 0} habillage(s)`}
+                precision={`${approfondis.parTypeSecondaire.HABILLAGE ?? 0} habillage(s) d'inter-programme`}
               />
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
-            <h2 className="mb-4 text-base font-semibold text-slate-900">Non-linéaire</h2>
+            <div className="mb-4 flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-snrt-navy" />
+              <h2 className="text-base font-semibold text-slate-900">Non-linéaire</h2>
+            </div>
             <div className="grid gap-8 lg:grid-cols-2">
               <div>
                 <div className="mb-3 flex items-baseline justify-between border-b border-slate-100 pb-2">
@@ -496,31 +519,25 @@ export default function Accueil({ chaineActive }) {
                 {statsNonLineaire.reseau.total === 0 ? (
                   <p className="text-sm text-slate-500">Aucune publication réseaux sociaux.</p>
                 ) : (
-                  <>
-                    <div className="space-y-2.5">
-                      {statsNonLineaire.reseau.parPlateforme.map(({ plateforme, nb }) => {
-                        const pct = Math.round((nb / statsNonLineaire.reseau.total) * 100)
-                        return (
-                          <div key={plateforme}>
-                            <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                              <span>{LIBELLE_PLATEFORME[plateforme] ?? plateforme}</span>
-                              <span className="tabular-nums text-slate-400">{nb} · {pct}%</span>
-                            </div>
-                            <div className="h-2.5 rounded-full bg-slate-100">
-                              <div
-                                className={`h-2.5 rounded-full ${couleurPlateforme(plateforme).fond}`}
-                                style={{ width: `${Math.max(pct, 2)}%` }}
-                              />
-                            </div>
+                  <div className="space-y-2.5">
+                    {statsNonLineaire.reseau.parPlateforme.map(({ plateforme, nb }) => {
+                      const pct = Math.round((nb / statsNonLineaire.reseau.total) * 100)
+                      return (
+                        <div key={plateforme}>
+                          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                            <span>{LIBELLE_PLATEFORME[plateforme] ?? plateforme}</span>
+                            <span className="tabular-nums text-slate-400">{nb} · {pct}%</span>
                           </div>
-                        )
-                      })}
-                    </div>
-                    <div className="mt-4 border-t border-slate-100 pt-3">
-                      <div className="mb-1.5 text-xs font-medium text-slate-500">Cycle de publication</div>
-                      <CyclePublication bilan={statsNonLineaire.reseau} />
-                    </div>
-                  </>
+                          <div className="h-2.5 rounded-full bg-slate-100">
+                            <div
+                              className={`h-2.5 rounded-full ${couleurPlateforme(plateforme).fond}`}
+                              style={{ width: `${Math.max(pct, 2)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
 
@@ -534,31 +551,56 @@ export default function Accueil({ chaineActive }) {
                 {statsNonLineaire.vod.total === 0 ? (
                   <p className="text-sm text-slate-500">Aucune mise en ligne VOD.</p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { v: statsNonLineaire.vod.total, l: 'Total' },
-                        { v: statsNonLineaire.vod.publieesPeriode, l: 'Publié cette semaine' },
-                        { v: statsNonLineaire.vod.enPreparation, l: 'En préparation' },
-                      ].map((c) => (
-                        <div key={c.l} className="rounded-md bg-slate-50 p-3">
-                          <div className="text-lg font-semibold text-slate-900">{c.v}</div>
-                          <div className="text-xs text-slate-500">{c.l}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 border-t border-slate-100 pt-3">
-                      <div className="mb-1.5 text-xs font-medium text-slate-500">Cycle de publication</div>
-                      <CyclePublication bilan={statsNonLineaire.vod} />
-                    </div>
-                  </>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { v: statsNonLineaire.vod.total, l: 'Total' },
+                      { v: statsNonLineaire.vod.publieesPeriode, l: 'Publié cette semaine' },
+                      { v: statsNonLineaire.vod.enPreparation, l: 'En préparation' },
+                    ].map((c) => (
+                      <div key={c.l} className="rounded-md bg-slate-50 p-3">
+                        <div className="text-lg font-semibold text-slate-900">{c.v}</div>
+                        <div className="text-xs text-slate-500">{c.l}</div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
+
+            {statsNonLineaire.reseau.total + statsNonLineaire.vod.total > 0 && (
+              <div className="mt-6 border-t border-slate-100 pt-4">
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <h3 className="text-sm font-semibold text-slate-700">Cycle de publication</h3>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    {STATUTS_NL.map((s) => (
+                      <span key={s.code} className="flex items-center gap-1.5">
+                        <span className={`inline-block h-2 w-2 rounded-full ${s.couleur}`} />
+                        {s.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { l: 'Réseaux sociaux', b: statsNonLineaire.reseau },
+                    { l: 'VOD — Forja', b: statsNonLineaire.vod },
+                  ].map(({ l, b }) => (
+                    <div key={l} className="grid grid-cols-[8rem_1fr_2.5rem] items-center gap-3">
+                      <span className="text-xs text-slate-500">{l}</span>
+                      {b.total > 0 ? <BarreCycle bilan={b} /> : <div className="h-2.5 rounded-full bg-slate-100" />}
+                      <span className="text-right text-xs tabular-nums text-slate-400">{b.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
-            <h2 className="mb-4 text-base font-semibold text-slate-900">Répartition par genre (stock disponible)</h2>
+            <div className="mb-4 flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-snrt-green" />
+              <h2 className="text-base font-semibold text-slate-900">Répartition par genre (stock disponible)</h2>
+            </div>
             <div className="flex flex-col gap-8 lg:flex-row">
               <div className="mx-auto lg:mx-0">
                 <Camembert repartition={repartition} volumeTotalMinutes={volumeTotalRepartition} />
@@ -591,7 +633,10 @@ export default function Accueil({ chaineActive }) {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
-            <h2 className="mb-4 text-base font-semibold text-slate-900">À consommer avant expiration</h2>
+            <div className="mb-4 flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-snrt-red" />
+              <h2 className="text-base font-semibold text-slate-900">À consommer avant expiration</h2>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
