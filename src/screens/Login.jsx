@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { connecter } from '../lib/session.js'
 import Marque from '../components/Marque.jsx'
+import FondLogin from '../components/FondLogin.jsx'
 
 export default function Login({ onConnexion }) {
   const [nom, setNom] = useState('')
@@ -17,8 +18,9 @@ export default function Login({ onConnexion }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-snrt-navy px-6">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-xl">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-snrt-navy px-6">
+      <FondLogin />
+      <div className="relative z-10 w-full max-w-sm rounded-xl bg-white/95 p-8 shadow-2xl ring-1 ring-white/20 backdrop-blur-sm">
         <div className="mb-6">
           <Marque variante="login" />
         </div>

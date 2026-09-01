@@ -92,3 +92,32 @@
 .animer-entree-modale-boite {
   animation: modale-boite-entree 180ms ease;
 }
+
+/* P31 — fond animé de l'écran de connexion (components/FondLogin.jsx).
+   Transforms GPU uniquement ; tout est coupé si prefers-reduced-motion. */
+@keyframes fondlogin-orbe-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(7vw, 6vh, 0) scale(1.25); }
+}
+@keyframes fondlogin-orbe-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to { transform: translate3d(-9vw, -7vh, 0) scale(1); }
+}
+@keyframes fondlogin-orbe-c {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(6vw, -9vh, 0) scale(1.2); }
+}
+@keyframes fondlogin-grille {
+  from { transform: rotateX(66deg) translateY(0); }
+  to { transform: rotateX(66deg) translateY(60px); }
+}
+@keyframes fondlogin-etoile {
+  0% { transform: translateY(0) rotateX(12deg) rotateY(0deg); }
+  50% { transform: translateY(-24px) rotateX(12deg) rotateY(180deg); }
+  100% { transform: translateY(0) rotateX(12deg) rotateY(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-fondlogin] * {
+    animation: none !important;
+  }
+}
