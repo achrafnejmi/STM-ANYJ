@@ -190,7 +190,6 @@ export default function PlanMedia({ chaineActive }) {
 
   useEffect(() => {
     setProposition(null)
-    setRapportEcrit(null)
     chargerTout()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne
   }, [chaineActive])
