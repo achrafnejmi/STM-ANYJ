@@ -19,6 +19,7 @@ import { couleurGenre } from '../lib/couleursGenre.js'
 import { estProgrammable } from '../lib/droits.js'
 import {
   calculerIndicateursTete,
+  calculerIndicateursApprofondis,
   calculerRepartitionParGenre,
   calculerTitresFinsDeDroits,
   estProgrammeNonProgramme,
@@ -180,6 +181,19 @@ export default function Accueil({ chaineActive }) {
     () => calculerIndicateursTete(programmesFiltres, episodesParProgrammeId, fenetresDroits, dateReference),
     [programmesFiltres, episodesParProgrammeId, fenetresDroits, dateReference]
   )
+  const approfondis = useMemo(
+    () =>
+      calculerIndicateursApprofondis({
+        programmes,
+        programmesFiltres,
+        episodesParProgrammeId,
+        fenetresDroits,
+        diffusionsPeriode,
+        elementsSecondaires,
+        dateReference,
+      }),
+    [programmes, programmesFiltres, episodesParProgrammeId, fenetresDroits, diffusionsPeriode, elementsSecondaires, dateReference]
+  )
   const repartition = useMemo(
     () => calculerRepartitionParGenre(programmesFiltresStatut, episodesParProgrammeId, fenetresDroits, dateReference),
     [programmesFiltresStatut, episodesParProgrammeId, fenetresDroits, dateReference]
@@ -319,17 +333,99 @@ export default function Accueil({ chaineActive }) {
         <p className="text-sm text-slate-500">Chargement…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <CarteIndicateur libelle="Volume disponible" valeur={formaterVolumeHeures(indicateurs.volumeMinutes)} />
-            <CarteIndicateur libelle="Titres retenus par les filtres" valeur={indicateurs.nbTitresRetenus} />
-            <CarteIndicateur libelle="Fins de droits (< 45 j)" valeur={indicateurs.nbTitresFinsDeDroits} />
-            <CarteIndicateur libelle="Titres hors droits" valeur={indicateurs.nbTitresHorsDroits} />
+          <div>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Stock &amp; droits</h2>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <CarteIndicateur
+                libelle="Volume disponible"
+                valeur={formaterVolumeHeures(indicateurs.volumeMinutes)}
+                ton="favorable"
+                sousTexte={`${approfondis.nbEpisodesPrets} épisode${approfondis.nbEpisodesPrets > 1 ? 's' : ''} prêt${approfondis.nbEpisodesPrets > 1 ? 's' : ''}`}
+              />
+              <CarteIndicateur
+                libelle="Titres retenus par les filtres"
+                valeur={indicateurs.nbTitresRetenus}
+                ton="info"
+                sousTexte={`sur ${approfondis.nbTitresTotal} au catalogue`}
+              />
+              <CarteIndicateur
+                libelle="Fins de droits (< 45 j)"
+                valeur={indicateurs.nbTitresFinsDeDroits}
+                ton={indicateurs.nbTitresFinsDeDroits > 0 ? 'vigilance' : 'neutre'}
+                sousTexte={
+                  approfondis.joursAvantEcheance != null
+                    ? `prochaine échéance dans ${approfondis.joursAvantEcheance} j`
+                    : 'aucune échéance proche'
+                }
+              />
+              <CarteIndicateur
+                libelle="Titres hors droits"
+                valeur={indicateurs.nbTitresHorsDroits}
+                ton={indicateurs.nbTitresHorsDroits > 0 ? 'alerte' : 'neutre'}
+              />
+            </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-xs font-medium text-slate-500">Éléments plan média placés</div>
-            <div className="mt-1 text-sm text-slate-700">
-              <span className="font-semibold">{elementsSecondaires.length}</span> élément{elementsSecondaires.length > 1 ? 's' : ''} dans le plan média live
+          <div>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Activité d'antenne — semaine du {formaterPlageSemaine(lundi)}
+            </h2>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <CarteIndicateur
+                libelle="Rotation du catalogue"
+                valeur={`${approfondis.tauxRotation} %`}
+                ton="info"
+                sousTexte={`${approfondis.nbTitresAntenne} titre${approfondis.nbTitresAntenne > 1 ? 's' : ''} à l'antenne`}
+              />
+              <CarteIndicateur
+                libelle="Titres dormants"
+                valeur={approfondis.nbTitresDormants}
+                ton={approfondis.nbTitresDormants > 0 ? 'vigilance' : 'neutre'}
+                sousTexte="jamais programmés sur la période"
+              />
+              <CarteIndicateur
+                libelle="Passages programmés"
+                valeur={approfondis.nbPassagesSemaine}
+                sousTexte={`${formaterVolumeHeures(approfondis.chargeAntenneMinutes)} d'antenne`}
+              />
+              <CarteIndicateur
+                libelle="Maturité PAD"
+                valeur={`${approfondis.tauxPad} %`}
+                ton={approfondis.tauxPad >= 80 ? 'favorable' : approfondis.tauxPad >= 50 ? 'vigilance' : 'alerte'}
+                sousTexte={`${approfondis.nbEpisodesPrets} / ${approfondis.nbEpisodesTotal} épisodes prêts`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Marge de diffusion &amp; plan média</h2>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <CarteIndicateur
+                libelle="Passages restants (droits)"
+                valeur={approfondis.passagesRestantsCumul}
+                ton="favorable"
+                sousTexte={
+                  approfondis.nbFenetresIllimitees > 0
+                    ? `+ ${approfondis.nbFenetresIllimitees} fenêtre${approfondis.nbFenetresIllimitees > 1 ? 's' : ''} illimitée${approfondis.nbFenetresIllimitees > 1 ? 's' : ''}`
+                    : 'cumul toutes fenêtres'
+                }
+              />
+              <CarteIndicateur
+                libelle="Éléments plan média"
+                valeur={elementsSecondaires.length}
+                ton="info"
+                sousTexte={`${formaterVolumeHeures(approfondis.volumeSecondaireMinutes)} placés (live)`}
+              />
+              <CarteIndicateur
+                libelle="Bandes-annonces"
+                valeur={approfondis.parTypeSecondaire.BANDE_ANNONCE ?? 0}
+                sousTexte="dans le plan média live"
+              />
+              <CarteIndicateur
+                libelle="Écrans publicitaires"
+                valeur={approfondis.parTypeSecondaire.ECRAN_PUBLICITAIRE ?? 0}
+                sousTexte={`${approfondis.parTypeSecondaire.HABILLAGE ?? 0} habillage${(approfondis.parTypeSecondaire.HABILLAGE ?? 0) > 1 ? 's' : ''}`}
+              />
             </div>
           </div>
 

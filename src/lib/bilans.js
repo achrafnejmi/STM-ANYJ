@@ -2,6 +2,7 @@
 // famille que droits.js/couverture.js. Aucune écriture, aucun accès Supabase.
 import { estProgrammable, estEpisodePret, fenetresProchesDeLaFermeture } from './droits.js'
 import { GENRES } from './genres.js'
+import { minutesDepuisDebutAntenne, joursEntre } from './semaine.js'
 
 // EXG-M9-01, définition littérale : un épisode compte dans le volume
 // disponible seulement s'il est prêt à diffuser ET que son titre a des
@@ -36,6 +37,95 @@ export function calculerIndicateursTete(programmesFiltres, episodesParProgrammeI
     nbTitresRetenus: programmesFiltres.length,
     nbTitresFinsDeDroits: idsFinsDeDroits.size,
     nbTitresHorsDroits,
+  }
+}
+
+// Durée d'une transmission en minutes, sur l'axe de la journée d'antenne
+// (gère le passage 06:00 → 06:00 : une fin « après minuit » reste positive).
+function dureeTransmissionMinutes(d) {
+  if (!d.heure_debut || !d.heure_fin) return 0
+  const debut = minutesDepuisDebutAntenne(d.heure_debut.slice(0, 5))
+  const fin = minutesDepuisDebutAntenne(d.heure_fin.slice(0, 5))
+  const brut = fin - debut
+  return brut >= 0 ? brut : brut + 24 * 60
+}
+
+// Indicateurs approfondis du tableau de bord (P31) — même famille que
+// calculerIndicateursTete, calculés à partir des mêmes données déjà chargées
+// par l'écran. Trois axes : rotation du catalogue, maturité PAD, marge de
+// diffusion (droits) — plus un aperçu du plan média live.
+//
+// `programmes` = tout le catalogue de la chaîne (pour la rotation, volontairement
+// indépendante des filtres genre/statut) ; `programmesFiltres` = les titres
+// retenus par les filtres (pour la maturité PAD, cohérente avec les cartes de
+// tête). `diffusionsPeriode` = grille LIVE sur la semaine de référence.
+export function calculerIndicateursApprofondis({
+  programmes,
+  programmesFiltres,
+  episodesParProgrammeId,
+  fenetresDroits,
+  diffusionsPeriode,
+  elementsSecondaires,
+  dateReference,
+}) {
+  // --- rotation du catalogue sur la période ---
+  const idsAntenne = new Set(diffusionsPeriode.map((d) => d.programme_id).filter(Boolean))
+  const nbTitresTotal = programmes.length
+  const nbTitresAntenne = programmes.filter((p) => idsAntenne.has(p.id)).length
+  const nbTitresDormants = nbTitresTotal - nbTitresAntenne
+  const tauxRotation = nbTitresTotal > 0 ? Math.round((nbTitresAntenne / nbTitresTotal) * 100) : 0
+  const nbPassagesSemaine = diffusionsPeriode.length
+  const chargeAntenneMinutes = diffusionsPeriode.reduce((acc, d) => acc + dureeTransmissionMinutes(d), 0)
+
+  // --- maturité PAD sur les titres retenus par les filtres ---
+  let nbEpisodesPrets = 0
+  let nbEpisodesTotal = 0
+  for (const p of programmesFiltres) {
+    const eps = episodesParProgrammeId.get(p.id) ?? []
+    nbEpisodesTotal += eps.length
+    nbEpisodesPrets += eps.filter((ep) => estEpisodePret(ep)).length
+  }
+  const tauxPad = nbEpisodesTotal > 0 ? Math.round((nbEpisodesPrets / nbEpisodesTotal) * 100) : 0
+
+  // --- marge de diffusion (droits) ---
+  let passagesRestantsCumul = 0
+  let nbFenetresIllimitees = 0
+  for (const f of fenetresDroits) {
+    if (f.illimite) {
+      nbFenetresIllimitees += 1
+      continue
+    }
+    passagesRestantsCumul += Math.max(0, (f.passages_autorises ?? 0) - (f.passages_consommes ?? 0))
+  }
+  const proches = fenetresProchesDeLaFermeture(fenetresDroits, dateReference)
+  const prochaineEcheance = proches.reduce(
+    (min, f) => (min == null || f.date_fin < min ? f.date_fin : min),
+    null
+  )
+  const joursAvantEcheance = prochaineEcheance ? joursEntre(dateReference, prochaineEcheance) : null
+
+  // --- plan média live ---
+  const volumeSecondaireMinutes = Math.round(
+    elementsSecondaires.reduce((acc, e) => acc + (e.duree_secondes ?? 0), 0) / 60
+  )
+  const parTypeSecondaire = {}
+  for (const e of elementsSecondaires) parTypeSecondaire[e.type] = (parTypeSecondaire[e.type] ?? 0) + 1
+
+  return {
+    nbTitresTotal,
+    nbTitresAntenne,
+    nbTitresDormants,
+    tauxRotation,
+    nbPassagesSemaine,
+    chargeAntenneMinutes,
+    nbEpisodesPrets,
+    nbEpisodesTotal,
+    tauxPad,
+    passagesRestantsCumul,
+    nbFenetresIllimitees,
+    joursAvantEcheance,
+    volumeSecondaireMinutes,
+    parTypeSecondaire,
   }
 }
 
