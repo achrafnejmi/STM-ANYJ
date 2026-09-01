@@ -52,9 +52,10 @@ export default function FondLogin() {
             <stop offset="55%" stopColor="#213a52" />
             <stop offset="100%" stopColor="#14243a" />
           </radialGradient>
-          <radialGradient id="fl-terre2" cx="50%" cy="0%" r="60%">
-            <stop offset="0%" stopColor="#2b4c6b" />
-            <stop offset="100%" stopColor="#1c3450" />
+          <radialGradient id="fl-terre2" cx="50%" cy="-8%" r="92%">
+            <stop offset="0%" stopColor="#325a7d" />
+            <stop offset="55%" stopColor="#294c6a" />
+            <stop offset="100%" stopColor="#22415f" />
           </radialGradient>
           <filter id="fl-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="6" result="b" />
@@ -298,12 +299,17 @@ export default function FondLogin() {
       />
       <div
         className="absolute inset-0"
-        style={{ background: 'radial-gradient(100% 78% at 50% 42%, transparent 58%, rgba(14,26,42,0.34) 100%)' }}
+        style={{ background: 'radial-gradient(115% 85% at 50% 34%, transparent 62%, rgba(16,28,44,0.24) 100%)' }}
       />
-      {/* Lueur d'atmosphère au ras du bas — évite la bande sombre morte */}
+      {/* Remontée de bleu sur toute la moitié basse — supprime la bande sombre
+          sous l'horizon (harmonise avec le bleu du milieu de scène) */}
       <div
-        className="absolute inset-x-0 bottom-0 h-40"
-        style={{ background: 'linear-gradient(to top, rgba(63,180,221,0.14), transparent)' }}
+        className="absolute inset-x-0 bottom-0 h-1/2"
+        style={{ background: 'linear-gradient(to top, rgba(46,82,114,0.55) 0%, rgba(46,82,114,0.18) 45%, transparent 100%)' }}
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 h-28"
+        style={{ background: 'linear-gradient(to top, rgba(63,180,221,0.10), transparent)' }}
       />
     </div>
   )
