@@ -234,6 +234,19 @@ export async function listerPublicationsReseauParChaine(chaineId) {
   )
 }
 
+// Historique non-linéaire d'un titre (onglet Historique, P31) : toutes chaînes
+// confondues, plus récentes d'abord (miroir de listerDiffusionsLineairesParProgramme).
+export async function listerPublicationsReseauParProgramme(programmeId) {
+  return verifie(
+    await supabase
+      .from('publication_reseau')
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('date_publication', { ascending: false })
+      .order('heure_publication', { ascending: false, nullsFirst: false })
+  )
+}
+
 // Lecture simple (P30 rollback) — nécessaire à verifierEtatActuel d'undoManager.js.
 export async function obtenirPublicationReseau(id) {
   return verifie(await supabase.from('publication_reseau').select('*').eq('id', id).maybeSingle())
@@ -255,6 +268,18 @@ export async function supprimerPublicationReseau(id) {
 
 export async function listerPublicationsVodParChaine(chaineId) {
   return verifie(await supabase.from('publication_vod').select('*').eq('chaine_id', chaineId).order('date_publication'))
+}
+
+// Historique non-linéaire d'un titre (onglet Historique, P31).
+export async function listerPublicationsVodParProgramme(programmeId) {
+  return verifie(
+    await supabase
+      .from('publication_vod')
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('date_publication', { ascending: false })
+      .order('heure_publication', { ascending: false, nullsFirst: false })
+  )
 }
 
 // Lecture simple (P30 rollback) — nécessaire à verifierEtatActuel d'undoManager.js.
