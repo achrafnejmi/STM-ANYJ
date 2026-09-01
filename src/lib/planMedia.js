@@ -256,12 +256,14 @@ function motifCouverture(motifsRencontres) {
 // `opts` : { habillageActif, ecranPubActif, bandesAnnoncesActives,
 // dureeEcranSecondes, tranchesCommercialisees: string[] }. `runId` : uuid
 // généré côté écran, posé sur chaque ligne proposée (annulation groupée).
-// `spots` : bibliothèque (spot_bibliotheque) — servent uniquement à la règle
-// P32. `regle` : { active, duree_min_minutes, duree_max_minutes,
-// nombre_annonces, spot_ids } ou null — si active, AJOUTE nombre_annonces
-// éléments (piochés dans le pool) dans chaque coupure dont le programme
-// précédent dure entre [min, max] minutes ; s'ajoute au remplissage par
-// défaut, ne le remplace pas.
+// `spots` : bibliothèque (spot_bibliotheque) — servent uniquement aux règles
+// P32/P33. `regles` : bibliothèque de règles de la chaîne, chacune
+// { id, active, duree_min_minutes, duree_max_minutes, genres: string[],
+// nombre_annonces, spot_ids } — TOUTES les règles actives s'appliquent
+// (empilées, dans l'ordre de la liste) : pour chaque coupure dont le
+// programme précédent dure entre [min, max] minutes ET (genres vide OU son
+// genre est dans `genres`), AJOUTE nombre_annonces éléments piochés dans le
+// pool de CETTE règle. S'ajoute au remplissage par défaut, ne le remplace pas.
 export function genererElementsSecondaires({
   dates,
   intervalles,
@@ -274,7 +276,7 @@ export function genererElementsSecondaires({
   chaineActive,
   planMediaId,
   spots = [],
-  regle = null,
+  regles = [],
 }) {
   const dateDebut = dates[0]
   const dateFin = dates[dates.length - 1]
@@ -302,10 +304,14 @@ export function genererElementsSecondaires({
     motifsParCampagne: new Map(),
   }
 
-  // Règle P32 : durée du programme précédent + pool d'items à piocher.
+  // Règles P32/P33 : durée du programme précédent + un pool et un curseur de
+  // rotation indépendants par règle active.
   const diffusionsParId = new Map(diffusionsToutes.map((d) => [d.id, d]))
-  const poolRegle = regle?.spot_ids?.length ? spots.filter((s) => regle.spot_ids.includes(s.id)) : spots
-  let indexPiocheRegle = 0
+  const reglesActives = regles.filter((r) => r.active)
+  const poolParRegle = new Map(
+    reglesActives.map((r) => [r.id, r.spot_ids?.length ? spots.filter((s) => r.spot_ids.includes(s.id)) : spots])
+  )
+  const indexPiocheParRegle = new Map(reglesActives.map((r) => [r.id, 0]))
 
   const placements = []
 
@@ -347,19 +353,29 @@ export function genererElementsSecondaires({
       placer('ECRAN_PUBLICITAIRE', opts.dureeEcranSecondes, null, `Écran publicitaire — ${tranche.label}`)
     }
 
-    // Règle P32 (s'ajoute au défaut) : si le programme qui précède cette
-    // coupure dure entre [min, max] minutes, on pose nombre_annonces items
-    // piochés en rotation dans le pool, tant que le budget le permet.
-    if (regle?.active && regle.nombre_annonces > 0 && poolRegle.length > 0) {
+    // Règles P32/P33 (s'ajoutent au défaut, empilées) : pour chaque règle
+    // active dont la bande de durée — et, si renseignés, les genres ciblés —
+    // matche le programme précédent, on pose nombre_annonces items piochés en
+    // rotation dans SON pool, tant que le budget le permet.
+    if (reglesActives.length > 0) {
       const precedente = diffusionsParId.get(intervalle.apresTransmissionId)
       const dureeProg = precedente ? dureeTransmissionMinutes(precedente) : null
-      if (dureeProg != null && dureeProg >= regle.duree_min_minutes && dureeProg <= regle.duree_max_minutes) {
-        for (let k = 0; k < regle.nombre_annonces; k++) {
-          const item = poolRegle[indexPiocheRegle % poolRegle.length]
-          indexPiocheRegle += 1
+      const genreProg = precedente ? programmesParId.get(precedente.programme_id)?.genre : null
+      for (const r of reglesActives) {
+        if (r.nombre_annonces <= 0) continue
+        const pool = poolParRegle.get(r.id)
+        if (!pool || pool.length === 0) continue
+        if (dureeProg == null || dureeProg < r.duree_min_minutes || dureeProg > r.duree_max_minutes) continue
+        if (r.genres?.length && (!genreProg || !r.genres.includes(genreProg))) continue
+
+        let idx = indexPiocheParRegle.get(r.id)
+        for (let k = 0; k < r.nombre_annonces; k++) {
+          const item = pool[idx % pool.length]
+          idx += 1
           if (resteSecondes < item.duree_secondes) break
           placer(item.type, item.duree_secondes, null, item.libelle)
         }
+        indexPiocheParRegle.set(r.id, idx)
       }
     }
 

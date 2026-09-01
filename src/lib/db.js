@@ -408,17 +408,24 @@ export async function supprimerCampagne(id) {
   verifie(await supabase.from('campagne').delete().eq('id', id).select())
 }
 
-// --- regle_plan_media (P32) : une règle par chaîne, partagée entre la
-// génération auto et l'application manuelle (onglet Composition) ---
+// --- regle_plan_media (P32/P33) : bibliothèque de règles par chaîne,
+// partagée entre la génération auto (toutes les règles actives s'appliquent)
+// et l'application manuelle (onglet Composition, une règle choisie) ---
 
-export async function obtenirReglePlanMedia(chaineId) {
-  return verifie(await supabase.from('regle_plan_media').select('*').eq('chaine_id', chaineId).maybeSingle())
+export async function listerReglesPlanMedia(chaineId) {
+  return verifie(await supabase.from('regle_plan_media').select('*').eq('chaine_id', chaineId).order('cree_le'))
 }
 
-export async function mettreAJourReglePlanMedia(chaineId, champs) {
-  return verifiePremiere(
-    await supabase.from('regle_plan_media').upsert({ chaine_id: chaineId, ...champs }, { onConflict: 'chaine_id' }).select()
-  )
+export async function creerReglePlanMedia(champs) {
+  return verifiePremiere(await supabase.from('regle_plan_media').insert(champs).select())
+}
+
+export async function mettreAJourReglePlanMedia(id, champs) {
+  return verifiePremiere(await supabase.from('regle_plan_media').update(champs).eq('id', id).select())
+}
+
+export async function supprimerReglePlanMedia(id) {
+  verifie(await supabase.from('regle_plan_media').delete().eq('id', id).select())
 }
 
 // --- plan_media (P24) : plusieurs plans média nommés par chaîne, un seul live ---

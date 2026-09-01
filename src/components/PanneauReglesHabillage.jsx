@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Play } from 'lucide-react'
+import { Play, Pencil, Plus } from 'lucide-react'
 import { TRANCHES } from '../lib/tranches.js'
 
 // Règles d'habillage (§4.6.2, colonne droite) : rappel de la période, 3
@@ -7,16 +7,19 @@ import { TRANCHES } from '../lib/tranches.js'
 // §4.6.5 — voir plan Phase 16, Ambiguïté 3 : le cahier ne les nomme pas et le
 // mockup de référence propose une 3e case qui contredirait RG-M5-01, non
 // reprise ici), durée d'un écran publicitaire (seule durée réellement
-// paramétrable, EXG-M5-07), tranches commercialisées, bouton de lancement.
+// paramétrable, EXG-M5-07), tranches commercialisées, bibliothèque de règles
+// (P32/P33 — hors cahier, cantonnée à cet onglet, aucune existence côté
+// Composition manuelle), bouton de lancement.
 export default function PanneauReglesHabillage({
   periodeLabel,
   opts,
   onChangerOpts,
   onGenerer,
   chargement,
-  regle,
-  spots = [],
-  onChangerRegle,
+  regles = [],
+  onNouvelleRegle,
+  onEditerRegle,
+  onBasculerActiveRegle,
 }) {
   const idDuree = useId()
 
@@ -26,11 +29,6 @@ export default function PanneauReglesHabillage({
       ...opts,
       tranchesCommercialisees: actuelles.includes(code) ? actuelles.filter((t) => t !== code) : [...actuelles, code],
     })
-  }
-
-  function basculerSpotRegle(id) {
-    const actuels = regle?.spot_ids ?? []
-    onChangerRegle({ spot_ids: actuels.includes(id) ? actuels.filter((s) => s !== id) : [...actuels, id] })
   }
 
   return (
@@ -99,73 +97,44 @@ export default function PanneauReglesHabillage({
         </div>
       </div>
 
-      {regle && onChangerRegle && (
+      {onNouvelleRegle && (
         <div className="mt-4 border-t border-slate-100 pt-4">
-          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            <input
-              type="checkbox"
-              checked={regle.active}
-              onChange={(e) => onChangerRegle({ active: e.target.checked })}
-            />
-            Règle par durée de programme — activer pour la génération auto
-          </label>
-          <div className="mt-3 space-y-3 text-sm text-slate-700">
-            <div className="flex flex-wrap items-center gap-2">
-              <span>Programme de</span>
-              <input
-                type="number"
-                min="0"
-                value={regle.duree_min_minutes}
-                onChange={(e) => onChangerRegle({ duree_min_minutes: Number(e.target.value) })}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
-              />
-              <span>à</span>
-              <input
-                type="number"
-                min="0"
-                value={regle.duree_max_minutes}
-                onChange={(e) => onChangerRegle({ duree_max_minutes: Number(e.target.value) })}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
-              />
-              <span>min</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span>Nombre d'annonces à ajouter</span>
-              <input
-                type="number"
-                min="0"
-                value={regle.nombre_annonces}
-                onChange={(e) => onChangerRegle({ nombre_annonces: Number(e.target.value) })}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
-              />
-            </div>
-            <div>
-              <span className="mb-1 block text-xs font-medium text-slate-500">Items à piocher</span>
-              <div className="max-h-40 overflow-y-auto rounded-md border border-slate-200">
-                {spots.length === 0 ? (
-                  <p className="px-2 py-2 text-xs text-slate-400">Bibliothèque de spots vide.</p>
-                ) : (
-                  spots.map((s) => (
-                    <label key={s.id} className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5 text-xs last:border-0">
-                      <input
-                        type="checkbox"
-                        checked={(regle.spot_ids ?? []).includes(s.id)}
-                        onChange={() => basculerSpotRegle(s.id)}
-                      />
-                      <span className="flex-1 truncate text-slate-700">{s.libelle}</span>
-                      <span className="text-slate-400">
-                        {s.type} · {s.duree_secondes}s
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-              <p className="mt-1 text-xs text-slate-400">Aucune cochée → tirage dans toute la bibliothèque.</p>
-            </div>
-            <p className="text-xs text-slate-400">
-              Cette règle est aussi applicable manuellement depuis l'onglet Composition (bouton « Appliquer la règle »).
-            </p>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">Bibliothèque de règles</span>
+            <button type="button" onClick={onNouvelleRegle} className="flex items-center gap-1 text-xs font-medium text-snrt-navy hover:underline">
+              <Plus size={13} />
+              Nouvelle règle
+            </button>
           </div>
+          {regles.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              Aucune règle. Une règle ajoute automatiquement N annonces (spots/BA/écrans pub) dans les coupures dont le
+              programme précédent a une durée donnée.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {regles.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={r.active}
+                    onChange={(e) => onBasculerActiveRegle(r.id, e.target.checked)}
+                    title={r.active ? 'Active pour la génération auto' : 'Inactive'}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-slate-700">{r.nom}</div>
+                    <div className="text-slate-400">
+                      {r.duree_min_minutes}–{r.duree_max_minutes} min · {r.nombre_annonces} annonce{r.nombre_annonces > 1 ? 's' : ''} ·{' '}
+                      {r.genres?.length ? r.genres.join(', ') : 'tous genres'}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => onEditerRegle(r)} className="text-slate-400 hover:text-snrt-navy">
+                    <Pencil size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -19,7 +19,6 @@ import {
   Redo2,
   X,
   MoreHorizontal,
-  Wand2,
 } from 'lucide-react'
 import {
   listerProgrammesParChaine,
@@ -28,8 +27,10 @@ import {
   listerCampagnesParChaine,
   listerElementsSecondairesParChaine,
   listerSpotsBibliotheque,
-  obtenirReglePlanMedia,
+  listerReglesPlanMedia,
+  creerReglePlanMedia,
   mettreAJourReglePlanMedia,
+  supprimerReglePlanMedia,
   creerElementSecondaire,
   creerElementsSecondaires,
   supprimerElementsSecondairesAutomatiquesParPeriode,
@@ -74,7 +75,7 @@ import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
 import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
 import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
-import PanneauAppliquerRegleComposition from '../components/PanneauAppliquerRegleComposition.jsx'
+import PanneauFormulaireRegle from '../components/PanneauFormulaireRegle.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const OPTS_DEFAUT = {
@@ -83,15 +84,6 @@ const OPTS_DEFAUT = {
   bandesAnnoncesActives: true,
   dureeEcranSecondes: DUREE_ECRAN_DEFAUT_SECONDES,
   tranchesCommercialisees: TRANCHES.map((t) => t.code),
-}
-
-// Règle Plan média (P32) — valeurs par défaut avant premier chargement / première écriture.
-const REGLE_DEFAUT = {
-  active: false,
-  duree_min_minutes: 0,
-  duree_max_minutes: 30,
-  nombre_annonces: 1,
-  spot_ids: [],
 }
 
 const LIBELLES_TYPE = {
@@ -149,8 +141,8 @@ export default function PlanMedia({ chaineActive }) {
   const [erreur, setErreur] = useState(null)
 
   const [opts, setOpts] = useState(OPTS_DEFAUT)
-  const [regle, setRegle] = useState(REGLE_DEFAUT)
-  const [appliquerRegleOuvert, setAppliquerRegleOuvert] = useState(false)
+  const [regles, setRegles] = useState([])
+  const [formulaireRegle, setFormulaireRegle] = useState(null) // null | 'CREER' | objet règle en édition
   const [proposition, setProposition] = useState(null)
   const [rapportEcrit, setRapportEcrit] = useState(null)
   const [derniereActionId, setDerniereActionId] = useState(null)
@@ -181,14 +173,14 @@ export default function PlanMedia({ chaineActive }) {
         obtenirGrilleLiveParChaine(chaineActive.id),
         listerPlanMediaParChaine(chaineActive.id),
       ])
-      const [lignesProgrammes, lignesDiffusions, lignesCampagnes, lignesElements, lignesSpots, ligneRegle] =
+      const [lignesProgrammes, lignesDiffusions, lignesCampagnes, lignesElements, lignesSpots, lignesRegles] =
         await Promise.all([
           listerProgrammesParChaine(chaineActive.id),
           grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
           listerCampagnesParChaine(chaineActive.id),
           listerElementsSecondairesParChaine(chaineActive.id),
           listerSpotsBibliotheque(chaineActive.id),
-          obtenirReglePlanMedia(chaineActive.id),
+          listerReglesPlanMedia(chaineActive.id),
         ])
       if (idAppel !== chargementIdRef.current) return
       setProgrammes(lignesProgrammes)
@@ -196,7 +188,7 @@ export default function PlanMedia({ chaineActive }) {
       setCampagnes(lignesCampagnes)
       setElementsSecondaires(lignesElements)
       setSpots(lignesSpots)
-      setRegle(ligneRegle ?? REGLE_DEFAUT)
+      setRegles(lignesRegles ?? [])
       setPlanMedias(lignesPlanMedia)
       const live = lignesPlanMedia.find((p) => p.est_live)
       const sauvegardees = lireDocumentsOuverts(chaineActive.code).filter((id) => lignesPlanMedia.some((p) => p.id === id))
@@ -331,39 +323,45 @@ export default function PlanMedia({ chaineActive }) {
     setDateReference((d) => ajouterJours(d, delta))
   }
 
-  // Règle P32 : une seule écriture par changement, upsert par chaîne (même
-  // patron que l'édition inline des campagnes).
-  async function changerRegle(patch) {
-    const suivante = { ...regle, ...patch }
-    setRegle(suivante)
+  // Bibliothèque de règles (P32/P33) — CRUD immédiat en base, la génération
+  // auto s'en sert au clic « Générer ». Aucune existence côté Composition.
+  async function creerRegle(champs) {
     try {
-      await mettreAJourReglePlanMedia(chaineActive.id, {
-        active: suivante.active,
-        duree_min_minutes: suivante.duree_min_minutes,
-        duree_max_minutes: suivante.duree_max_minutes,
-        nombre_annonces: suivante.nombre_annonces,
-        spot_ids: suivante.spot_ids,
-      })
+      const cree = await creerReglePlanMedia({ chaine_id: chaineActive.id, ...champs })
+      setRegles((prev) => [...prev, cree])
+      setFormulaireRegle(null)
     } catch (err) {
       setErreur(err.message)
     }
   }
 
-  // Application manuelle de la règle (MODE 2, onglet Composition) : écrit les
-  // lignes retenues en origine 'MANUELLE' (protégées : une génération auto
-  // ultérieure ne les efface jamais), annulables en bloc via l'Undo P24.
-  async function appliquerRegleComposition(retenues) {
-    if (!planMediaActif || retenues.length === 0) return
-    const creees = await creerElementsSecondaires(retenues)
-    await enregistrerAction({
-      chaineId: chaineActive.id,
-      ecran: 'PLAN_MEDIA',
-      documentId: planMediaActif.id,
-      libelle: `Application de la règle (${creees.length} élément${creees.length > 1 ? 's' : ''})`,
-      operations: creees.map((e) => ({ table: 'element_secondaire', type: 'INSERT', id: e.id, apres: e })),
-    })
-    setElementsSecondaires((prev) => [...prev, ...creees])
-    setAppliquerRegleOuvert(false)
+  async function modifierRegle(id, champs) {
+    try {
+      const maj = await mettreAJourReglePlanMedia(id, champs)
+      setRegles((prev) => prev.map((r) => (r.id === id ? maj : r)))
+      setFormulaireRegle(null)
+    } catch (err) {
+      setErreur(err.message)
+    }
+  }
+
+  async function supprimerRegle(id) {
+    try {
+      await supprimerReglePlanMedia(id)
+      setRegles((prev) => prev.filter((r) => r.id !== id))
+      setFormulaireRegle(null)
+    } catch (err) {
+      setErreur(err.message)
+    }
+  }
+
+  async function basculerActiveRegle(id, active) {
+    setRegles((prev) => prev.map((r) => (r.id === id ? { ...r, active } : r)))
+    try {
+      await mettreAJourReglePlanMedia(id, { active })
+    } catch (err) {
+      setErreur(err.message)
+    }
   }
 
   // Aucune écriture ici — pure lecture + calcul (planMedia.js). L'écriture
@@ -387,7 +385,7 @@ export default function PlanMedia({ chaineActive }) {
       chaineActive,
       planMediaId: planMediaActif.id,
       spots,
-      regle,
+      regles,
     })
     const nbAutomatiquesRemplaces = elementsSecondairesActifs.filter(
       (e) => e.origine === 'AUTOMATIQUE' && e.date >= dateDebut && e.date <= dateFin
@@ -970,26 +968,6 @@ export default function PlanMedia({ chaineActive }) {
                   Importer
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setAppliquerRegleOuvert(true)}
-                disabled={!planMediaActif}
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <Wand2 size={15} />
-                Appliquer la règle
-              </button>
-              <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                Règle : programme {regle.duree_min_minutes}–{regle.duree_max_minutes} min → {regle.nombre_annonces} annonce
-                {regle.nombre_annonces > 1 ? 's' : ''}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                    regle.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {regle.active ? 'active (auto)' : 'inactive'}
-                </span>
-              </span>
             </div>
           </div>
         )}
@@ -1114,9 +1092,10 @@ export default function PlanMedia({ chaineActive }) {
               onChangerOpts={setOpts}
               onGenerer={generer}
               chargement={chargement}
-              regle={regle}
-              spots={spots}
-              onChangerRegle={changerRegle}
+              regles={regles}
+              onNouvelleRegle={() => setFormulaireRegle('CREER')}
+              onEditerRegle={(r) => setFormulaireRegle(r)}
+              onBasculerActiveRegle={basculerActiveRegle}
             />
           </div>
         </div>
@@ -1149,18 +1128,15 @@ export default function PlanMedia({ chaineActive }) {
         />
       )}
 
-      {appliquerRegleOuvert && planMediaActif && (
-        <PanneauAppliquerRegleComposition
-          regle={regle}
+      {formulaireRegle && (
+        <PanneauFormulaireRegle
+          regleInitiale={formulaireRegle === 'CREER' ? null : formulaireRegle}
           spots={spots}
-          diffusions={diffusions}
-          programmesParId={programmesParId}
-          elementsSecondairesActifs={elementsSecondairesActifs}
-          dates={dates}
-          chaineActive={chaineActive}
-          planMediaId={planMediaActif.id}
-          onFermer={() => setAppliquerRegleOuvert(false)}
-          onApplique={appliquerRegleComposition}
+          onEnregistrer={(champs) =>
+            formulaireRegle === 'CREER' ? creerRegle(champs) : modifierRegle(formulaireRegle.id, champs)
+          }
+          onSupprimer={formulaireRegle === 'CREER' ? undefined : () => supprimerRegle(formulaireRegle.id)}
+          onFermer={() => setFormulaireRegle(null)}
         />
       )}
 
