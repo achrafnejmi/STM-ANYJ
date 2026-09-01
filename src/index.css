@@ -131,6 +131,16 @@
   0%, 100% { transform: skewX(0deg) translateY(0); opacity: 0.85; }
   50% { transform: skewX(-5deg) translateY(-8px); opacity: 1; }
 }
+@keyframes fondlogin-radar {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes fondlogin-comete {
+  0% { transform: translate(60px, 20px); opacity: 0; }
+  15% { opacity: 0.9; }
+  70% { opacity: 0.9; }
+  100% { transform: translate(-150px, -46px); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   [data-fondlogin] * {
     animation: none !important;

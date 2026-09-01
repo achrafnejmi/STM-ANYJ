@@ -84,22 +84,29 @@ export default function FondLogin() {
 
         <rect width="1600" height="900" fill="url(#fl-espace)" />
 
-        {/* Nébuleuse lointaine — profondeur */}
+        {/* Nébuleuses lointaines — profondeur */}
         <ellipse cx="300" cy="330" rx="440" ry="260" fill="url(#fl-nebuleuse)" />
         <ellipse cx="1180" cy="250" rx="360" ry="200" fill="url(#fl-nebuleuse)" opacity="0.6" />
+        <ellipse cx="1440" cy="130" rx="300" ry="150" fill="url(#fl-nebuleuse)" opacity="0.45" />
 
-        {/* Lune lointaine */}
-        <g opacity="0.5">
-          <circle cx="1372" cy="146" r="46" fill="#8fa6bb" filter="url(#fl-glow)" />
-          <circle cx="1388" cy="138" r="42" fill="#1a2c40" />
-          <circle cx="1360" cy="150" r="7" fill="#7b91a6" opacity="0.6" />
-          <circle cx="1350" cy="134" r="4" fill="#7b91a6" opacity="0.6" />
+        {/* Galaxie spirale très lointaine (haut-gauche) */}
+        <g transform="translate(210 150) rotate(-18)" opacity="0.5" style={{ transformOrigin: '210px 150px', animation: 'fondlogin-spin 120s linear infinite' }}>
+          <ellipse rx="120" ry="34" fill="url(#fl-nebuleuse)" />
+          <ellipse rx="66" ry="20" fill="#cfe6f2" opacity="0.10" />
+          <circle r="4" fill="#eaf3fa" opacity="0.5" />
+        </g>
+
+        {/* Comète — tête + traîne, dérive lente (remplace la lune) */}
+        <g style={{ animation: 'fondlogin-comete 26s ease-in-out infinite' }}>
+          <path d="M 1478 96 C 1560 70 1636 58 1712 40 C 1642 78 1566 104 1490 122 Z" fill="#bfe0ef" opacity="0.20" />
+          <circle cx="1480" cy="104" r="4.5" fill="#eef7fc" filter="url(#fl-glow)" />
         </g>
 
         {/* Étoiles filantes (rares) */}
         <g stroke="#cfe6f2" strokeWidth="2" strokeLinecap="round">
           <line x1="120" y1="90" x2="150" y2="102" style={{ animation: 'fondlogin-filante 11s ease-in -3s infinite' }} />
           <line x1="980" y1="60" x2="1010" y2="74" style={{ animation: 'fondlogin-filante 14s ease-in -9s infinite' }} />
+          <line x1="1240" y1="470" x2="1276" y2="452" style={{ animation: 'fondlogin-filante 17s ease-in -6s infinite' }} />
         </g>
 
         {/* Champ d'étoiles */}
@@ -116,8 +123,8 @@ export default function FondLogin() {
           ))}
         </g>
 
-        {/* Constellation — motif « réseau de diffusion » */}
-        <g stroke="#8fd6ee" strokeWidth="0.8" strokeOpacity="0.35" fill="#dff1f9">
+        {/* Constellations — motif « réseau de diffusion » */}
+        <g stroke="#8fd6ee" strokeWidth="0.8" strokeOpacity="0.32" fill="#dff1f9">
           <polyline points="1180,110 1276,168 1352,120 1436,196 1392,286" fill="none" />
           <polyline points="1276,168 1330,250" fill="none" />
           {[
@@ -130,9 +137,28 @@ export default function FondLogin() {
           ].map(([x, y], i) => (
             <circle key={i} cx={x} cy={y} r="2" style={{ animation: `fondlogin-scintille 4s ease-in-out ${-i * 0.7}s infinite` }} />
           ))}
+          <polyline points="150,300 236,352 210,452 320,470 300,560" fill="none" />
+          {[
+            [150, 300],
+            [236, 352],
+            [210, 452],
+            [320, 470],
+            [300, 560],
+          ].map(([x, y], i) => (
+            <circle key={`b${i}`} cx={x} cy={y} r="1.8" style={{ animation: `fondlogin-scintille 4.6s ease-in-out ${-i * 0.9}s infinite` }} />
+          ))}
+          <polyline points="640,140 700,96 792,132 760,214" fill="none" />
+          {[
+            [640, 140],
+            [700, 96],
+            [792, 132],
+            [760, 214],
+          ].map(([x, y], i) => (
+            <circle key={`c${i}`} cx={x} cy={y} r="1.8" style={{ animation: `fondlogin-scintille 5s ease-in-out ${-i * 1.1}s infinite` }} />
+          ))}
         </g>
 
-        {/* Orbites en perspective (précession très lente) */}
+        {/* Orbites en perspective (précession très lente) + satellites de données */}
         <g
           fill="none"
           stroke="#249ccc"
@@ -141,7 +167,12 @@ export default function FondLogin() {
           <ellipse cx="800" cy="560" rx="590" ry="150" strokeOpacity="0.28" strokeWidth="1.5" />
           <ellipse cx="800" cy="560" rx="430" ry="108" strokeOpacity="0.2" strokeWidth="1.5" strokeDasharray="3 7" />
           <ellipse cx="800" cy="560" rx="760" ry="196" strokeOpacity="0.14" strokeWidth="1.5" />
+          <ellipse cx="800" cy="560" rx="300" ry="76" strokeOpacity="0.16" strokeWidth="1.2" strokeDasharray="2 8" />
         </g>
+        {/* Paquets qui circulent sur les orbites */}
+        <circle r="2.4" fill="#bfe9f7" style={{ offsetPath: "path('M 500 560 a 300 76 0 1 0 600 0 a 300 76 0 1 0 -600 0')", animation: 'fondlogin-orbite 12s linear infinite' }} />
+        <circle r="2" fill="#8fd6ee" style={{ offsetPath: ORBITE_SAT, animation: 'fondlogin-orbite 22s linear -8s infinite' }} />
+        <circle r="2" fill="#8fd6ee" style={{ offsetPath: ORBITE_SAT2, animation: 'fondlogin-orbite 34s linear -14s infinite reverse' }} />
 
         {/* Limbe terrestre + atmosphère */}
         <circle cx="800" cy="1520" r="880" fill="url(#fl-terre2)" />
@@ -199,8 +230,23 @@ export default function FondLogin() {
         <circle r="2.6" fill="#bfe9f7" style={{ offsetPath: "path('M 360 742 Q 800 700 1230 748')", animation: 'fondlogin-orbite 6s linear infinite' }} />
         <circle r="2.2" fill="#bfe9f7" style={{ offsetPath: "path('M 360 742 Q 800 700 1230 748')", animation: 'fondlogin-orbite 6s linear -3s infinite' }} />
 
-        {/* Station au sol : pylône + balise + ondes de diffusion */}
+        {/* Station au sol : pylône + balise + ondes + radar + empreinte */}
         <g transform="translate(360 792)">
+          {/* empreinte de couverture au sol */}
+          <ellipse
+            cx="0"
+            cy="6"
+            rx="118"
+            ry="30"
+            fill="none"
+            stroke="#3fb4dd"
+            strokeOpacity="0.22"
+            style={{ animation: 'fondlogin-balise 5s ease-in-out infinite' }}
+          />
+          {/* balayage radar */}
+          <g style={{ transformOrigin: '0px -52px', animation: 'fondlogin-radar 7s linear infinite' }}>
+            <path d="M 0 -52 L 96 -78 A 100 100 0 0 1 96 -26 Z" fill="#3fb4dd" opacity="0.10" />
+          </g>
           <g fill="none" stroke="#3fb4dd" strokeWidth="2">
             <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.2s ease-out infinite' }} />
             <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.2s ease-out -1.4s infinite' }} />
@@ -230,8 +276,9 @@ export default function FondLogin() {
           </g>
         </g>
 
-        {/* Seconde station au sol, à droite */}
+        {/* Seconde station au sol, à droite, avec grappe de paraboles */}
         <g transform="translate(1230 812) scale(0.82)">
+          <ellipse cx="0" cy="6" rx="128" ry="32" fill="none" stroke="#3fb4dd" strokeOpacity="0.2" style={{ animation: 'fondlogin-balise 5.6s ease-in-out -1s infinite' }} />
           <g fill="none" stroke="#3fb4dd" strokeWidth="2">
             <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -0.6s infinite' }} />
             <circle cx="0" cy="-52" r="6" style={{ animation: 'fondlogin-onde 4.6s ease-out -2.1s infinite' }} />
@@ -240,6 +287,17 @@ export default function FondLogin() {
           <path d="M -11 0 L 11 0 L 4 -50 L -4 -50 Z" fill="#22405c" stroke="#3fb4dd" strokeWidth="1.5" />
           <line x1="-8" y1="-24" x2="8" y2="-24" stroke="#3fb4dd" strokeWidth="1.5" />
           <circle cx="0" cy="-52" r="3.4" fill="#cc2430" style={{ animation: 'fondlogin-balise 2.6s ease-in-out -0.7s infinite' }} />
+          {/* grappe de paraboles */}
+          {[
+            [-46, 4, -28],
+            [-24, 8, -16],
+            [40, 6, 20],
+          ].map(([tx, ty, rot], i) => (
+            <g key={i} transform={`translate(${tx} ${ty}) rotate(${rot})`}>
+              <line x1="0" y1="0" x2="0" y2="10" stroke="#3fb4dd" strokeWidth="1.6" />
+              <path d="M -11 -4 A 12 12 0 0 1 11 -4 Z" fill="#22405c" stroke="#3fb4dd" strokeWidth="1.4" />
+            </g>
+          ))}
         </g>
 
         {/* Second satellite — orbite externe, sens inverse, plus petit */}
