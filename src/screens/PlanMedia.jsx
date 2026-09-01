@@ -65,7 +65,6 @@ import {
 } from '../lib/exportPlanMedia.js'
 import Modal from '../components/Modal.jsx'
 import PanneauReglesGeneration from '../components/PanneauReglesGeneration.jsx'
-import PanneauApercuPlanMedia from '../components/PanneauApercuPlanMedia.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
 import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
@@ -98,6 +97,51 @@ const CHAMPS_COPIABLES_ELEMENT = [
   'origine',
   'run_id',
 ]
+
+// Regroupe les éléments d'un plan média en sections lisibles comme le fichier
+// réel : une section par programme de la grille live (dernier inclus), titrée
+// par le programme, ses éléments triés par heure ; un bloc « Hors coupure »
+// pour les éléments non ancrés. `elements` peut mélanger des lignes réelles et
+// des propositions (marquées `_propose`). Utilisé par l'onglet Composition ET
+// par l'aperçu de la génération par règles.
+function grouperSectionsPlanMedia(dates, diffusions, elements, programmesParId) {
+  const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
+  const points = calculerPointsInsertion(dates, diffusions)
+  const triDebut = (a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0)
+
+  const parCoupure = new Map()
+  const horsCoupureParDate = new Map()
+  for (const e of elements) {
+    if (e.apres_transmission_id == null) {
+      if (!horsCoupureParDate.has(e.date)) horsCoupureParDate.set(e.date, [])
+      horsCoupureParDate.get(e.date).push(e)
+    } else {
+      if (!parCoupure.has(e.apres_transmission_id)) parCoupure.set(e.apres_transmission_id, [])
+      parCoupure.get(e.apres_transmission_id).push(e)
+    }
+  }
+
+  const parJour = new Map(dates.map((d) => [d, []]))
+  for (const date of dates) {
+    const hc = (horsCoupureParDate.get(date) ?? []).slice().sort(triDebut)
+    if (hc.length > 0) {
+      parJour.get(date).push({ cle: `${date}|libre`, coupureId: COUPURE_LIBRE, contexte: 'Hors coupure', fenetre: '06:00 → 06:00', heureFinProg: null, elements: hc })
+    }
+  }
+  for (const iv of points) {
+    if (!parJour.has(iv.date)) continue
+    const d = diffusionsParId.get(iv.apresTransmissionId)
+    parJour.get(iv.date).push({
+      cle: `${iv.date}|${iv.apresTransmissionId}`,
+      coupureId: iv.apresTransmissionId,
+      contexte: programmesParId.get(d?.programme_id)?.titre ?? '—',
+      fenetre: `${d?.heure_fin?.slice(0, 5) ?? '?'} → ${minutesEnHeure(iv.fin)}`,
+      heureFinProg: d?.heure_fin ?? null,
+      elements: (parCoupure.get(iv.apresTransmissionId) ?? []).slice().sort(triDebut),
+    })
+  }
+  return dates.map((date) => [date, parJour.get(date)]).filter(([, sections]) => sections.length > 0)
+}
 
 export default function PlanMedia({ chaineActive }) {
   // Le Plan média se compose JOUR par JOUR (socle : une grille linéaire d'une
@@ -247,58 +291,24 @@ export default function PlanMedia({ chaineActive }) {
     () => elementsSecondairesActifs.filter((e) => dates.includes(e.date)).sort((a, b) => a.date.localeCompare(b.date) || a.heure_debut.localeCompare(b.heure_debut)),
     [elementsSecondairesActifs, dates]
   )
-  // Vue Composition (P31) : le Plan média se lit désormais comme le fichier
-  // réel — chaque coupure de la grille live devient une section titrée par le
-  // programme qui la précède (CONTEXTE), ses BA/spots/écrans en dessous, et un
-  // « + » en bout de section pour insérer jusqu'au programme suivant. Le bloc
-  // « Hors coupure » regroupe les éléments non ancrés (grille incomplète).
-  const sectionsComposition = useMemo(() => {
-    const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
-    // Socle du Plan média : un point d'insertion APRÈS CHAQUE programme de la
-    // grille linéaire de la journée (dernier programme inclus), pas seulement
-    // dans les écarts — cf. calculerPointsInsertion.
-    const intervalles = calculerPointsInsertion(dates, diffusions)
-    const triDebut = (a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0)
+  // Vue Composition (P31) : le Plan média se lit comme le fichier réel — une
+  // section par programme, ses BA/spots/écrans en dessous, un « + » en bout.
+  const sectionsComposition = useMemo(
+    () => grouperSectionsPlanMedia(dates, diffusions, elementsPeriode, programmesParId),
+    [dates, diffusions, elementsPeriode, programmesParId]
+  )
 
-    const parCoupure = new Map()
-    const horsCoupureParDate = new Map()
-    for (const e of elementsPeriode) {
-      if (e.apres_transmission_id == null) {
-        if (!horsCoupureParDate.has(e.date)) horsCoupureParDate.set(e.date, [])
-        horsCoupureParDate.get(e.date).push(e)
-      } else {
-        if (!parCoupure.has(e.apres_transmission_id)) parCoupure.set(e.apres_transmission_id, [])
-        parCoupure.get(e.apres_transmission_id).push(e)
-      }
-    }
-
-    const parJour = new Map(dates.map((d) => [d, []]))
-    for (const date of dates) {
-      const hc = (horsCoupureParDate.get(date) ?? []).slice().sort(triDebut)
-      if (hc.length > 0) {
-        parJour.get(date).push({
-          cle: `${date}|libre`,
-          coupureId: COUPURE_LIBRE,
-          contexte: 'Hors coupure',
-          fenetre: '06:00 → 06:00',
-          elements: hc,
-        })
-      }
-    }
-    for (const iv of intervalles) {
-      if (!parJour.has(iv.date)) continue
-      const d = diffusionsParId.get(iv.apresTransmissionId)
-      parJour.get(iv.date).push({
-        cle: `${iv.date}|${iv.apresTransmissionId}`,
-        coupureId: iv.apresTransmissionId,
-        contexte: programmesParId.get(d?.programme_id)?.titre ?? '—',
-        fenetre: `${d?.heure_fin?.slice(0, 5) ?? '?'} → ${minutesEnHeure(iv.fin)}`,
-        heureFinProg: d?.heure_fin ?? null,
-        elements: (parCoupure.get(iv.apresTransmissionId) ?? []).slice().sort(triDebut),
-      })
-    }
-    return dates.map((date) => [date, parJour.get(date)]).filter(([, sections]) => sections.length > 0)
-  }, [dates, diffusions, elementsPeriode, programmesParId])
+  // Aperçu de la génération par règles : même structure, avec les éléments
+  // existants + les propositions du run courant (marquées `_propose`). Sans
+  // proposition, c'est le Plan média « vide » = juste les programmes du jour.
+  const sectionsApercu = useMemo(() => {
+    if (!proposition) return grouperSectionsPlanMedia(dates, diffusions, elementsPeriode, programmesParId)
+    // La confirmation remplace tous les éléments AUTOMATIQUE de la période :
+    // l'aperçu montre donc le manuel conservé + les propositions du run.
+    const base = elementsPeriode.filter((e) => e.origine !== 'AUTOMATIQUE')
+    const proposees = proposition.propositions.map((p, i) => ({ ...p, id: `prop-${i}`, _propose: true }))
+    return grouperSectionsPlanMedia(dates, diffusions, [...base, ...proposees], programmesParId)
+  }, [dates, diffusions, elementsPeriode, programmesParId, proposition])
 
   function naviguer(delta) {
     setDateReference((d) => ajouterJours(d, delta))
@@ -1007,23 +1017,101 @@ export default function PlanMedia({ chaineActive }) {
 
       {ongletPanneau === 'GENERATION' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_1fr]">
-          <div className="space-y-6">
-            {proposition ? (
-              <PanneauApercuPlanMedia
-                proposition={proposition}
-                nbAutomatiquesRemplaces={proposition.nbAutomatiquesRemplaces}
-                onConfirmer={confirmerGeneration}
-                onAnnuler={() => setProposition(null)}
-                enregistrement={enregistrement}
-              />
-            ) : (
-              <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
-                Le Plan média est composé soit <strong>manuellement</strong> (onglet Composition), soit
-                <strong> par règles</strong> : active une ou plusieurs règles à droite puis clique « Générer ». Le
-                résultat — spots / bandes-annonces / écrans entre et dans les programmes — s'affiche ici en aperçu avant
-                écriture.
+          <div className="space-y-4">
+            {proposition && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+                <span>
+                  {proposition.propositions.length} élément{proposition.propositions.length > 1 ? 's' : ''} proposé
+                  {proposition.propositions.length > 1 ? 's' : ''}
+                  {proposition.nbAutomatiquesRemplaces > 0 &&
+                    ` · ${proposition.nbAutomatiquesRemplaces} élément(s) auto précédent(s) remplacé(s)`}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => confirmerGeneration(proposition.propositions)}
+                    disabled={enregistrement}
+                    className="rounded-md bg-snrt-navy px-3 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+                  >
+                    {enregistrement ? 'Écriture…' : 'Confirmer'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProposition(null)}
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                  >
+                    Annuler
+                  </button>
+                </div>
               </div>
             )}
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="mb-1 text-sm font-semibold text-slate-900">
+                {proposition ? 'Aperçu du plan média' : 'Plan média'} — {planMediaActif?.nom}
+              </h3>
+              {!proposition && (
+                <p className="mb-3 text-xs text-slate-400">
+                  Programmes du jour issus de la grille linéaire live. Sélectionnez une règle à droite puis « Générer » —
+                  les spots / BA / écrans / habillages apparaîtront à leur place.
+                </p>
+              )}
+              {sectionsApercu.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucun programme ce jour-là dans la grille linéaire live.</p>
+              ) : (
+                <div className="space-y-5">
+                  {sectionsApercu.map(([date, sections]) => (
+                    <div key={date}>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {formaterDateLongue(date)}
+                      </div>
+                      <div className="space-y-3">
+                        {sections.map((s) => (
+                          <div key={s.cle} className="rounded-md border border-slate-200">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                              <span className="text-sm font-medium text-slate-800">{s.contexte}</span>
+                              <span className="font-mono text-xs text-slate-500">{s.fenetre}</span>
+                            </div>
+                            {s.elements.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-slate-400">—</p>
+                            ) : (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {s.elements.map((e) => (
+                                    <tr
+                                      key={e.id}
+                                      className={`border-b border-slate-100 last:border-0 ${
+                                        e._propose ? 'bg-emerald-50 text-emerald-900' : 'text-slate-700'
+                                      }`}
+                                    >
+                                      <td className="py-1.5 pl-3 pr-3 font-mono text-xs">
+                                        {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
+                                      </td>
+                                      <td className="py-1.5 pr-3">
+                                        {LIBELLES_TYPE[e.type] ?? e.type}
+                                        {s.heureFinProg && e.heure_debut < s.heureFinProg && (
+                                          <span className="ml-1.5 rounded bg-slate-100 px-1 text-[10px] text-slate-500">intra</span>
+                                        )}
+                                        {e._propose && (
+                                          <span className="ml-1.5 rounded bg-emerald-200 px-1 text-[10px] font-medium text-emerald-800">
+                                            proposé
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="lg:sticky lg:top-6 lg:self-start">
