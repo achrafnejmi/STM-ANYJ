@@ -51,6 +51,7 @@ import PaletteGenres from '../components/PaletteGenres.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 import PanneauImportGrilleType from '../components/PanneauImportGrilleType.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
+import SegmentedControl from '../components/SegmentedControl.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
@@ -733,9 +734,9 @@ export default function GrilleType({ chaineActive }) {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
         {/* Barre d'onglets (P28) : grilles type ouvertes de la chaîne active. */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
           {grillesTypeOuvertes.map((g) => (
             <div
               key={g.id}
@@ -826,32 +827,27 @@ export default function GrilleType({ chaineActive }) {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-slate-300 text-sm" title="Précision d'affichage">
-              {PRESETS_ZOOM.map((preset, i) => (
-                <button
-                  key={preset.code}
-                  type="button"
-                  onClick={() => setIndexZoom(i)}
-                  className={`px-3 py-1.5 ${i === indexZoom ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              variante="zoom"
+              title="Précision d'affichage"
+              options={PRESETS_ZOOM.map((preset, i) => [String(i), preset.label])}
+              value={String(indexZoom)}
+              onChange={(c) => setIndexZoom(Number(c))}
+            />
             {!selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <CheckSquare size={15} />
+                <CheckSquare size={14} />
                 Sélectionner
               </button>
             )}
             {selectionActive && (
-              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
+              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-2.5 py-1 text-xs text-snrt-navy">
                 <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
                 <button
                   type="button"
@@ -867,7 +863,7 @@ export default function GrilleType({ chaineActive }) {
               </div>
             )}
             {presseGaPapier.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button type="button" onClick={coller} className="flex items-center gap-1 font-medium underline hover:no-underline">
                   <ClipboardPaste size={13} />
@@ -901,47 +897,47 @@ export default function GrilleType({ chaineActive }) {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
           <button
             type="button"
             onClick={() => setPleinEcran((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${
               pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
             }`}
             title={pleinEcran ? 'Afficher le panneau des genres' : 'Masquer le panneau des genres pour élargir la grille'}
           >
-            {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            {pleinEcran ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
             Plein écran
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setImportOuvert(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
               title="Importer une grille type depuis un fichier Excel"
             >
-              <FileUp size={15} />
+              <FileUp size={14} />
               Importer
             </button>
             <button
               type="button"
               onClick={() => succes('Grille type enregistrée ✓')}
               title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
             >
-              <Save size={15} />
+              <Save size={14} />
               Enregistrer
             </button>
           </div>
         </div>
 
         {genresPresents.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
             {genresPresents.map((g) => {
               const { fond } = couleurGenre(g)
               return (
-                <span key={g} className="flex items-center gap-1.5 text-xs text-slate-600">
-                  <span className={`h-2.5 w-2.5 rounded-full ${fond}`} />
+                <span key={g} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className={`h-2 w-2 rounded-full ${fond}`} />
                   {g}
                 </span>
               )

@@ -84,6 +84,7 @@ import PopoverHistorique from '../components/PopoverHistorique.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
+import SegmentedControl from '../components/SegmentedControl.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const DUREE_PAR_DEFAUT_MIN = 30
@@ -767,9 +768,9 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
         {/* Barre d'onglets (P23) : grilles ouvertes de la chaîne active. */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
           {grillesOuvertes.map((g) => (
             <div
               key={g.id}
@@ -845,66 +846,50 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
           )}
         </div>
 
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="flex rounded-md border border-slate-300 text-sm">
-              {[
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <SegmentedControl
+              variante="vue"
+              options={[
                 ['JOUR', 'Jour'],
                 ['SEMAINE', 'Semaine'],
                 ['MOIS', 'Mois'],
                 ['ANNEE', 'Année'],
-              ].map(([code, label]) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setVue(code)}
-                  className={`px-3 py-2 ${vue === code ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="flex rounded-md border border-slate-300 text-sm" title="Bascule d'affichage par vecteur (RG-13) — filtre visuel uniquement">
-              {[
+              ]}
+              value={vue}
+              onChange={setVue}
+            />
+            <SegmentedControl
+              variante="filtre"
+              title="Bascule d'affichage par vecteur (RG-13) — filtre visuel uniquement"
+              options={[
                 ['SATELLITE', 'Satellite'],
                 ['TNT', 'TNT'],
-              ].map(([code, label]) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setVueVecteur(code)}
-                  className={`px-3 py-2 ${vueVecteur === code ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+              ]}
+              value={vueVecteur}
+              onChange={setVueVecteur}
+            />
             {vueEditable && (
-              <div className="flex rounded-md border border-slate-300 text-sm" title="Précision de programmation">
-                {PRESETS_ZOOM.map((preset, i) => (
-                  <button
-                    key={preset.code}
-                    type="button"
-                    onClick={() => setIndexZoom(i)}
-                    className={`px-3 py-2 ${i === indexZoom ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                variante="zoom"
+                title="Précision de programmation"
+                options={PRESETS_ZOOM.map((preset, i) => [String(i), preset.label])}
+                value={String(indexZoom)}
+                onChange={(c) => setIndexZoom(Number(c))}
+              />
             )}
             {vueEditable && !selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <CheckSquare size={15} />
+                <CheckSquare size={14} />
                 Sélectionner
               </button>
             )}
             {vueEditable && selectionActive && (
-              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
+              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-2.5 py-1 text-xs text-snrt-navy">
                 <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
                 <button
                   type="button"
@@ -920,7 +905,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               </div>
             )}
             {vueEditable && presseGaPapier.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button
                   type="button"
@@ -958,15 +943,15 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => naviguer(-1)}
-              className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50"
+              className="rounded-md border border-slate-300 p-1 hover:bg-slate-50"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
             </button>
-            <span className="min-w-[12rem] text-center text-sm font-medium text-slate-700">
+            <span className="min-w-[10rem] text-center text-xs font-medium text-slate-700">
               {vue === 'SEMAINE' && formaterPlageSemaine(lundi)}
               {vue === 'JOUR' && formaterDateLongue(dateReference)}
               {vue === 'MOIS' && formaterMoisAnnee(dateReference)}
@@ -975,56 +960,56 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
             <button
               type="button"
               onClick={() => naviguer(1)}
-              className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50"
+              className="rounded-md border border-slate-300 p-1 hover:bg-slate-50"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
             <button
               type="button"
               onClick={() => setDateReference(aujourdHuiISO())}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
             >
               Aujourd'hui
             </button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => setPleinEcran((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${
                 pleinEcran ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
               title={pleinEcran ? 'Afficher le panneau catalogue' : 'Masquer le panneau catalogue pour élargir la grille'}
             >
-              {pleinEcran ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+              {pleinEcran ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
               Plein écran
             </button>
             <button
               type="button"
               onClick={() => setAfficherGrilleType((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${
                 afficherGrilleType
                   ? 'border-snrt-navy bg-snrt-navy/5 text-snrt-navy'
                   : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
               title="Afficher les blocs de la grille type en fond"
             >
-              <Layers3 size={15} />
+              <Layers3 size={14} />
               Grille type
             </button>
             <button
               type="button"
               onClick={ouvrirAnomalies}
-              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${
                 nbBloquantes > 0
                   ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
                   : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <CircleAlert size={15} />
+              <CircleAlert size={14} />
               Anomalies
               {nbBloquantes > 0 && (
                 <span className="rounded-full bg-red-600 px-1.5 text-xs font-semibold text-white">{nbBloquantes}</span>
@@ -1036,21 +1021,21 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
               type="button"
               onClick={() => succes('Grille enregistrée ✓')}
               title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
             >
-              <Save size={15} />
+              <Save size={14} />
               Enregistrer
             </button>
           </div>
         </div>
 
         {genresPresents.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
             {genresPresents.map((g) => {
               const { fond } = couleurGenre(g)
               return (
-                <span key={g} className="flex items-center gap-1.5 text-xs text-slate-600">
-                  <span className={`h-2.5 w-2.5 rounded-full ${fond}`} />
+                <span key={g} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className={`h-2 w-2 rounded-full ${fond}`} />
                   {g || 'Sans genre'}
                 </span>
               )
