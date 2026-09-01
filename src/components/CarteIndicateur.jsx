@@ -1,13 +1,14 @@
 // Carte d'indicateur du tableau de bord (M9). `ton` ajoute un liseré de
-// couleur discret à gauche (bleu = info, vert = favorable, ambre = vigilance,
-// rose = alerte) — sobre, une seule touche de couleur par carte. `sousTexte` :
-// précision courte sous la valeur (ratio, tendance, échéance…).
+// couleur discret à gauche, dans la palette SNRT uniquement (bleu = info,
+// vert = favorable, orange = vigilance, rouge = alerte) — sobre, une seule
+// touche de couleur par carte. `sousTexte` : précision courte sous la valeur
+// (ratio, tendance, échéance…).
 const TONS = {
   neutre: 'border-l-slate-200',
-  info: 'border-l-indigo-400',
-  favorable: 'border-l-emerald-400',
-  vigilance: 'border-l-amber-400',
-  alerte: 'border-l-rose-400',
+  info: 'border-l-snrt-blue',
+  favorable: 'border-l-snrt-green',
+  vigilance: 'border-l-snrt-orange',
+  alerte: 'border-l-snrt-red',
 }
 
 export default function CarteIndicateur({ libelle, valeur, description, ton = 'neutre', sousTexte }) {
