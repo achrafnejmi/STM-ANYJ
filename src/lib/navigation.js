@@ -1,5 +1,5 @@
 // Liste unique des sections de la coquille (sidebar + routage App.jsx + hash URL).
-import { Home, Tv2, FileSignature, BookText, FileText, Layers3, CalendarDays, ListChecks, Megaphone, Share2, ListOrdered, Settings } from 'lucide-react'
+import { Home, Tv2, FileSignature, BookText, FileText, Layers3, CalendarDays, ListChecks, Megaphone, Share2, ListOrdered, BadgeCheck, Settings } from 'lucide-react'
 
 export const SECTIONS = [
   { id: 'ACCUEIL', label: 'Accueil', icone: Home },
@@ -13,6 +13,7 @@ export const SECTIONS = [
   { id: 'PLAN_MEDIA', label: 'Plan média', icone: Megaphone },
   { id: 'GRILLE_NON_LINEAIRE', label: 'Grille non-linéaire', icone: Share2 },
   { id: 'CONDUCTEUR', label: 'Conducteur', icone: ListOrdered },
+  { id: 'CONTROLE_PAD', label: 'Contrôle PAD', icone: BadgeCheck },
   { id: 'ADMINISTRATION', label: 'Administration', icone: Settings },
 ]
 

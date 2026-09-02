@@ -5,8 +5,9 @@
 // onglets, seul le champ Format apparaît/disparaît selon `config.formats`.
 import { useEffect, useId, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
-import { listerDiffusionsLineairesParProgramme } from '../lib/db.js'
+import { listerDiffusionsLineairesParProgramme, creerNotifications } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
+import { messagePublicationNonLineaire } from '../lib/notifications.js'
 import { enregistrerAction } from '../lib/undoManager.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { STATUTS_PUBLICATION } from '../lib/statutsPublication.js'
@@ -101,6 +102,26 @@ export default function PanneauPublication({
       statut: form.statut,
     }
     const titreProgramme = programmes.find((p) => p.id === form.programme_id)?.titre || 'publication'
+    const etaitPublie = estEdition && publication.statut === 'PUBLIE'
+    // Notifie le rôle Marketing / Digital quand une publication passe à PUBLIÉ
+    // (P35c) — notification par chaîne, non ciblée par utilisateur (cf. plan).
+    async function notifierSiPublie(pub) {
+      if (etaitPublie || pub.statut !== 'PUBLIE') return
+      const plateforme = config.plateformes.find((p) => p.code === pub.plateforme)?.libelle || pub.plateforme
+      try {
+        await creerNotifications([
+          {
+            chaine_id: chaineActive.id,
+            type: 'PUBLICATION_NON_LINEAIRE',
+            programme_id: pub.programme_id,
+            message: messagePublicationNonLineaire(titreProgramme, plateforme),
+            lu: false,
+          },
+        ])
+      } catch (err) {
+        console.error('Notification Marketing impossible :', err)
+      }
+    }
     try {
       if (estEdition) {
         const maj = await config.mettreAJour(publication.id, champs)
@@ -110,6 +131,7 @@ export default function PanneauPublication({
           libelle: `Modification : ${titreProgramme}`,
           operations: [{ table: config.table, type: 'UPDATE', id: maj.id, avant: publication, apres: maj }],
         })
+        await notifierSiPublie(maj)
         onModifie(maj)
       } else {
         const cree = await config.creer({ ...champs, cree_par: lireUtilisateur() })
@@ -119,6 +141,7 @@ export default function PanneauPublication({
           libelle: `Création : ${titreProgramme}`,
           operations: [{ table: config.table, type: 'INSERT', id: cree.id, apres: cree }],
         })
+        await notifierSiPublie(cree)
         onCree(cree)
       }
     } catch (err) {

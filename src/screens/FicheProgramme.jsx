@@ -456,7 +456,11 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       </div>
 
       {onglet === 'EPISODES' && id && (
-        <EpisodesPanel programmeId={id} onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)} />
+        <EpisodesPanel
+          programmeId={id}
+          chaineActive={chaineActive}
+          onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)}
+        />
       )}
       {onglet === 'DROITS' && id && (
         <div className="space-y-6">

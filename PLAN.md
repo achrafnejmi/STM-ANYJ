@@ -166,6 +166,19 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   couleurs genre/chaîne), transitions cohérentes, bouton Export unifié (Excel/Word/PDF) sur tous
   les écrans qui exportent, désencombrement des barres d'outils les plus chargées. *Test :
   aucune régression fonctionnelle, couleurs genre/chaîne inchangées, exports identiques.*
+- **P35 — Système de rôles multi-utilisateurs (PoC)** ✅ LIVRÉ (hors feuille de route initiale) :
+  simulation du workflow métier pour la démo — sélecteur d'utilisateur au login (8 rôles :
+  Super Admin, Admin de chaîne, Programmateur, Acquisitions, Documentaliste, Rédacteur,
+  Contrôle PAD, Marketing), navigation filtrée par rôle (point unique `src/lib/roles.js`),
+  verrou de chaîne pour l'Admin de chaîne, 3 écrans neufs (Bible + OCR simulé, Synopsis FR/AR
+  simulé, Contrôle PAD), demande de validation PAD depuis le panneau Épisodes, notification
+  Marketing à la publication non-linéaire. **Pas de vraie sécurité** : aucun mot de passe, les
+  RLS restent ouvertes (`anon_all_*`). La vraie authentification Supabase (mot de passe, RLS
+  par rôle via `auth.uid()`, ciblage des notifications par utilisateur) est **reportée à la
+  production**, hors périmètre du PoC. Migrations : `migration-p35.sql` → `p36` → `p37`.
+  *Test : se connecter comme chaque utilisateur de démo, vérifier la Sidebar et les redirections ;
+  demande PAD → traitement par le Contrôle PAD → épisode passe PAD ; publication → PUBLIÉ →
+  notification dédiée dans la cloche.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

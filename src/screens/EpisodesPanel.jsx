@@ -6,7 +6,9 @@ import {
   mettreAJourEpisode,
   supprimerEpisode,
   listerDiffusionsLineairesParProgramme,
+  creerDemandePad,
 } from '../lib/db.js'
+import { lireUtilisateur } from '../lib/session.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
@@ -42,7 +44,7 @@ function versFormulaire(episode) {
   }
 }
 
-export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
+export default function EpisodesPanel({ programmeId, chaineActive, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -52,6 +54,7 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
   const [form, setForm] = useState(null)
   const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
+  const [demandePad, setDemandePad] = useState(false)
   const idDescription = useId()
   const idPad = useId()
   const notifier = useNotification()
@@ -155,6 +158,29 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
       setErreur(err.message)
     } finally {
       setEnregistrement(false)
+    }
+  }
+
+  // Demande de validation PAD (P35c) — envoyée au rôle Contrôle PAD, qui
+  // l'accepte (episode.pad = true) ou la refuse. Ne modifie rien ici.
+  async function demanderValidationPad() {
+    const motif = window.prompt('Motif de la demande de validation PAD (optionnel) :', '')
+    if (motif === null) return
+    setDemandePad(true)
+    setErreur(null)
+    try {
+      await creerDemandePad({
+        chaine_id: chaineActive.id,
+        programme_id: programmeId,
+        episode_id: episodeId,
+        demandeur: lireUtilisateur(),
+        motif: motif.trim() || null,
+      })
+      notifier.succes('Demande de validation PAD envoyée au Contrôle PAD.')
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setDemandePad(false)
     }
   }
 
@@ -296,6 +322,18 @@ export default function EpisodesPanel({ programmeId, onEpisodesChange }) {
                     />
                     PAD (prêt à diffuser)
                   </label>
+                  {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={demanderValidationPad}
+                        disabled={demandePad}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {demandePad ? 'Envoi…' : 'Demander la validation PAD'}
+                      </button>
+                    </div>
+                  )}
                   {episodeId !== 'NOUVEAU' && (
                     <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
                       <div>

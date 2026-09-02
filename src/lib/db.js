@@ -694,6 +694,22 @@ export async function perimerActionsAnnulees(chaineId, ecran, documentId = null)
   return verifie(await requete.select())
 }
 
+// --- demande_pad (P35c : demandes de validation PAD → rôle Contrôle PAD) ---
+
+export async function listerDemandesPadParChaine(chaineId) {
+  return verifie(
+    await supabase.from('demande_pad').select('*').eq('chaine_id', chaineId).order('cree_le', { ascending: false })
+  )
+}
+
+export async function creerDemandePad(champs) {
+  return verifiePremiere(await supabase.from('demande_pad').insert(champs).select())
+}
+
+export async function mettreAJourDemandePad(id, champs) {
+  return verifiePremiere(await supabase.from('demande_pad').update(champs).eq('id', id).select())
+}
+
 // --- notification (P29 : centre de notifications persistant, lu/non lu par chaîne) ---
 
 export async function listerNotificationsParChaine(chaineId) {

@@ -21,6 +21,12 @@ export function messageDroitsProches(titreProgramme, fenetre) {
   return `« ${titreProgramme} » — fenêtre de droits ferme le ${fenetre.date_fin} (${passagesRestants} passage${passagesRestants > 1 ? 's' : ''} restant${passagesRestants > 1 ? 's' : ''})`
 }
 
+// PUBLICATION_NON_LINEAIRE (P35c) : événement ponctuel écrit au moment où une
+// publication réseaux sociaux / VOD passe à PUBLIÉ (PanneauPublication.jsx).
+export function messagePublicationNonLineaire(titreProgramme, plateforme) {
+  return `« ${titreProgramme} » publié en non-linéaire${plateforme ? ` sur ${plateforme}` : ''}`
+}
+
 // Lignes DROITS_PROCHES manquantes pour une chaîne : fenêtres actuellement
 // proches de la fermeture qui n'ont pas encore de notification existante
 // (notificationsExistantes = déjà chargées par l'appelant, App.jsx).
