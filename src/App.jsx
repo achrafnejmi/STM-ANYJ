@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
-import { lireChaineActive, definirChaineActive, chargerChaines } from './lib/chaines.js'
-import { sectionVersHash, hashVersSection } from './lib/navigation.js'
+import { lireChaineActive, definirChaineActive, chargerChaines, CHAINES } from './lib/chaines.js'
+import { SECTIONS, sectionVersHash, hashVersSection } from './lib/navigation.js'
+import { peutVoirSection, premiereSection, chaineVerrouillee, libelleRole } from './lib/roles.js'
 import { get as lireStockage, set as ecrireStockage } from './lib/storage.js'
 import { chargerGenres } from './lib/genres.js'
 import { chargerTranches } from './lib/tranches.js'
@@ -71,22 +72,48 @@ function App() {
   // réconcilié ici à chaque changement de chaîne (voir effet ci-dessous).
   const [notifications, setNotifications] = useState([])
   const [notificationsOuvertes, setNotificationsOuvertes] = useState(false)
-  // Rôle (retouche post-P29) : convention d'affichage, pas une vraie barrière
-  // de sécurité (connexion sans mot de passe, cf. session.js) — juste de quoi
-  // masquer la section « Utilisateurs & rôles » de Administration.jsx aux
-  // non-admins. Chargé une fois à la connexion (upsert best-effort : ne
-  // touche jamais un rôle déjà attribué).
+  // Rôle (P35) : simulation d'accès pour la démo, PAS une vraie barrière de
+  // sécurité (connexion sans mot de passe, RLS ouvertes). Pilote le filtrage
+  // de la Sidebar, la garde de route et le verrou de chaîne. Chargé une fois
+  // à la connexion. `utilisateurCourant` = la ligne complète (nom_affiche,
+  // chaine_id) ; `roleUtilisateur` = son rôle (fallback 'UTILISATEUR' = tout).
+  const [utilisateurCourant, setUtilisateurCourant] = useState(null)
   const [roleUtilisateur, setRoleUtilisateur] = useState(null)
 
   useEffect(() => {
     if (!utilisateur) {
+      setUtilisateurCourant(null)
       setRoleUtilisateur(null)
       return
     }
     obtenirOuCreerUtilisateur(utilisateur)
-      .then((u) => setRoleUtilisateur(u?.role ?? 'UTILISATEUR'))
+      .then((u) => {
+        setUtilisateurCourant(u ?? null)
+        setRoleUtilisateur(u?.role ?? 'UTILISATEUR')
+      })
       .catch((err) => console.error('Chargement du rôle utilisateur impossible :', err))
   }, [utilisateur])
+
+  // Verrou de chaîne : l'Administrateur de chaîne est forcé sur SA chaîne
+  // (sélecteur de chaîne verrouillé côté TopBar).
+  useEffect(() => {
+    if (!chaineVerrouillee(roleUtilisateur) || !utilisateurCourant?.chaine_id) return
+    const cible = CHAINES.find((c) => c.id === utilisateurCourant.chaine_id)
+    if (cible && cible.code !== chaineActive.code) changerChaine(cible.code)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- changerChaine/chaineActive stables ici
+  }, [roleUtilisateur, utilisateurCourant])
+
+  const sectionsVisibles = SECTIONS.filter((s) => peutVoirSection(roleUtilisateur, s.id))
+
+  // Garde de route : si le rôle est chargé et la section courante lui est
+  // interdite, rediriger vers sa première section autorisée.
+  useEffect(() => {
+    if (!roleUtilisateur) return
+    if (!peutVoirSection(roleUtilisateur, section)) {
+      naviguer(premiereSection(roleUtilisateur, SECTIONS.map((s) => s.id)))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- naviguer stable
+  }, [roleUtilisateur, section])
 
   useEffect(() => {
     function onHashChange() {
@@ -208,6 +235,10 @@ function App() {
       marquerNotificationLue(n.id).catch((err) => console.error('Marquage lu impossible :', err))
     }
     setNotificationsOuvertes(false)
+    if (n.type === 'PUBLICATION_NON_LINEAIRE') {
+      naviguer('GRILLE_NON_LINEAIRE')
+      return
+    }
     if (n.programme_id) ouvrirProgramme(n.programme_id, n.type === 'DROITS_PROCHES' ? 'DROITS' : undefined)
   }
 
@@ -222,6 +253,7 @@ function App() {
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar
         section={section}
+        sections={sectionsVisibles}
         onNaviguer={naviguer}
         ouverte={sidebarOuverte}
         onFermer={() => setSidebarOuverte(false)}
@@ -232,10 +264,13 @@ function App() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar
           utilisateur={utilisateur}
+          nomAffiche={utilisateurCourant?.nom_affiche}
+          roleLabel={libelleRole(roleUtilisateur)}
           onDeconnexion={handleDeconnexion}
           onToggleSidebar={() => setSidebarOuverte((v) => !v)}
           chaineActive={chaineActive}
           onChangerChaine={changerChaine}
+          chaineVerrouillee={chaineVerrouillee(roleUtilisateur)}
           onOuvrirRecherche={() => setRechercheOuverte(true)}
           onOuvrirNotifications={() => setNotificationsOuvertes(true)}
           nbNotificationsNonLues={notifications.filter((n) => !n.lu).length}

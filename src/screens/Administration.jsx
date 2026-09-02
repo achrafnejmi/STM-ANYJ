@@ -33,7 +33,9 @@ export default function Administration({ roleUtilisateur }) {
   const [utilisateurs, setUtilisateurs] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
-  const estAdmin = roleUtilisateur === 'ADMIN'
+  // P35 : la gestion des utilisateurs & rôles est réservée au Super
+  // Administrateur (l'Administrateur de chaîne voit le reste d'Administration).
+  const estSuperAdmin = roleUtilisateur === 'SUPER_ADMIN' || roleUtilisateur === 'ADMIN'
 
   useEffect(() => {
     rafraichir()
@@ -84,7 +86,7 @@ export default function Administration({ roleUtilisateur }) {
       <TableauTranches tranches={tranches} onRafraichir={rafraichir} />
       <TableauChaines chaines={chaines} onRafraichir={rafraichir} />
 
-      {estAdmin && (
+      {estSuperAdmin && (
         <TableauUtilisateurs utilisateurs={utilisateurs} utilisateurActif={lireUtilisateur()} onRafraichir={rafraichir} />
       )}
 

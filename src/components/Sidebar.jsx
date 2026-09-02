@@ -5,7 +5,9 @@ import Marque from './Marque.jsx'
 // `repliee` (retouche post-P29) : rail d'icônes desktop, distinct du tiroir
 // mobile `ouverte`/`onFermer` ci-dessous — les deux mécanismes coexistent,
 // le repli n'a aucun sens sur le tiroir mobile qui se ferme déjà entièrement.
-export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges = {}, repliee = false, onBasculerReplier }) {
+// `sections` (P35) : liste filtrée selon le rôle (défaut = toutes). Aucune
+// autre différence — le rendu reste identique.
+export default function Sidebar({ section, sections = SECTIONS, onNaviguer, ouverte, onFermer, badges = {}, repliee = false, onBasculerReplier }) {
   return (
     <>
       {ouverte && <div className="fixed inset-0 z-20 bg-black/30 lg:hidden" onClick={onFermer} />}
@@ -21,7 +23,7 @@ export default function Sidebar({ section, onNaviguer, ouverte, onFermer, badges
           </button>
         </div>
         <nav className="flex-1 space-y-1 px-2 pb-4">
-          {SECTIONS.map(({ id, label, icone: Icone }) => (
+          {sections.map(({ id, label, icone: Icone }) => (
             <button
               key={id}
               type="button"

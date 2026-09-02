@@ -4,10 +4,13 @@ import Marque from './Marque.jsx'
 
 export default function TopBar({
   utilisateur,
+  nomAffiche,
+  roleLabel,
   onDeconnexion,
   onToggleSidebar,
   chaineActive,
   onChangerChaine,
+  chaineVerrouillee = false,
   onOuvrirRecherche,
   onOuvrirNotifications,
   nbNotificationsNonLues = 0,
@@ -37,17 +40,21 @@ export default function TopBar({
         <div className="flex items-start gap-2">
           <img src={chaineActive.logo} alt={chaineActive.nom} className="h-8 w-8 shrink-0 object-contain" />
           <div className="flex flex-col">
-            <select
-              value={chaineActive.code}
-              onChange={(e) => onChangerChaine(e.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700"
-            >
-              {CHAINES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
+            {chaineVerrouillee ? (
+              <span className="px-2 py-1 text-sm font-medium text-slate-700">{chaineActive.nom}</span>
+            ) : (
+              <select
+                value={chaineActive.code}
+                onChange={(e) => onChangerChaine(e.target.value)}
+                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700"
+              >
+                {CHAINES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.nom}
+                  </option>
+                ))}
+              </select>
+            )}
             <span className="text-xs text-slate-500">{chaineActive.ligneEditoriale}</span>
           </div>
         </div>
@@ -68,7 +75,10 @@ export default function TopBar({
           </button>
           <span className="flex items-center gap-1.5 text-sm text-slate-600">
             <UserRound size={16} />
-            {utilisateur}
+            <span className="flex flex-col leading-tight">
+              <span>{nomAffiche || utilisateur}</span>
+              {roleLabel && <span className="text-[11px] text-slate-400">{roleLabel}</span>}
+            </span>
           </span>
           <button
             type="button"
