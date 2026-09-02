@@ -67,6 +67,28 @@ export function urlAttestation(chemin) {
   return supabase.storage.from('attestations').getPublicUrl(chemin).data.publicUrl
 }
 
+// --- bible (P35b : PDF descriptif + OCR simulé + synopsis FR/AR simulé) ---
+
+export async function obtenirBible(programmeId) {
+  return verifie(await supabase.from('bible').select('*').eq('programme_id', programmeId).maybeSingle())
+}
+
+export async function enregistrerBible(programmeId, champs) {
+  return verifiePremiere(
+    await supabase.from('bible').upsert({ programme_id: programmeId, ...champs }, { onConflict: 'programme_id' }).select()
+  )
+}
+
+export async function televerserBible(programmeId, fichier) {
+  const chemin = `${programmeId}/${fichier.name}`
+  verifie(await supabase.storage.from('bibles').upload(chemin, fichier, { upsert: true }))
+  return chemin
+}
+
+export function urlBible(chemin) {
+  return supabase.storage.from('bibles').getPublicUrl(chemin).data.publicUrl
+}
+
 // --- episode ---
 
 export async function listerEpisodes(programmeId) {

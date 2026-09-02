@@ -25,6 +25,8 @@ import PanneauNotifications from './components/PanneauNotifications.jsx'
 import Accueil from './screens/Accueil.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
+import Bible from './screens/Bible.jsx'
+import Synopsis from './screens/Synopsis.jsx'
 import GrilleType from './screens/GrilleType.jsx'
 import GrilleLineaire from './screens/GrilleLineaire.jsx'
 import AutoProgrammation from './screens/AutoProgrammation.jsx'
@@ -37,6 +39,8 @@ const ECRANS = {
   ACCUEIL: Accueil,
   PROGRAMMES: Programmes,
   CONTRATS: Contrats,
+  BIBLE: Bible,
+  SYNOPSIS: Synopsis,
   GRILLE_TYPE: GrilleType,
   GRILLE_LINEAIRE: GrilleLineaire,
   AUTO_PROGRAMMATION: AutoProgrammation,
