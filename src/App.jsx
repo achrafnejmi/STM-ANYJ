@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
 import { lireChaineActive, definirChaineActive, chargerChaines, CHAINES } from './lib/chaines.js'
 import { SECTIONS, sectionVersHash, hashVersSection } from './lib/navigation.js'
-import { peutVoirSection, premiereSection, chaineVerrouillee, libelleRole } from './lib/roles.js'
+import { peutVoirSection, premiereSection, chaineVerrouillee, libelleRole, notificationVisible } from './lib/roles.js'
 import { get as lireStockage, set as ecrireStockage } from './lib/storage.js'
 import { chargerGenres } from './lib/genres.js'
 import { chargerTranches } from './lib/tranches.js'
@@ -33,6 +33,8 @@ import AutoProgrammation from './screens/AutoProgrammation.jsx'
 import PlanMedia from './screens/PlanMedia.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
+import PilotageDroitsStock from './screens/PilotageDroitsStock.jsx'
+import SuiviPad from './screens/SuiviPad.jsx'
 import ControlePad from './screens/ControlePad.jsx'
 import Administration from './screens/Administration.jsx'
 
@@ -48,6 +50,8 @@ const ECRANS = {
   PLAN_MEDIA: PlanMedia,
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
+  PILOTAGE_DROITS_STOCK: PilotageDroitsStock,
+  SUIVI_PAD: SuiviPad,
   CONTROLE_PAD: ControlePad,
   ADMINISTRATION: Administration,
 }
@@ -259,6 +263,14 @@ function App() {
       naviguer('GRILLE_NON_LINEAIRE')
       return
     }
+    if (n.type === 'DEMANDE_PAD' || n.type === 'RELANCE_PAD') {
+      naviguer('CONTROLE_PAD')
+      return
+    }
+    if (n.type === 'DECISION_PAD') {
+      naviguer('SUIVI_PAD')
+      return
+    }
     if (n.programme_id) ouvrirProgramme(n.programme_id, n.type === 'DROITS_PROCHES' ? 'DROITS' : undefined)
   }
 
@@ -268,6 +280,10 @@ function App() {
   }
 
   const Ecran = ECRANS[section]
+
+  // Cloche filtrée par rôle (P36) : une notification routée (destinataire_role
+  // non nul) n'apparaît que pour le rôle visé (et le Super Administrateur).
+  const notificationsVisibles = notifications.filter((n) => notificationVisible(n, roleUtilisateur))
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -293,7 +309,7 @@ function App() {
           chaineVerrouillee={chaineVerrouillee(roleUtilisateur)}
           onOuvrirRecherche={() => setRechercheOuverte(true)}
           onOuvrirNotifications={() => setNotificationsOuvertes(true)}
-          nbNotificationsNonLues={notifications.filter((n) => !n.lu).length}
+          nbNotificationsNonLues={notificationsVisibles.filter((n) => !n.lu).length}
         />
         <main className="flex-1 overflow-y-auto p-6">
           <Ecran
@@ -314,7 +330,7 @@ function App() {
       />
       {notificationsOuvertes && (
         <PanneauNotifications
-          notifications={notifications}
+          notifications={notificationsVisibles}
           onFermer={() => setNotificationsOuvertes(false)}
           onAller={allerNotification}
           onMarquerToutesLues={marquerToutesLues}

@@ -73,6 +73,12 @@ export async function obtenirBible(programmeId) {
   return verifie(await supabase.from('bible').select('*').eq('programme_id', programmeId).maybeSingle())
 }
 
+// Toutes les bibles, colonnes légères — pour afficher le lien PDF de revue par
+// programme (Contrôle PAD, P36) sans une requête par ligne.
+export async function listerBibles() {
+  return verifie(await supabase.from('bible').select('programme_id, fichier_chemin, ocr_texte'))
+}
+
 export async function enregistrerBible(programmeId, champs) {
   return verifiePremiere(
     await supabase.from('bible').upsert({ programme_id: programmeId, ...champs }, { onConflict: 'programme_id' }).select()

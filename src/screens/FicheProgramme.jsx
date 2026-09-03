@@ -458,6 +458,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       {onglet === 'EPISODES' && id && (
         <EpisodesPanel
           programmeId={id}
+          programmeTitre={form.titre}
           chaineActive={chaineActive}
           roleUtilisateur={roleUtilisateur}
           onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)}

@@ -7,9 +7,11 @@ import {
   supprimerEpisode,
   listerDiffusionsLineairesParProgramme,
   creerDemandePad,
+  creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { peutDemanderPad } from '../lib/roles.js'
+import { messageDemandePad } from '../lib/notifications.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
@@ -45,7 +47,7 @@ function versFormulaire(episode) {
   }
 }
 
-export default function EpisodesPanel({ programmeId, chaineActive, roleUtilisateur, onEpisodesChange }) {
+export default function EpisodesPanel({ programmeId, programmeTitre, chaineActive, roleUtilisateur, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -177,6 +179,16 @@ export default function EpisodesPanel({ programmeId, chaineActive, roleUtilisate
         demandeur: lireUtilisateur(),
         motif: motif.trim() || null,
       })
+      await creerNotifications([
+        {
+          chaine_id: chaineActive.id,
+          type: 'DEMANDE_PAD',
+          destinataire_role: 'CONTROLE_PAD',
+          programme_id: programmeId,
+          message: messageDemandePad(programmeTitre || 'Programme', form.numero === '' ? null : Number(form.numero)),
+          lu: false,
+        },
+      ])
       notifier.succes('Demande de validation PAD envoyée au Contrôle PAD.')
     } catch (err) {
       setErreur(err.message)

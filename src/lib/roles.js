@@ -32,6 +32,8 @@ const TOUTES = [
   'ADMINISTRATION',
   'BIBLE',
   'SYNOPSIS',
+  'PILOTAGE_DROITS_STOCK',
+  'SUIVI_PAD',
   'CONTROLE_PAD',
 ]
 
@@ -51,10 +53,11 @@ export const SECTIONS_PAR_ROLE = {
   ],
   PROGRAMMATEUR: ['GRILLE_TYPE', 'GRILLE_LINEAIRE'],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
-  // Comme ACQUISITIONS pour les écrans (Programmes + Contrats & droits), mais
-  // c'est le seul rôle (avec le Super Admin) habilité à émettre une nouvelle
-  // demande de validation PAD depuis le panneau Épisodes — cf. peutDemanderPad.
-  GESTION_DROITS_STOCK: ['PROGRAMMES', 'CONTRATS'],
+  // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
+  // tableau de bord dédié + suivi des demandes, en plus de Programmes et
+  // Contrats & droits. Seul rôle (avec le Super Admin) habilité à émettre une
+  // demande de validation PAD — cf. peutDemanderPad.
+  GESTION_DROITS_STOCK: ['PILOTAGE_DROITS_STOCK', 'SUIVI_PAD', 'PROGRAMMES', 'CONTRATS'],
   DOCUMENTALISTE: ['BIBLE'],
   REDACTEUR: ['SYNOPSIS'],
   CONTROLE_PAD: ['CONTROLE_PAD'],
@@ -88,6 +91,13 @@ export function chaineVerrouillee(role) {
 // Administrateur qui voit tout.
 export function peutDemanderPad(role) {
   return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
+}
+
+// Cloche de notifications (P36) : une notification sans destinataire_role est
+// visible par toute la chaîne (comportement P29) ; sinon seul le rôle visé — et
+// le Super Administrateur, qui supervise tout — la voit.
+export function notificationVisible(notif, role) {
+  return notif.destinataire_role == null || notif.destinataire_role === role || role === 'SUPER_ADMIN'
 }
 
 export function libelleRole(code) {

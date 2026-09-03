@@ -27,6 +27,25 @@ export function messagePublicationNonLineaire(titreProgramme, plateforme) {
   return `« ${titreProgramme} » publié en non-linéaire${plateforme ? ` sur ${plateforme}` : ''}`
 }
 
+// Circuit PAD (P36), événements ponctuels routés par rôle (destinataire_role) :
+// DEMANDE_PAD / RELANCE_PAD → Contrôle PAD ; DECISION_PAD → Gestion des droits
+// et du stock.
+function etiquetteEpisode(titreProgramme, numeroEp) {
+  return `« ${titreProgramme} »${numeroEp != null ? ` — ÉP. ${numeroEp}` : ''}`
+}
+
+export function messageDemandePad(titreProgramme, numeroEp) {
+  return `${etiquetteEpisode(titreProgramme, numeroEp)} : demande de validation PAD`
+}
+
+export function messageRelancePad(titreProgramme, numeroEp, nbRelances) {
+  return `${etiquetteEpisode(titreProgramme, numeroEp)} : relance n°${nbRelances} pour la validation PAD`
+}
+
+export function messageDecisionPad(titreProgramme, numeroEp, statut) {
+  return `${etiquetteEpisode(titreProgramme, numeroEp)} : validation PAD ${statut === 'ACCEPTEE' ? 'acceptée' : 'refusée'}`
+}
+
 // Lignes DROITS_PROCHES manquantes pour une chaîne : fenêtres actuellement
 // proches de la fermeture qui n'ont pas encore de notification existante
 // (notificationsExistantes = déjà chargées par l'appelant, App.jsx).

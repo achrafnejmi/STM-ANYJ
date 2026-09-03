@@ -179,6 +179,19 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   *Test : se connecter comme chaque utilisateur de démo, vérifier la Sidebar et les redirections ;
   demande PAD → traitement par le Contrôle PAD → épisode passe PAD ; publication → PUBLIÉ →
   notification dédiée dans la cloche.*
+- **P36 — Espaces spécialisés par rôle (Gestion des droits & du stock, Contrôle PAD)** ✅ LIVRÉ
+  (hors feuille de route) : application du principe « chaque rôle → écrans et données taillés
+  pour sa spécialité ». Nouveau rôle `GESTION_DROITS_STOCK` (Oumnia) avec un **tableau de bord
+  dédié** (KPI droits / stock / circuit PAD, réutilise `bilans.js`) et un écran **Suivi PAD**
+  (initialiser une demande, relancer le Contrôle PAD, historique des décisions — jamais la mise
+  en PAD). L'**entité PAD** (`CONTROLE_PAD`) reçoit les demandes, voit **tout le catalogue**
+  d'épisodes (filtre Tous / Non PAD / Demande, statut PAD, lien Bible PDF de revue) et fait la
+  mise en PAD. **Notifications routées par rôle** (`notification.destinataire_role`) :
+  `DEMANDE_PAD` / `RELANCE_PAD` → Contrôle PAD, `DECISION_PAD` → Gestion des droits & du stock ;
+  la cloche filtre sur le rôle (Super Admin voit tout). Migration : `migration-p40.sql`.
+  *Test : Oumnia (Pilotage droits & stock + Suivi PAD) initialise puis relance une demande →
+  Nabil (Contrôle PAD) la voit avec genre/durée/Bible, accepte → l'épisode passe PAD → Oumnia
+  reçoit la décision dans sa cloche.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

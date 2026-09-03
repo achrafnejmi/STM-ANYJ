@@ -1,9 +1,12 @@
-import { X, BellRing, PlusCircle, TriangleAlert, CheckCheck, Share2 } from 'lucide-react'
+import { X, BellRing, PlusCircle, TriangleAlert, CheckCheck, Share2, BadgeCheck } from 'lucide-react'
 
 const ICONES_TYPE = {
   NOUVEAU_PROGRAMME: { Icone: PlusCircle, classe: 'text-emerald-600' },
   DROITS_PROCHES: { Icone: TriangleAlert, classe: 'text-amber-600' },
   PUBLICATION_NON_LINEAIRE: { Icone: Share2, classe: 'text-indigo-600' },
+  DEMANDE_PAD: { Icone: BadgeCheck, classe: 'text-snrt-blue' },
+  RELANCE_PAD: { Icone: BellRing, classe: 'text-snrt-orange' },
+  DECISION_PAD: { Icone: CheckCheck, classe: 'text-snrt-green' },
 }
 
 function formaterHorodatage(iso) {
