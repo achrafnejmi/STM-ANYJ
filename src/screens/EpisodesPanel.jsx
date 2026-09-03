@@ -6,12 +6,14 @@ import {
   mettreAJourEpisode,
   supprimerEpisode,
   listerDiffusionsLineairesParProgramme,
+  listerDemandesPadParProgramme,
   creerDemandePad,
+  mettreAJourDemandePad,
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
-import { peutDemanderPad, peutMettreEnPad } from '../lib/roles.js'
-import { messageDemandePad } from '../lib/notifications.js'
+import { peutDemanderPad, peutMettreEnPad, peutRelancerPad } from '../lib/roles.js'
+import { messageDemandePad, messageRelancePad } from '../lib/notifications.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
@@ -22,6 +24,16 @@ const ONGLETS = [
   { id: 'SUPPORTS', label: 'Supports' },
   { id: 'EVENEMENTS', label: 'Événements secondaires' },
 ]
+
+const MS_24H = 24 * 3600 * 1000
+
+// `cree_le` / `derniere_relance_le` d'une demande PAD sont des timestamptz.
+function formaterHorodatage(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 const EPISODE_VIDE = {
   numero: '',
@@ -58,6 +70,7 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
   const [valeurInitiale, setValeurInitiale] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [demandePad, setDemandePad] = useState(false)
+  const [demandesPad, setDemandesPad] = useState([])
   const idDescription = useId()
   const idPad = useId()
   const notifier = useNotification()
@@ -71,12 +84,14 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
   async function rafraichir() {
     setChargement(true)
     try {
-      const [lignes, lignesDiffusions] = await Promise.all([
+      const [lignes, lignesDiffusions, lignesDemandes] = await Promise.all([
         listerEpisodes(programmeId),
         listerDiffusionsLineairesParProgramme(programmeId),
+        listerDemandesPadParProgramme(programmeId),
       ])
       setEpisodes(lignes)
       setDiffusions(lignesDiffusions)
+      setDemandesPad(lignesDemandes)
       onEpisodesChange?.(lignes)
     } catch (err) {
       setErreur(err.message)
@@ -89,6 +104,17 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
   // remplacent la lecture des colonnes statiques episode.derniere_diffusion /
   // nombre_diffusions, jamais recalculées depuis la suppression de l'import xlsx.
   const historiqueParEpisode = useMemo(() => calculerParEpisode(diffusions), [diffusions])
+
+  // Demande PAD en cours pour l'épisode sélectionné (P36) : décide si l'on
+  // propose « Demander la validation PAD » (aucune demande) ou « Relancer »
+  // (demande déjà en attente — pour les rôles qui font le suivi).
+  const demandePadEnAttente = useMemo(
+    () => demandesPad.find((d) => d.episode_id === episodeId && d.statut === 'EN_ATTENTE') ?? null,
+    [demandesPad, episodeId]
+  )
+  const relancePadPossible =
+    !demandePadEnAttente?.derniere_relance_le ||
+    Date.now() - new Date(demandePadEnAttente.derniere_relance_le).getTime() >= MS_24H
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : changer d'épisode
   // sélectionné ou ouvrir "nouvel épisode" abandonnerait silencieusement la
@@ -195,6 +221,39 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
       )
       onNotificationCreee?.()
       notifier.succes('Demande de validation PAD transmise au Contrôle PAD et au suivi du stock.')
+      rafraichir()
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setDemandePad(false)
+    }
+  }
+
+  // Relance d'une demande PAD déjà en attente (P36) — suivi du circuit par la
+  // Gestion des droits et du stock, sans jamais mettre l'épisode en PAD.
+  async function relancerValidationPad() {
+    if (!demandePadEnAttente) return
+    setDemandePad(true)
+    setErreur(null)
+    try {
+      const nb = (demandePadEnAttente.relances ?? 0) + 1
+      await mettreAJourDemandePad(demandePadEnAttente.id, {
+        relances: nb,
+        derniere_relance_le: new Date().toISOString(),
+      })
+      await creerNotifications([
+        {
+          chaine_id: chaineActive.id,
+          type: 'RELANCE_PAD',
+          destinataire_role: 'CONTROLE_PAD',
+          programme_id: programmeId,
+          message: messageRelancePad(programmeTitre || 'Programme', form.numero === '' ? null : Number(form.numero), nb),
+          lu: false,
+        },
+      ])
+      onNotificationCreee?.()
+      notifier.succes(`Relance n°${nb} envoyée au Contrôle PAD.`)
+      rafraichir()
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -344,16 +403,39 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                       <span className="text-xs text-slate-400">— mise en PAD réservée au Contrôle PAD</span>
                     )}
                   </label>
-                  {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && peutDemanderPad(roleUtilisateur) && (
-                    <div>
-                      <button
-                        type="button"
-                        onClick={demanderValidationPad}
-                        disabled={demandePad}
-                        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        {demandePad ? 'Envoi…' : 'Demander la validation PAD'}
-                      </button>
+                  {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && (
+                    <div className="space-y-1">
+                      {demandePadEnAttente ? (
+                        <>
+                          <p className="text-xs text-slate-500">
+                            Demande PAD en attente — envoyée le {formaterHorodatage(demandePadEnAttente.cree_le)}
+                            {demandePadEnAttente.relances > 0 &&
+                              ` · ${demandePadEnAttente.relances} relance${demandePadEnAttente.relances > 1 ? 's' : ''}`}
+                          </p>
+                          {peutRelancerPad(roleUtilisateur) && (
+                            <button
+                              type="button"
+                              onClick={relancerValidationPad}
+                              disabled={demandePad || !relancePadPossible}
+                              title={relancePadPossible ? 'Relancer le Contrôle PAD' : 'Déjà relancé il y a moins de 24 h'}
+                              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              {demandePad ? 'Envoi…' : 'Relancer la validation PAD'}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        peutDemanderPad(roleUtilisateur) && (
+                          <button
+                            type="button"
+                            onClick={demanderValidationPad}
+                            disabled={demandePad}
+                            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            {demandePad ? 'Envoi…' : 'Demander la validation PAD'}
+                          </button>
+                        )
+                      )}
                     </div>
                   )}
                   {episodeId !== 'NOUVEAU' && (

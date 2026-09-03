@@ -708,6 +708,14 @@ export async function listerDemandesPadParChaine(chaineId) {
   )
 }
 
+// Demandes PAD d'un programme (panneau Épisodes : savoir si l'épisode courant
+// a déjà une demande en cours → proposer « Relancer » plutôt que « Demander »).
+export async function listerDemandesPadParProgramme(programmeId) {
+  return verifie(
+    await supabase.from('demande_pad').select('*').eq('programme_id', programmeId).order('cree_le', { ascending: false })
+  )
+}
+
 export async function creerDemandePad(champs) {
   return verifiePremiere(await supabase.from('demande_pad').insert(champs).select())
 }

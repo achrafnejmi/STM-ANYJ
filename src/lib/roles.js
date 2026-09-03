@@ -113,6 +113,13 @@ export function peutMettreEnPad(role) {
   return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'ACQUISITIONS'
 }
 
+// Relance d'une demande PAD déjà en cours (suivi du circuit) : la Gestion des
+// droits et du stock, plus le Super Admin. Le Programmateur, lui, ne fait
+// qu'initier (peutDemanderPad).
+export function peutRelancerPad(role) {
+  return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
+}
+
 // Cloche de notifications (P36) : une notification sans destinataire_role est
 // visible par toute la chaîne (comportement P29) ; sinon seul le rôle visé — et
 // le Super Administrateur, qui supervise tout — la voit.
