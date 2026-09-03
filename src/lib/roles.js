@@ -141,6 +141,20 @@ export function peutTraiterDemandeProgrammation(role) {
   return role === 'ADMIN_CHAINE' || role === 'SUPER_ADMIN'
 }
 
+// Déposer / remplacer la bible d'un programme (panneau Métadonnées de la fiche).
+// La consultation est ouverte à tous ceux qui atteignent la fiche ; le dépôt est
+// réservé au catalogage, à la Gestion des droits et du stock, au Documentaliste,
+// à l'Admin de chaîne et au Super Admin — pas au Programmateur.
+export function peutGererBible(role) {
+  return (
+    role === 'SUPER_ADMIN' ||
+    role === 'ADMIN_CHAINE' ||
+    role === 'ACQUISITIONS' ||
+    role === 'GESTION_DROITS_STOCK' ||
+    role === 'DOCUMENTALISTE'
+  )
+}
+
 // Cloche de notifications (P36) : une notification sans destinataire_role est
 // visible par toute la chaîne (comportement P29) ; sinon seul le rôle visé — et
 // le Super Administrateur, qui supervise tout — la voit.

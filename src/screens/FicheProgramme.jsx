@@ -19,6 +19,7 @@ import { messageNouveauProgramme, messageDemandeProgAT } from '../lib/notificati
 import { peutGererCatalogue, peutDemanderProgrammation } from '../lib/roles.js'
 import { chaineAutoriseeProgramme, estExclusifAutreChaine } from '../lib/exclusivite.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
+import PanneauBible from '../components/PanneauBible.jsx'
 import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
 import Toggle from '../components/Toggle.jsx'
@@ -519,6 +520,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         )}
 
         {onglet === 'METADONNEES' && (
+          <>
           <form onSubmit={enregistrer} className="space-y-4">
             <div className="grid grid-cols-[10rem_1fr] gap-6">
               <div className="flex flex-col gap-1">
@@ -564,6 +566,8 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </form>
+          {id && <div className="mt-6"><PanneauBible programmeId={id} roleUtilisateur={roleUtilisateur} /></div>}
+          </>
         )}
       </div>
 
