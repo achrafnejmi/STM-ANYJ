@@ -46,6 +46,23 @@ export function messageDecisionPad(titreProgramme, numeroEp, statut) {
   return `${etiquetteEpisode(titreProgramme, numeroEp)} : validation PAD ${statut === 'ACCEPTEE' ? 'acceptée' : 'refusée'}`
 }
 
+// Circuit « demande de programmation » d'un titre exclusif (P37), routé par rôle :
+// A_TRANSMETTRE → Admin de la chaîne demandeuse ; SOUMISE → Admin de la chaîne
+// détentrice ; DECISION → Admin demandeur (ou Programmateur si rejet interne).
+export function messageDemandeProgAT(titreProgramme, chaineDemandeuse) {
+  return `« ${titreProgramme} » — demande de programmation de ${chaineDemandeuse} à transmettre`
+}
+
+export function messageDemandeProgSoumise(titreProgramme, chaineDemandeuse) {
+  return `« ${titreProgramme} » — ${chaineDemandeuse} demande à programmer ce titre exclusif`
+}
+
+export function messageDemandeProgDecision(titreProgramme, statut) {
+  const issue =
+    statut === 'ACCEPTEE' ? 'approuvée' : statut === 'REJETEE_INTERNE' ? 'non transmise' : 'refusée'
+  return `« ${titreProgramme} » — demande de programmation ${issue}`
+}
+
 // Cible d'un clic sur une notification (P36) : section(s) « source » par ordre de
 // préférence. L'appelant (App.jsx) navigue vers la première que le rôle courant
 // peut voir ; si aucune (ou type absent d'ici), il ouvre la fiche du programme
@@ -55,8 +72,12 @@ export const SECTIONS_CIBLE_NOTIFICATION = {
   RELANCE_PAD: ['CONTROLE_PAD', 'SUIVI_PAD'],
   DECISION_PAD: ['SUIVI_PAD', 'CONTROLE_PAD'],
   PUBLICATION_NON_LINEAIRE: ['GRILLE_NON_LINEAIRE'],
+  DEMANDE_PROG_A_TRANSMETTRE: ['DEMANDES_PROGRAMMATION'],
+  DEMANDE_PROG_SOUMISE: ['DEMANDES_PROGRAMMATION'],
+  DEMANDE_PROG_DECISION: ['DEMANDES_PROGRAMMATION'],
   // NOUVEAU_PROGRAMME / DROITS_PROCHES : pas de section dédiée → ouverture de la
-  // fiche programme (onglet Droits pour une alerte de fin de droits).
+  // fiche programme (onglet Droits pour une alerte de fin de droits). Idem si le
+  // rôle ne voit pas la section cible (ex. Programmateur → rejet interne).
 }
 
 // Lignes DROITS_PROCHES manquantes pour une chaîne : fenêtres actuellement

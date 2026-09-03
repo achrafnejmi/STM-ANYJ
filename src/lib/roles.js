@@ -35,6 +35,7 @@ const TOUTES = [
   'PILOTAGE_DROITS_STOCK',
   'SUIVI_PAD',
   'CONTROLE_PAD',
+  'DEMANDES_PROGRAMMATION',
 ]
 
 export const SECTIONS_PAR_ROLE = {
@@ -49,6 +50,7 @@ export const SECTIONS_PAR_ROLE = {
     'PLAN_MEDIA',
     'GRILLE_NON_LINEAIRE',
     'CONDUCTEUR',
+    'DEMANDES_PROGRAMMATION',
     'ADMINISTRATION',
   ],
   // Travaille depuis la grille (principe : « la grille est le produit ») mais a
@@ -118,6 +120,25 @@ export function peutMettreEnPad(role) {
 // qu'initier (peutDemanderPad).
 export function peutRelancerPad(role) {
   return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
+}
+
+// Gestion du catalogue (P37) : créer / supprimer un programme, éditer son
+// exclusivité. Réservé au catalogage (Acquisitions), à l'Admin de chaîne et au
+// Super Admin — un Programmateur n'ajoute pas de programme.
+export function peutGererCatalogue(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'ACQUISITIONS'
+}
+
+// Initier une demande de programmation d'un titre exclusif à une autre chaîne
+// (P37) : le Programmateur, plus le Super Admin.
+export function peutDemanderProgrammation(role) {
+  return role === 'PROGRAMMATEUR' || role === 'SUPER_ADMIN'
+}
+
+// Traiter une demande de programmation (transmettre / rejeter / approuver /
+// refuser) : l'Administrateur de chaîne, plus le Super Admin.
+export function peutTraiterDemandeProgrammation(role) {
+  return role === 'ADMIN_CHAINE' || role === 'SUPER_ADMIN'
 }
 
 // Cloche de notifications (P36) : une notification sans destinataire_role est

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { ArrowLeft, Paperclip, Loader2, Trash2 } from 'lucide-react'
 import {
   obtenirProgramme,
@@ -8,12 +8,16 @@ import {
   televerserAttestation,
   urlAttestation,
   listerEpisodes,
+  listerDemandesProgrammationParProgramme,
+  creerDemandeProgrammation,
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
-import { messageNouveauProgramme } from '../lib/notifications.js'
+import { messageNouveauProgramme, messageDemandeProgAT } from '../lib/notifications.js'
+import { peutGererCatalogue, peutDemanderProgrammation } from '../lib/roles.js'
+import { chaineAutoriseeProgramme, estExclusifAutreChaine } from '../lib/exclusivite.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import FenetresDroitsPanel from '../components/FenetresDroitsPanel.jsx'
 import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
@@ -98,6 +102,8 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   const [erreur, setErreur] = useState(null)
   const [nombreEpisodes, setNombreEpisodes] = useState(0)
   const [televersementEnCours, setTeleversementEnCours] = useState(false)
+  const [demandesProg, setDemandesProg] = useState([])
+  const [envoiDemandeProg, setEnvoiDemandeProg] = useState(false)
   const idDescription = useId()
   const idExclusif = useId()
   const notifier = useNotification()
@@ -119,6 +125,17 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       .then((lignes) => setNombreEpisodes(lignes.length))
       .catch(() => {})
   }, [id])
+
+  const rafraichirDemandesProg = useCallback(() => {
+    if (!id) return
+    listerDemandesProgrammationParProgramme(id)
+      .then(setDemandesProg)
+      .catch(() => {})
+  }, [id])
+
+  useEffect(() => {
+    rafraichirDemandesProg()
+  }, [rafraichirDemandesProg])
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) — reporté à
   // Programmes.jsx pour protéger une réouverture externe (recherche globale,
@@ -249,8 +266,68 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     }
   }
 
+  // Exclusivité inter-chaînes (P37) : ce titre est-il exclusif à une AUTRE
+  // chaîne que celle active, et cette chaîne a-t-elle déjà l'autorisation ?
+  const estExclusifAutre = !!programme && estExclusifAutreChaine(programme, chaineActive.id)
+  const dejaAutorise = !!programme && chaineAutoriseeProgramme(programme, chaineActive.id)
+  const demandeProgActive = demandesProg.find(
+    (d) => d.chaine_demandeuse_id === chaineActive.id && ['A_TRANSMETTRE', 'SOUMISE'].includes(d.statut)
+  )
+  const nomChaineExclu = estExclusifAutre ? CHAINES.find((c) => c.id === programme.chaine_id)?.nom ?? 'autre chaîne' : null
+
+  async function demanderProgrammation() {
+    if (!programme) return
+    const motif = window.prompt('Motif de la demande de programmation (optionnel) :', '')
+    if (motif === null) return
+    setEnvoiDemandeProg(true)
+    setErreur(null)
+    try {
+      await creerDemandeProgrammation({
+        programme_id: programme.id,
+        chaine_demandeuse_id: chaineActive.id,
+        chaine_exclusive_id: programme.chaine_id,
+        demandeur: lireUtilisateur(),
+        motif: motif.trim() || null,
+      })
+      await creerNotifications([
+        {
+          chaine_id: chaineActive.id,
+          type: 'DEMANDE_PROG_A_TRANSMETTRE',
+          destinataire_role: 'ADMIN_CHAINE',
+          programme_id: programme.id,
+          message: messageDemandeProgAT(programme.titre, chaineActive.nom),
+          lu: false,
+        },
+      ])
+      onNotificationCreee?.()
+      notifier.succes('Demande de programmation envoyée à votre administrateur de chaîne.')
+      rafraichirDemandesProg()
+    } catch (err) {
+      setErreur(err.message)
+      notifier.erreur(err.message)
+    } finally {
+      setEnvoiDemandeProg(false)
+    }
+  }
+
   if (chargement) {
     return <p className="text-sm text-slate-500">Chargement…</p>
+  }
+
+  // Un rôle sans gestion du catalogue ne crée pas de programme (P37).
+  if (!id && !peutGererCatalogue(roleUtilisateur)) {
+    return (
+      <div className="space-y-4">
+        <button type="button" onClick={onRetour} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700">
+          <ArrowLeft size={16} />
+          Retour à la liste
+        </button>
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          La création d'un programme est réservée au catalogage (Acquisitions), à l'administrateur de chaîne et au
+          super administrateur.
+        </p>
+      </div>
+    )
   }
 
   const langueInfo = LANGUES.find((l) => l.id === langueActive)
@@ -266,7 +343,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           <ArrowLeft size={16} />
           Retour à la liste
         </button>
-        {id && (
+        {id && peutGererCatalogue(roleUtilisateur) && (
           <button
             type="button"
             onClick={supprimer}
@@ -345,49 +422,84 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <Toggle
-                  id={idExclusif}
-                  checked={form.exclusif}
-                  onChange={(v) =>
-                    setForm({
-                      ...form,
-                      exclusif: v,
-                      chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
-                    })
-                  }
-                  label="Exclusif à cette chaîne"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      exclusif: !form.exclusif,
-                      chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
-                    })
-                  }
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Exclusif à cette chaîne
-                </button>
+            {estExclusifAutre ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-medium text-slate-700">Exclusif à {nomChaineExclu}</p>
+                {dejaAutorise ? (
+                  <p className="mt-1 text-sm text-emerald-700">
+                    ✓ {chaineActive.nom} est autorisée à programmer ce titre.
+                  </p>
+                ) : demandeProgActive ? (
+                  <p className="mt-1 text-sm text-amber-700">
+                    Demande de programmation en cours —{' '}
+                    {demandeProgActive.statut === 'A_TRANSMETTRE'
+                      ? 'en attente de votre administrateur de chaîne'
+                      : "transmise, en attente de l'administrateur de " + nomChaineExclu}
+                    .
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Ce titre n'est pas programmable par {chaineActive.nom} sans l'accord de {nomChaineExclu}.
+                    </p>
+                    {peutDemanderProgrammation(roleUtilisateur) && (
+                      <button
+                        type="button"
+                        onClick={demanderProgrammation}
+                        disabled={envoiDemandeProg}
+                        className="mt-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {envoiDemandeProg ? 'Envoi…' : 'Demander à bénéficier de ce programme'}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Programme partagé par toutes les chaînes par défaut ; activez pour le réserver à une chaîne.
-              </p>
-              {form.exclusif && (
-                <div className="mt-3 max-w-xs">
-                  <ChampSelect
-                    label="Chaîne exclusive"
-                    required
-                    value={form.chaineExclusiveId}
-                    onChange={(v) => setForm({ ...form, chaineExclusiveId: v })}
-                    options={CHAINES.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+            ) : (
+              <div>
+                <div className="flex items-center gap-3">
+                  <Toggle
+                    id={idExclusif}
+                    checked={form.exclusif}
+                    onChange={(v) =>
+                      setForm({
+                        ...form,
+                        exclusif: v,
+                        chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
+                      })
+                    }
+                    label="Exclusif à cette chaîne"
                   />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        exclusif: !form.exclusif,
+                        chaineExclusiveId: form.chaineExclusiveId || chaineActive.id,
+                      })
+                    }
+                    className="text-sm font-medium text-slate-700"
+                  >
+                    Exclusif à cette chaîne
+                  </button>
                 </div>
-              )}
-            </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Programme partagé par toutes les chaînes par défaut ; activez pour le réserver à une chaîne.
+                </p>
+                {form.exclusif && (
+                  <div className="mt-3 max-w-xs">
+                    <ChampSelect
+                      label="Chaîne exclusive"
+                      required
+                      value={form.chaineExclusiveId}
+                      onChange={(v) => setForm({ ...form, chaineExclusiveId: v })}
+                      options={CHAINES.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>

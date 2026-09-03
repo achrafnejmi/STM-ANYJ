@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Search, EyeOff, Eye } from 'lucide-react'
+import { ChevronRight, Search, EyeOff, Eye, SquareArrowOutUpRight } from 'lucide-react'
 import {
   listerProgrammesParChaine,
+  listerProgrammesExclusifsAutresChaines,
   listerTousLesEpisodes,
   listerEpisodes,
   listerDiffusionsLineairesParProgramme,
   listerToutesLesFenetresDroits,
 } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
+import { CHAINES } from '../lib/chaines.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
@@ -21,17 +23,25 @@ function formaterDuree(minutes) {
 // RG-07 : contrôle per-épisode, indépendant du toggle "hors droits" (qui
 // porte sur le TITRE) — un épisode non prêt n'est jamais déplaçable, même si
 // son titre a des droits valides.
-function LigneEpisode({ episode, programmeId, dragRef, derniereDiffusion }) {
+function LigneEpisode({ episode, programmeId, dragRef, derniereDiffusion, bloqueExclu = false }) {
   const pret = estEpisodePret(episode)
+  const deplacable = pret && !bloqueExclu
   return (
     <div
-      draggable={pret}
+      draggable={deplacable}
       onDragStart={() => {
+        if (!deplacable) return
         dragRef.current = { episodeId: episode.id, programmeId, numero: episode.numero, duree: episode.duree }
       }}
-      title={pret ? undefined : 'Support non prêt à diffuser (PAD) — non déplaçable'}
+      title={
+        bloqueExclu
+          ? 'Programme exclusif à une autre chaîne — autorisation de programmation requise'
+          : pret
+            ? undefined
+            : 'Support non prêt à diffuser (PAD) — non déplaçable'
+      }
       className={`flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5 text-xs ${
-        pret ? 'cursor-grab hover:bg-slate-50 active:cursor-grabbing' : 'cursor-not-allowed bg-slate-50 opacity-60'
+        deplacable ? 'cursor-grab hover:bg-slate-50 active:cursor-grabbing' : 'cursor-not-allowed bg-slate-50 opacity-60'
       }`}
     >
       <span className="font-mono text-slate-500">ÉP.{String(episode.numero ?? '?').padStart(2, '0')}</span>
@@ -43,7 +53,7 @@ function LigneEpisode({ episode, programmeId, dragRef, derniereDiffusion }) {
   )
 }
 
-export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistorique }) {
+export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistorique, onOuvrirProgramme }) {
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [fenetresDroits, setFenetresDroits] = useState([])
@@ -61,9 +71,19 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
     setChargement(true)
     setErreur(null)
     setProgrammeOuvert(null)
-    Promise.all([listerProgrammesParChaine(chaineActive.id), listerTousLesEpisodes(), listerToutesLesFenetresDroits()])
-      .then(([lignesProgrammes, lignesEpisodes, lignesFenetres]) => {
-        setProgrammes(lignesProgrammes)
+    Promise.all([
+      listerProgrammesParChaine(chaineActive.id),
+      listerProgrammesExclusifsAutresChaines(chaineActive.id),
+      listerTousLesEpisodes(),
+      listerToutesLesFenetresDroits(),
+    ])
+      .then(([lignesProgrammes, lignesExclusifsAutres, lignesEpisodes, lignesFenetres]) => {
+        // P37 : les exclusifs d'autres chaînes (non autorisés) apparaissent en
+        // lecture seule, marqués `bloqueExclu`, non déplaçables.
+        setProgrammes([
+          ...lignesProgrammes,
+          ...lignesExclusifsAutres.map((p) => ({ ...p, bloqueExclu: true })),
+        ])
         setFenetresDroits(lignesFenetres)
         setEpisodes(lignesEpisodes)
       })
@@ -102,7 +122,7 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
         return eps.some((ep) => (ep.titre ?? '').toLowerCase().includes(q) || (ep.titre_ar ?? '').includes(qBrut))
       })
       .filter((p) => !filtreGenre || p.genre === filtreGenre)
-      .filter((p) => !masquerHorsDroits || estProgrammable(p.id, fenetresDroits, aujourdHui).ok)
+      .filter((p) => p.bloqueExclu || !masquerHorsDroits || estProgrammable(p.id, fenetresDroits, aujourdHui).ok)
   }, [programmes, recherche, filtreGenre, masquerHorsDroits, fenetresDroits, episodesParProgrammeId])
 
   function basculerDepli(programme) {
@@ -169,8 +189,10 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
           const { fond, texte } = couleurGenre(p.genre)
           const ouvert = programmeOuvert === p.id
           const droits = estProgrammable(p.id, fenetresDroits, aujourdHuiISO())
+          const bloque = !!p.bloqueExclu
+          const nomChaineExclu = bloque ? CHAINES.find((c) => c.id === p.chaine_id)?.nom ?? 'autre chaîne' : null
           return (
-            <div key={p.id} className="border-b border-slate-100">
+            <div key={p.id} className={`border-b border-slate-100 ${bloque ? 'bg-slate-50/70' : ''}`}>
               <div className="flex items-center gap-1.5 p-2">
                 <button
                   type="button"
@@ -194,13 +216,22 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="block truncate text-sm font-medium text-slate-800">{p.titre}</span>
-                      {!droits.ok && (
+                      {bloque ? (
                         <span
-                          className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[10px] font-medium text-red-700"
-                          title={droits.motif}
+                          className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-700"
+                          title="Exclusif à une autre chaîne — autorisation de programmation requise"
                         >
-                          Hors droits
+                          Exclusif · {nomChaineExclu}
                         </span>
+                      ) : (
+                        !droits.ok && (
+                          <span
+                            className="shrink-0 rounded bg-red-100 px-1 py-0.5 text-[10px] font-medium text-red-700"
+                            title={droits.motif}
+                          >
+                            Hors droits
+                          </span>
+                        )
                       )}
                     </span>
                     <span className="block text-xs text-slate-500">
@@ -208,6 +239,16 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
                     </span>
                   </span>
                 </button>
+                {onOuvrirProgramme && (
+                  <button
+                    type="button"
+                    onClick={() => onOuvrirProgramme(p.id)}
+                    className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-snrt-navy"
+                    title="Ouvrir la fiche du programme (demande PAD / demande de programmation)"
+                  >
+                    <SquareArrowOutUpRight size={14} />
+                  </button>
+                )}
               </div>
               {ouvert && (
                 <div className="pb-1">
@@ -223,6 +264,7 @@ export default function CataloguePanel({ chaineActive, dragRef, onOuvrirHistoriq
                         programmeId={p.id}
                         dragRef={dragRef}
                         derniereDiffusion={dernieresDiffusions.get(ep.id)?.derniere}
+                        bloqueExclu={bloque}
                       />
                     ))
                   )}

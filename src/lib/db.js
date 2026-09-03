@@ -45,9 +45,43 @@ export async function supprimerProgramme(id) {
 // avec les exclusifs à cette chaîne — même pattern .or() que
 // listerSpotsBibliotheque (P16b), un simple .eq() ne peut pas exprimer
 // « cette chaîne OU aucune chaîne » sur la même colonne.
+// P37 : + les exclusifs d'une AUTRE chaîne pour lesquels celle-ci a reçu une
+// autorisation (chaines_autorisees, circuit demande_programmation).
 export async function listerProgrammesParChaine(chaineId) {
   return verifie(
-    await supabase.from('programme').select('*').or(`chaine_id.eq.${chaineId},chaine_id.is.null`).order('titre')
+    await supabase
+      .from('programme')
+      .select('*')
+      .or(`chaine_id.eq.${chaineId},chaine_id.is.null,chaines_autorisees.cs.{${chaineId}}`)
+      .order('titre')
+  )
+}
+
+// P37 : titres exclusifs à une AUTRE chaîne, non (encore) autorisés pour
+// `chaineId` — visibles en lecture seule (catalogue grille + liste Programmes),
+// non programmables. Le filtre « pas dans chaines_autorisees » se fait côté
+// client (un `not.cs` négatif n'est pas exprimable simplement en PostgREST).
+export async function listerProgrammesExclusifsAutresChaines(chaineId) {
+  const lignes = verifie(
+    await supabase.from('programme').select('*').not('chaine_id', 'is', null).neq('chaine_id', chaineId).order('titre')
+  )
+  return lignes.filter((p) => !(p.chaines_autorisees ?? []).includes(chaineId))
+}
+
+// P37 : ajoute une chaîne à la liste des chaînes autorisées d'un titre exclusif
+// (décision d'approbation de l'admin détenteur).
+export async function autoriserChaineProgramme(programmeId, chaineId) {
+  const programme = verifie(
+    await supabase.from('programme').select('chaines_autorisees').eq('id', programmeId).maybeSingle()
+  )
+  const actuelles = programme?.chaines_autorisees ?? []
+  if (actuelles.includes(chaineId)) return programme
+  return verifiePremiere(
+    await supabase
+      .from('programme')
+      .update({ chaines_autorisees: [...actuelles, chaineId] })
+      .eq('id', programmeId)
+      .select()
   )
 }
 
@@ -722,6 +756,38 @@ export async function creerDemandePad(champs) {
 
 export async function mettreAJourDemandePad(id, champs) {
   return verifiePremiere(await supabase.from('demande_pad').update(champs).eq('id', id).select())
+}
+
+// --- demande_programmation (P37 : programme exclusif demandé par une chaîne tierce) ---
+
+// Demandes qui concernent la chaîne (émises par elle OU visant son exclusivité).
+// L'écran trie ensuite en « À transmettre » / « Reçues » / « Historique ».
+export async function listerDemandesProgrammationParChaine(chaineId) {
+  return verifie(
+    await supabase
+      .from('demande_programmation')
+      .select('*')
+      .or(`chaine_demandeuse_id.eq.${chaineId},chaine_exclusive_id.eq.${chaineId}`)
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function listerDemandesProgrammationParProgramme(programmeId) {
+  return verifie(
+    await supabase
+      .from('demande_programmation')
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function creerDemandeProgrammation(champs) {
+  return verifiePremiere(await supabase.from('demande_programmation').insert(champs).select())
+}
+
+export async function mettreAJourDemandeProgrammation(id, champs) {
+  return verifiePremiere(await supabase.from('demande_programmation').update(champs).eq('id', id).select())
 }
 
 // --- notification (P29 : centre de notifications persistant, lu/non lu par chaîne) ---

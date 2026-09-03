@@ -46,6 +46,7 @@ import { couleurGenre } from '../lib/couleursGenre.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
+import { chaineAutoriseeProgramme } from '../lib/exclusivite.js'
 import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
 import {
   PRESETS_ZOOM,
@@ -94,7 +95,7 @@ const MARQUES_HEURES = genererMarquesHeures()
 // (recalculés à partir de la grille cible au moment de coller).
 const CHAMPS_COPIABLES = ['programme_id', 'episode_id', 'episode_numero', 'date', 'heure_debut', 'heure_fin', 'genre', 'titre_cache', 'vecteur']
 
-export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) {
+export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, onOuvrirProgramme }) {
   const [vue, setVue] = useState('SEMAINE')
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
@@ -600,9 +601,15 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
       setErreur(`Dépôt refusé — ${droits.motif}`)
       return
     }
+    const programme = programmesParId.get(payload.programmeId)
+    // P37 : un titre exclusif à une autre chaîne n'est déposable que si cette
+    // chaîne a reçu l'autorisation (le catalogue empêche déjà le drag ; garde-fou).
+    if (!programme || !chaineAutoriseeProgramme(programme, chaineActive.id)) {
+      setErreur('Dépôt refusé — programme exclusif à une autre chaîne (autorisation requise).')
+      return
+    }
     const heureDebut = minutesEnHeure(minuteDebut)
     const heureFin = minutesEnHeure(minuteDebut + (payload.duree ?? DUREE_PAR_DEFAUT_MIN))
-    const programme = programmesParId.get(payload.programmeId)
     const champs = {
       programme_id: payload.programmeId,
       episode_id: payload.episodeId,
@@ -1048,7 +1055,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes }) 
 
       <div className="flex items-start gap-4">
         {!pleinEcran && (
-          <CataloguePanel chaineActive={chaineActive} dragRef={dragRef} onOuvrirHistorique={setHistoriqueOuvert} />
+          <CataloguePanel
+            chaineActive={chaineActive}
+            dragRef={dragRef}
+            onOuvrirHistorique={setHistoriqueOuvert}
+            onOuvrirProgramme={onOuvrirProgramme}
+          />
         )}
 
         {!chargement && grilleActive && vueEditable && (

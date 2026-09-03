@@ -196,6 +196,20 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   *Test : Oumnia (Pilotage droits & stock + Suivi PAD) initialise puis relance une demande →
   Nabil (Contrôle PAD) la voit avec genre/durée/Bible, accepte → l'épisode passe PAD → Oumnia
   reçoit la décision dans sa cloche.*
+- **P37 — Programmes exclusifs & demande de programmation inter-chaînes** ✅ LIVRÉ (hors
+  feuille de route) : un titre exclusif à une chaîne est désormais **visible** par les autres
+  (catalogue de la grille + liste Programmes, badgé « Exclusif — accès requis », non
+  déplaçable, dépôt refusé) mais reste **non programmable** sans autorisation. Circuit :
+  le **Programmateur** ouvre la fiche (raccourci du catalogue) → « Demander à bénéficier de ce
+  programme » → l'**Administrateur de chaîne** demandeur **transmet** ou **rejette en interne**
+  → l'**Administrateur de chaîne détenteur** **approuve** (la chaîne est ajoutée à
+  `programme.chaines_autorisees`) ou **refuse** ; chaque étape notifie l'acteur suivant.
+  Nouvel écran **Demandes de programmation** (Admin de chaîne + Super Admin). La **création /
+  suppression** d'un programme est réservée à Acquisitions / Admin de chaîne / Super Admin
+  (`peutGererCatalogue`) — un Programmateur n'en crée pas. Comptes de démo admin de chaîne
+  seedés (`safae.admin` Al Aoula, `hamid.admin` Arryadia). Migration : `migration-p41.sql`.
+  *Test : Younes/Arryadia demande « 45 minutes » (exclusif Al Aoula) → hamid.admin transmet →
+  safae.admin approuve → le titre devient déplaçable pour Arryadia.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

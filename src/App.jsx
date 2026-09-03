@@ -33,6 +33,7 @@ import AutoProgrammation from './screens/AutoProgrammation.jsx'
 import PlanMedia from './screens/PlanMedia.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
+import DemandesProgrammation from './screens/DemandesProgrammation.jsx'
 import PilotageDroitsStock from './screens/PilotageDroitsStock.jsx'
 import SuiviPad from './screens/SuiviPad.jsx'
 import ControlePad from './screens/ControlePad.jsx'
@@ -50,6 +51,7 @@ const ECRANS = {
   PLAN_MEDIA: PlanMedia,
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
+  DEMANDES_PROGRAMMATION: DemandesProgrammation,
   PILOTAGE_DROITS_STOCK: PilotageDroitsStock,
   SUIVI_PAD: SuiviPad,
   CONTROLE_PAD: ControlePad,

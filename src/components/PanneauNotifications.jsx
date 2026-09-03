@@ -1,4 +1,4 @@
-import { X, BellRing, PlusCircle, TriangleAlert, CheckCheck, Share2, BadgeCheck } from 'lucide-react'
+import { X, BellRing, PlusCircle, TriangleAlert, CheckCheck, Share2, BadgeCheck, Send, Inbox } from 'lucide-react'
 
 const ICONES_TYPE = {
   NOUVEAU_PROGRAMME: { Icone: PlusCircle, classe: 'text-emerald-600' },
@@ -7,6 +7,9 @@ const ICONES_TYPE = {
   DEMANDE_PAD: { Icone: BadgeCheck, classe: 'text-snrt-blue' },
   RELANCE_PAD: { Icone: BellRing, classe: 'text-snrt-orange' },
   DECISION_PAD: { Icone: CheckCheck, classe: 'text-snrt-green' },
+  DEMANDE_PROG_A_TRANSMETTRE: { Icone: Send, classe: 'text-snrt-blue' },
+  DEMANDE_PROG_SOUMISE: { Icone: Inbox, classe: 'text-snrt-orange' },
+  DEMANDE_PROG_DECISION: { Icone: CheckCheck, classe: 'text-snrt-green' },
 }
 
 function formaterHorodatage(iso) {

@@ -72,5 +72,12 @@ export default function Programmes({ chaineActive, programmeCible, onNotificatio
     )
   }
 
-  return <ListeProgrammes chaineActive={chaineActive} onOuvrir={ouvrir} onNouveau={nouveau} />
+  return (
+    <ListeProgrammes
+      chaineActive={chaineActive}
+      onOuvrir={ouvrir}
+      onNouveau={nouveau}
+      roleUtilisateur={roleUtilisateur}
+    />
+  )
 }

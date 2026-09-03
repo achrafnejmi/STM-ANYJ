@@ -4,8 +4,14 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
 import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listerProgrammesParChaine, listerTousLesEpisodes, listerDiffusionsLineairesParChaine } from '../lib/db.js'
+import {
+  listerProgrammesParChaine,
+  listerProgrammesExclusifsAutresChaines,
+  listerTousLesEpisodes,
+  listerDiffusionsLineairesParChaine,
+} from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
+import { peutGererCatalogue } from '../lib/roles.js'
 import { calculerDerniereParProgramme } from '../lib/historique.js'
 import { formaterDateLongue, formaterDureeMinutes } from '../lib/semaine.js'
 import { construireDonneesProgrammes, construireLignesExcelProgrammes, construireNomFichierProgrammes, ENTETE_PROGRAMMES } from '../lib/exportProgrammes.js'
@@ -13,7 +19,7 @@ import BoutonExporter from '../components/BoutonExporter.jsx'
 
 const TAILLE_PAGE = 30
 
-export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
+export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, roleUtilisateur }) {
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
@@ -39,10 +45,16 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
     setChargement(true)
     setErreur(null)
 
-    const principale = listerProgrammesParChaine(chaineActive.id)
-      .then((lignes) => {
+    const principale = Promise.all([
+      listerProgrammesParChaine(chaineActive.id),
+      listerProgrammesExclusifsAutresChaines(chaineActive.id),
+    ])
+      .then(([lignes, exclusifsAutres]) => {
         if (idAppel !== requeteId.current) return
-        setProgrammes(lignes)
+        // P37 : les exclusifs d'autres chaînes non autorisés apparaissent aussi,
+        // marqués `exclusifBloque` (badge, non modifiables — la ligne ouvre la
+        // fiche où le programmateur peut demander l'accès).
+        setProgrammes([...lignes, ...exclusifsAutres.map((p) => ({ ...p, exclusifBloque: true }))])
         setPage(0)
       })
       .catch((err) => {
@@ -237,14 +249,16 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
           </div>
           <div className="flex items-center gap-2">
             <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
-            <button
-              type="button"
-              onClick={onNouveau}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
-            >
-              <Plus size={16} />
-              Nouveau programme
-            </button>
+            {peutGererCatalogue(roleUtilisateur) && (
+              <button
+                type="button"
+                onClick={onNouveau}
+                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              >
+                <Plus size={16} />
+                Nouveau programme
+              </button>
+            )}
           </div>
         </div>
 
@@ -269,7 +283,17 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau }) {
                   onClick={() => onOuvrir(p.id)}
                   className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
                 >
-                  <td className="py-2 pr-4 text-slate-700">{p.titre}</td>
+                  <td className="py-2 pr-4 text-slate-700">
+                    {p.titre}
+                    {p.exclusifBloque && (
+                      <span
+                        className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                        title="Exclusif à une autre chaîne — autorisation de programmation requise"
+                      >
+                        Exclusif — accès requis
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 text-slate-700">{p.chaine_id == null ? 'Toutes chaînes' : p.chaine}</td>
                   <td className="py-2 pr-4 text-slate-700">{p.genre || '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{formaterDureeMinutes(dureeMoyenneParProgramme.get(p.id))}</td>
