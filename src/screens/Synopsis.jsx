@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles, FileDown, FileText, ChevronDown, ChevronRight } from 'lucide-react'
+import { Sparkles, FileDown, FileText, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import { listerProgrammesParChaine, obtenirBible, enregistrerBible, urlBible } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { genererSynopsisFactice } from '../lib/bibleDemo.js'
@@ -16,8 +16,10 @@ export default function Synopsis({ chaineActive }) {
   const [fr, setFr] = useState('')
   const [ar, setAr] = useState('')
   const [ocrOuvert, setOcrOuvert] = useState(false)
+  const [edition, setEdition] = useState(false)
   const [chargement, setChargement] = useState(true)
   const [generation, setGeneration] = useState(false)
+  const [enregistrement, setEnregistrement] = useState(false)
   const [exportEnCours, setExportEnCours] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [message, setMessage] = useState(null)
@@ -35,6 +37,7 @@ export default function Synopsis({ chaineActive }) {
 
   useEffect(() => {
     setOcrOuvert(false)
+    setEdition(false)
     setMessage(null)
     if (!programmeId) {
       setBible(null)
@@ -64,12 +67,34 @@ export default function Synopsis({ chaineActive }) {
       setAr(nar)
       const maj = await enregistrerBible(programmeId, { synopsis_fr: nfr, synopsis_ar: nar, cree_par: lireUtilisateur() })
       setBible(maj)
-      setMessage('Synopsis généré et enregistré — téléchargez le PDF.')
+      setEdition(false)
+      setMessage('Synopsis généré et enregistré — modifiez si besoin, puis téléchargez le PDF.')
     } catch (err) {
       setErreur(err.message)
     } finally {
       setGeneration(false)
     }
+  }
+
+  async function enregistrerEdition() {
+    setEnregistrement(true)
+    setErreur(null)
+    try {
+      const maj = await enregistrerBible(programmeId, { synopsis_fr: fr, synopsis_ar: ar, cree_par: lireUtilisateur() })
+      setBible(maj)
+      setEdition(false)
+      setMessage('Modifications enregistrées.')
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnregistrement(false)
+    }
+  }
+
+  function annulerEdition() {
+    setFr(bible?.synopsis_fr ?? '')
+    setAr(bible?.synopsis_ar ?? '')
+    setEdition(false)
   }
 
   async function telecharger(langue) {
@@ -184,22 +209,74 @@ export default function Synopsis({ chaineActive }) {
             </button>
           </div>
 
-          {(fr || ar) && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {fr && (
+          {(fr || ar || edition) && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">Synopsis</h2>
+                {edition ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={enregistrerEdition}
+                      disabled={enregistrement}
+                      className="rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+                    >
+                      {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={annulerEdition}
+                      disabled={enregistrement}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  (fr || ar) && (
+                    <button
+                      type="button"
+                      onClick={() => setEdition(true)}
+                      className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      <Pencil size={14} />
+                      Modifier
+                    </button>
+                  )
+                )}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (français)</h3>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">{fr}</p>
+                  {edition ? (
+                    <textarea
+                      value={fr}
+                      onChange={(e) => setFr(e.target.value)}
+                      rows={10}
+                      className="w-full rounded-md border border-slate-300 p-2 text-sm"
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm text-slate-700">{fr || <span className="text-slate-400">—</span>}</p>
+                  )}
                 </div>
-              )}
-              {ar && (
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (العربية)</h3>
-                  <p dir="rtl" className="whitespace-pre-wrap text-sm text-slate-700">
-                    {ar}
-                  </p>
+                  {edition ? (
+                    <textarea
+                      value={ar}
+                      onChange={(e) => setAr(e.target.value)}
+                      dir="rtl"
+                      rows={10}
+                      className="w-full rounded-md border border-slate-300 p-2 text-sm"
+                    />
+                  ) : (
+                    <p dir="rtl" className="whitespace-pre-wrap text-sm text-slate-700">
+                      {ar || <span className="text-slate-400">—</span>}
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -208,13 +285,12 @@ export default function Synopsis({ chaineActive }) {
             {[
               { code: 'FR', label: 'PDF français', off: !fr.trim() },
               { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
-              { code: 'BILINGUE', label: 'PDF bilingue', off: !fr.trim() && !ar.trim() },
             ].map((b) => (
               <button
                 key={b.code}
                 type="button"
                 onClick={() => telecharger(b.code)}
-                disabled={b.off || exportEnCours !== null}
+                disabled={b.off || edition || exportEnCours !== null}
                 className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
               >
                 <FileDown size={15} />

@@ -217,8 +217,10 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   image) — jsPDF en mode texte ne sait pas relier les lettres arabes. **Téléchargement seul**,
   rien n'est stocké. Les mêmes boutons apparaissent dans le panneau Bible de l'onglet
   Métadonnées quand un synopsis est enregistré (consultation par d'autres rôles). Pas de
-  migration. *Test : salma.redac génère puis exporte les 3 formats ; l'arabe est lié et aligné
-  à droite.*
+  migration. **P38b** : export **FR / AR** seul (bilingue retiré) ; l'aperçu FR + AR est
+  éditable via un bouton **Modifier / Enregistrer** (plus de zones de saisie permanentes ; la
+  génération enregistre directement). *Test : salma.redac génère → aperçu → Modifier → corrige
+  → Enregistrer → PDF FR / PDF AR ; l'arabe est lié et aligné à droite.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

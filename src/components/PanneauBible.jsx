@@ -153,7 +153,6 @@ export default function PanneauBible({ programmeId, programme, roleUtilisateur }
               {[
                 { code: 'FR', label: 'PDF français', off: !bible?.synopsis_fr },
                 { code: 'AR', label: 'PDF arabe', off: !bible?.synopsis_ar },
-                { code: 'BILINGUE', label: 'PDF bilingue', off: !bible?.synopsis_fr && !bible?.synopsis_ar },
               ].map((b) => (
                 <button
                   key={b.code}
