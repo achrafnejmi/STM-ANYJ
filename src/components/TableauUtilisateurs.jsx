@@ -1,8 +1,10 @@
 // Administration — Utilisateurs & rôles (P30, étendu P35 : 8 rôles, nom
 // affiché distinct de l'identifiant, chaîne d'affectation, création).
-// Édition en ligne, écriture immédiate ; création via une ligne de saisie.
+// Édition en brouillon : les champs se modifient librement, rien n'est écrit
+// tant que l'utilisateur ne clique pas « Enregistrer » sur la ligne (un seul
+// appel, un seul toast). Création et suppression restent des actions directes.
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Save, Undo2 } from 'lucide-react'
 import { creerUtilisateur, mettreAJourUtilisateur, supprimerUtilisateur } from '../lib/db.js'
 import { ROLES } from '../lib/roles.js'
 import { CHAINES } from '../lib/chaines.js'
@@ -11,12 +13,53 @@ import { useNotification } from './NotificationProvider.jsx'
 export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, onRafraichir }) {
   const [nouveau, setNouveau] = useState({ nom_utilisateur: '', nom_affiche: '', role: 'PROGRAMMATEUR', chaine_id: '' })
   const [erreur, setErreur] = useState(null)
+  // Brouillons par identifiant : { [nom]: { nom_affiche?, role?, chaine_id? } }
+  // ne contient que les champs touchés.
+  const [brouillons, setBrouillons] = useState({})
   const notifier = useNotification()
 
-  async function patch(nom, champs, message) {
+  function original(u, champ) {
+    if (champ === 'chaine_id') return u.chaine_id ?? ''
+    return u[champ] ?? ''
+  }
+
+  function valeur(u, champ) {
+    const b = brouillons[u.nom_utilisateur]
+    return b && champ in b ? b[champ] : original(u, champ)
+  }
+
+  function setChamp(u, champ, val) {
+    setBrouillons((prev) => ({
+      ...prev,
+      [u.nom_utilisateur]: { ...prev[u.nom_utilisateur], [champ]: val },
+    }))
+  }
+
+  function estModifie(u) {
+    const b = brouillons[u.nom_utilisateur]
+    if (!b) return false
+    return Object.entries(b).some(([champ, val]) => String(val ?? '') !== String(original(u, champ)))
+  }
+
+  function oublierBrouillon(nom) {
+    setBrouillons((prev) => {
+      const copie = { ...prev }
+      delete copie[nom]
+      return copie
+    })
+  }
+
+  async function enregistrer(u) {
+    const b = brouillons[u.nom_utilisateur]
+    if (!b) return
+    const champs = {}
+    if ('nom_affiche' in b) champs.nom_affiche = b.nom_affiche.trim() || null
+    if ('role' in b) champs.role = b.role
+    if ('chaine_id' in b) champs.chaine_id = b.chaine_id || null
     try {
-      await mettreAJourUtilisateur(nom, champs)
-      notifier.succes(message ?? `Modifications de « ${nom} » enregistrées.`)
+      await mettreAJourUtilisateur(u.nom_utilisateur, champs)
+      notifier.succes(`Modifications de « ${u.nom_utilisateur} » enregistrées.`)
+      oublierBrouillon(u.nom_utilisateur)
       onRafraichir()
     } catch (err) {
       setErreur(err.message)
@@ -55,6 +98,7 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
     try {
       await supprimerUtilisateur(nom)
       notifier.succes(`Utilisateur « ${nom} » supprimé.`)
+      oublierBrouillon(nom)
       onRafraichir()
     } catch (err) {
       setErreur(err.message)
@@ -83,75 +127,90 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
             </tr>
           </thead>
           <tbody>
-            {utilisateurs.map((u) => (
-              <tr key={u.nom_utilisateur} className="border-b border-slate-100">
-                <td className="py-1.5 pl-3 pr-3 text-slate-700">
-                  {u.nom_utilisateur}
-                  {u.nom_utilisateur === utilisateurActif && (
-                    <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">vous</span>
-                  )}
-                </td>
-                <td className="py-1.5 pr-3">
-                  <input
-                    type="text"
-                    defaultValue={u.nom_affiche ?? ''}
-                    onBlur={(e) =>
-                      e.target.value !== (u.nom_affiche ?? '') &&
-                      patch(u.nom_utilisateur, { nom_affiche: e.target.value }, `Nom affiché de « ${u.nom_utilisateur} » enregistré.`)
-                    }
-                    className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                  />
-                </td>
-                <td className="py-1.5 pr-3">
-                  <select
-                    value={u.role}
-                    onChange={(e) =>
-                      patch(u.nom_utilisateur, { role: e.target.value }, `Rôle de « ${u.nom_utilisateur} » mis à jour.`)
-                    }
-                    className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.code} value={r.code}>
-                        {r.label}
-                      </option>
-                    ))}
-                    {!ROLES.some((r) => r.code === u.role) && <option value={u.role}>{u.role}</option>}
-                  </select>
-                </td>
-                <td className="py-1.5 pr-3">
-                  <select
-                    value={u.chaine_id ?? ''}
-                    onChange={(e) =>
-                      patch(
-                        u.nom_utilisateur,
-                        { chaine_id: e.target.value || null },
-                        `Chaîne de « ${u.nom_utilisateur} » mise à jour.`
-                      )
-                    }
-                    className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-                  >
-                    <option value="">— (toutes)</option>
-                    {CHAINES.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nom}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="py-1.5 pr-3 text-right">
-                  {u.nom_utilisateur !== utilisateurActif && (
-                    <button
-                      type="button"
-                      onClick={() => supprimer(u.nom_utilisateur)}
-                      title="Supprimer cet utilisateur"
-                      className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            {utilisateurs.map((u) => {
+              const modifie = estModifie(u)
+              return (
+                <tr key={u.nom_utilisateur} className={`border-b border-slate-100 ${modifie ? 'bg-amber-50/60' : ''}`}>
+                  <td className="py-1.5 pl-3 pr-3 text-slate-700">
+                    {u.nom_utilisateur}
+                    {u.nom_utilisateur === utilisateurActif && (
+                      <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">vous</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <input
+                      type="text"
+                      value={valeur(u, 'nom_affiche')}
+                      onChange={(e) => setChamp(u, 'nom_affiche', e.target.value)}
+                      className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    />
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <select
+                      value={valeur(u, 'role')}
+                      onChange={(e) => setChamp(u, 'role', e.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                     >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                      {ROLES.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {r.label}
+                        </option>
+                      ))}
+                      {!ROLES.some((r) => r.code === valeur(u, 'role')) && (
+                        <option value={valeur(u, 'role')}>{valeur(u, 'role')}</option>
+                      )}
+                    </select>
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <select
+                      value={valeur(u, 'chaine_id')}
+                      onChange={(e) => setChamp(u, 'chaine_id', e.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    >
+                      <option value="">— (toutes)</option>
+                      {CHAINES.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => enregistrer(u)}
+                        disabled={!modifie}
+                        title={modifie ? 'Enregistrer les modifications' : 'Aucune modification'}
+                        className="rounded-md p-1 text-snrt-navy hover:bg-snrt-navy/10 disabled:text-slate-300 disabled:hover:bg-transparent"
+                      >
+                        <Save size={15} />
+                      </button>
+                      {modifie && (
+                        <button
+                          type="button"
+                          onClick={() => oublierBrouillon(u.nom_utilisateur)}
+                          title="Annuler les modifications"
+                          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <Undo2 size={15} />
+                        </button>
+                      )}
+                      {u.nom_utilisateur !== utilisateurActif && (
+                        <button
+                          type="button"
+                          onClick={() => supprimer(u.nom_utilisateur)}
+                          title="Supprimer cet utilisateur"
+                          className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
             {utilisateurs.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-3 pl-3 text-sm text-slate-500">
