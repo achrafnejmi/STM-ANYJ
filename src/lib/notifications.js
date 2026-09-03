@@ -46,6 +46,19 @@ export function messageDecisionPad(titreProgramme, numeroEp, statut) {
   return `${etiquetteEpisode(titreProgramme, numeroEp)} : validation PAD ${statut === 'ACCEPTEE' ? 'acceptée' : 'refusée'}`
 }
 
+// Cible d'un clic sur une notification (P36) : section(s) « source » par ordre de
+// préférence. L'appelant (App.jsx) navigue vers la première que le rôle courant
+// peut voir ; si aucune (ou type absent d'ici), il ouvre la fiche du programme
+// référencé. Rend le routage cohérent pour TOUT le système de notifications.
+export const SECTIONS_CIBLE_NOTIFICATION = {
+  DEMANDE_PAD: ['CONTROLE_PAD', 'SUIVI_PAD'],
+  RELANCE_PAD: ['CONTROLE_PAD', 'SUIVI_PAD'],
+  DECISION_PAD: ['SUIVI_PAD', 'CONTROLE_PAD'],
+  PUBLICATION_NON_LINEAIRE: ['GRILLE_NON_LINEAIRE'],
+  // NOUVEAU_PROGRAMME / DROITS_PROCHES : pas de section dédiée → ouverture de la
+  // fiche programme (onglet Droits pour une alerte de fin de droits).
+}
+
 // Lignes DROITS_PROCHES manquantes pour une chaîne : fenêtres actuellement
 // proches de la fermeture qui n'ont pas encore de notification existante
 // (notificationsExistantes = déjà chargées par l'appelant, App.jsx).

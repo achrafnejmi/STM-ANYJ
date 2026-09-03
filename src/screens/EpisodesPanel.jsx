@@ -47,7 +47,7 @@ function versFormulaire(episode) {
   }
 }
 
-export default function EpisodesPanel({ programmeId, programmeTitre, chaineActive, roleUtilisateur, onEpisodesChange }) {
+export default function EpisodesPanel({ programmeId, programmeTitre, chaineActive, roleUtilisateur, onNotificationCreee, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -193,6 +193,7 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
           lu: false,
         }))
       )
+      onNotificationCreee?.()
       notifier.succes('Demande de validation PAD transmise au Contrôle PAD et au suivi du stock.')
     } catch (err) {
       setErreur(err.message)

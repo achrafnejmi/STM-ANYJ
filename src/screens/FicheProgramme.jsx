@@ -461,6 +461,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           programmeTitre={form.titre}
           chaineActive={chaineActive}
           roleUtilisateur={roleUtilisateur}
+          onNotificationCreee={onNotificationCreee}
           onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)}
         />
       )}

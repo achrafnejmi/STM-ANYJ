@@ -28,7 +28,7 @@ const MS_24H = 24 * 3600 * 1000
 // circuit de validation PAD SANS le faire (pas de mise en PAD ici). Permet
 // d'initialiser une demande et de relancer le Contrôle PAD. Reçoit en retour
 // les décisions (notifications DECISION_PAD, routées vers ce rôle).
-export default function SuiviPad({ chaineActive }) {
+export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificationCreee }) {
   const [demandes, setDemandes] = useState([])
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
@@ -76,6 +76,17 @@ export default function SuiviPad({ chaineActive }) {
     return `${titre}${ep?.numero != null ? ` — ÉP. ${ep.numero}` : ''}${ep?.titre ? ` : ${ep.titre}` : ''}`
   }
 
+  function anciennete(iso) {
+    const j = joursDepuis(iso)
+    return `le ${formaterHorodatage(iso)}${j >= 1 ? ` · il y a ${j} j` : ''}`
+  }
+
+  // Ouvre la fiche du programme sur l'onglet Épisodes (consulter le programme /
+  // l'épisode concerné par la demande).
+  function ouvrirEpisode(demande) {
+    onOuvrirProgramme?.(demande.programme_id, 'EPISODES')
+  }
+
   async function initialiser(e) {
     e.preventDefault()
     if (!form.programmeId || !form.episodeId) return
@@ -102,6 +113,7 @@ export default function SuiviPad({ chaineActive }) {
       ])
       setForm({ programmeId: '', episodeId: '', motif: '' })
       notifier.succes('Demande de validation PAD envoyée au Contrôle PAD.')
+      onNotificationCreee?.()
       rafraichir()
     } catch (err) {
       setErreur(err.message)
@@ -129,6 +141,7 @@ export default function SuiviPad({ chaineActive }) {
         },
       ])
       notifier.succes(`Relance n°${nb} envoyée au Contrôle PAD.`)
+      onNotificationCreee?.()
       rafraichir()
     } catch (err) {
       setErreur(err.message)
@@ -221,9 +234,15 @@ export default function SuiviPad({ chaineActive }) {
               return (
                 <li key={d.id} className="flex items-start justify-between gap-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{libelle(d.programme_id, d.episode_id)}</p>
+                    <button
+                      type="button"
+                      onClick={() => ouvrirEpisode(d)}
+                      className="text-left text-sm font-medium text-snrt-navy hover:underline"
+                    >
+                      {libelle(d.programme_id, d.episode_id)}
+                    </button>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      Demandé par {d.demandeur} · il y a {joursDepuis(d.cree_le)} j
+                      Demandé par {d.demandeur} · {anciennete(d.cree_le)}
                       {d.relances > 0 && ` · ${d.relances} relance${d.relances > 1 ? 's' : ''}`}
                       {d.derniere_relance_le && ` · dernière relance ${formaterHorodatage(d.derniere_relance_le)}`}
                     </p>
@@ -257,10 +276,16 @@ export default function SuiviPad({ chaineActive }) {
             {historique.map((d) => (
               <li key={d.id} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-slate-700">{libelle(d.programme_id, d.episode_id)}</p>
+                  <button
+                    type="button"
+                    onClick={() => ouvrirEpisode(d)}
+                    className="block max-w-full truncate text-left text-sm text-snrt-navy hover:underline"
+                  >
+                    {libelle(d.programme_id, d.episode_id)}
+                  </button>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {d.demandeur} → {d.traite_par || '—'}
-                    {d.traite_le ? ` · ${formaterHorodatage(d.traite_le)}` : ''}
+                    Demandé le {formaterHorodatage(d.cree_le)} · {d.demandeur} → {d.traite_par || '—'}
+                    {d.traite_le ? ` · traité le ${formaterHorodatage(d.traite_le)}` : ''}
                   </p>
                 </div>
                 <span

@@ -16,7 +16,7 @@ import {
   marquerToutesNotificationsLues,
   obtenirUtilisateur,
 } from './lib/db.js'
-import { calculerNotificationsDroitsManquantes } from './lib/notifications.js'
+import { calculerNotificationsDroitsManquantes, SECTIONS_CIBLE_NOTIFICATION } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import TopBar from './components/TopBar.jsx'
@@ -204,6 +204,19 @@ function App() {
     }
   }, [chaineActive])
 
+  // Sondage léger (P36) : une notification écrite par un autre utilisateur
+  // (ex. une demande PAD reçue) doit apparaître dans la cloche sans attendre
+  // une action de l'utilisateur courant. Simple `setInterval` — pas de canal
+  // temps réel dans le PoC.
+  useEffect(() => {
+    const id = setInterval(() => {
+      listerNotificationsParChaine(chaineActive.id)
+        .then(setNotifications)
+        .catch(() => {})
+    }, 30000)
+    return () => clearInterval(id)
+  }, [chaineActive])
+
   useEffect(() => {
     function onKeyDown(e) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -259,16 +272,11 @@ function App() {
       marquerNotificationLue(n.id).catch((err) => console.error('Marquage lu impossible :', err))
     }
     setNotificationsOuvertes(false)
-    if (n.type === 'PUBLICATION_NON_LINEAIRE') {
-      naviguer('GRILLE_NON_LINEAIRE')
-      return
-    }
-    if (n.type === 'DEMANDE_PAD' || n.type === 'RELANCE_PAD') {
-      naviguer('CONTROLE_PAD')
-      return
-    }
-    if (n.type === 'DECISION_PAD') {
-      naviguer('SUIVI_PAD')
+    // Routage systématique : vers la première section « source » que le rôle
+    // courant peut voir (SECTIONS_CIBLE_NOTIFICATION), sinon la fiche programme.
+    const cible = (SECTIONS_CIBLE_NOTIFICATION[n.type] ?? []).find((s) => peutVoirSection(roleUtilisateur, s))
+    if (cible) {
+      naviguer(cible)
       return
     }
     if (n.programme_id) ouvrirProgramme(n.programme_id, n.type === 'DROITS_PROCHES' ? 'DROITS' : undefined)
@@ -308,7 +316,10 @@ function App() {
           onChangerChaine={changerChaine}
           chaineVerrouillee={chaineVerrouillee(roleUtilisateur)}
           onOuvrirRecherche={() => setRechercheOuverte(true)}
-          onOuvrirNotifications={() => setNotificationsOuvertes(true)}
+          onOuvrirNotifications={() => {
+            setNotificationsOuvertes(true)
+            rafraichirNotifications()
+          }}
           nbNotificationsNonLues={notificationsVisibles.filter((n) => !n.lu).length}
         />
         <main className="flex-1 overflow-y-auto p-6">

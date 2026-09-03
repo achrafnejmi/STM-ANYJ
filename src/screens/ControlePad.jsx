@@ -35,7 +35,7 @@ function formaterHorodatage(iso) {
 // validation PAD envoyées depuis le panneau Épisodes, et valider directement
 // des épisodes encore non PAD. Circuit simplifié pour la démo (pas de vraie
 // vérification de support).
-export default function ControlePad({ chaineActive }) {
+export default function ControlePad({ chaineActive, onNotificationCreee }) {
   const [demandes, setDemandes] = useState([])
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
@@ -144,6 +144,7 @@ export default function ControlePad({ chaineActive }) {
           lu: false,
         },
       ])
+      onNotificationCreee?.()
       rafraichir()
     } catch (err) {
       setErreur(err.message)
