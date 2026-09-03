@@ -51,7 +51,19 @@ export const SECTIONS_PAR_ROLE = {
     'CONDUCTEUR',
     'ADMINISTRATION',
   ],
-  PROGRAMMATEUR: ['GRILLE_TYPE', 'GRILLE_LINEAIRE'],
+  // Travaille depuis la grille (principe : « la grille est le produit ») mais a
+  // besoin de tout le contexte de programmation : catalogue, plan média,
+  // conducteur, tableau de bord. Peut initier une demande PAD (cf.
+  // peutDemanderPad) sans jamais mettre un épisode en PAD (cf. peutMettreEnPad).
+  PROGRAMMATEUR: [
+    'GRILLE_LINEAIRE',
+    'ACCUEIL',
+    'PROGRAMMES',
+    'GRILLE_TYPE',
+    'AUTO_PROGRAMMATION',
+    'PLAN_MEDIA',
+    'CONDUCTEUR',
+  ],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
   // tableau de bord dédié + suivi des demandes, en plus de Programmes et
@@ -87,10 +99,18 @@ export function chaineVerrouillee(role) {
 }
 
 // Émission d'une nouvelle demande de validation PAD (bouton du panneau
-// Épisodes) : réservée à la Gestion des droits et du stock, plus le Super
-// Administrateur qui voit tout.
+// Épisodes) : le Programmateur (qui la déclenche quand il veut programmer un
+// épisode non PAD), la Gestion des droits et du stock, et le Super Admin.
 export function peutDemanderPad(role) {
-  return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
+  return role === 'PROGRAMMATEUR' || role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
+}
+
+// Mise en PAD directe d'un épisode (case « PAD » du panneau Épisodes) : ni le
+// Programmateur ni la Gestion des droits et du stock ne le font — c'est le rôle
+// de l'entité Contrôle PAD (via son écran), ou une décision d'acceptation de
+// demande. Ici : le catalogage (Acquisitions), l'Admin de chaîne, le Super Admin.
+export function peutMettreEnPad(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'ACQUISITIONS'
 }
 
 // Cloche de notifications (P36) : une notification sans destinataire_role est

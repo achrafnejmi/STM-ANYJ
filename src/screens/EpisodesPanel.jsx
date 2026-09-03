@@ -10,7 +10,7 @@ import {
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
-import { peutDemanderPad } from '../lib/roles.js'
+import { peutDemanderPad, peutMettreEnPad } from '../lib/roles.js'
 import { messageDemandePad } from '../lib/notifications.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
@@ -179,17 +179,21 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
         demandeur: lireUtilisateur(),
         motif: motif.trim() || null,
       })
-      await creerNotifications([
-        {
+      // Fan-out : l'entité Contrôle PAD (qui traitera) ET la Gestion des droits
+      // et du stock (Oumnia, qui en assure le suivi et peut relancer).
+      const numeroEp = form.numero === '' ? null : Number(form.numero)
+      const msg = messageDemandePad(programmeTitre || 'Programme', numeroEp)
+      await creerNotifications(
+        ['CONTROLE_PAD', 'GESTION_DROITS_STOCK'].map((destinataire_role) => ({
           chaine_id: chaineActive.id,
           type: 'DEMANDE_PAD',
-          destinataire_role: 'CONTROLE_PAD',
+          destinataire_role,
           programme_id: programmeId,
-          message: messageDemandePad(programmeTitre || 'Programme', form.numero === '' ? null : Number(form.numero)),
+          message: msg,
           lu: false,
-        },
-      ])
-      notifier.succes('Demande de validation PAD envoyée au Contrôle PAD.')
+        }))
+      )
+      notifier.succes('Demande de validation PAD transmise au Contrôle PAD et au suivi du stock.')
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -331,9 +335,13 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                       id={idPad}
                       type="checkbox"
                       checked={form.pad}
+                      disabled={!peutMettreEnPad(roleUtilisateur)}
                       onChange={(e) => setForm({ ...form, pad: e.target.checked })}
                     />
                     PAD (prêt à diffuser)
+                    {!peutMettreEnPad(roleUtilisateur) && (
+                      <span className="text-xs text-slate-400">— mise en PAD réservée au Contrôle PAD</span>
+                    )}
                   </label>
                   {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && peutDemanderPad(roleUtilisateur) && (
                     <div>

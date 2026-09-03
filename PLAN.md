@@ -186,9 +186,13 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   (initialiser une demande, relancer le Contrôle PAD, historique des décisions — jamais la mise
   en PAD). L'**entité PAD** (`CONTROLE_PAD`) reçoit les demandes, voit **tout le catalogue**
   d'épisodes (filtre Tous / Non PAD / Demande, statut PAD, lien Bible PDF de revue) et fait la
-  mise en PAD. **Notifications routées par rôle** (`notification.destinataire_role`) :
-  `DEMANDE_PAD` / `RELANCE_PAD` → Contrôle PAD, `DECISION_PAD` → Gestion des droits & du stock ;
-  la cloche filtre sur le rôle (Super Admin voit tout). Migration : `migration-p40.sql`.
+  mise en PAD. Le **Programmateur** accède désormais à Grille linéaire/type, Auto-programmation,
+  Plan média, Programmes, Conducteur et au tableau de bord ; il peut **initier** une demande PAD
+  (case « PAD » désactivée pour lui, `peutMettreEnPad`) quand il veut programmer un épisode non
+  PAD. **Notifications routées par rôle** (`notification.destinataire_role`) : `DEMANDE_PAD`
+  → Contrôle PAD **et** Gestion des droits & du stock ; `RELANCE_PAD` → Contrôle PAD ;
+  `DECISION_PAD` → Gestion des droits & du stock ; la cloche filtre sur le rôle (Super Admin
+  voit tout). Migration : `migration-p40.sql`.
   *Test : Oumnia (Pilotage droits & stock + Suivi PAD) initialise puis relance une demande →
   Nabil (Contrôle PAD) la voit avec genre/durée/Bible, accepte → l'épisode passe PAD → Oumnia
   reçoit la décision dans sa cloche.*
