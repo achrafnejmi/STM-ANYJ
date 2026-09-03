@@ -566,7 +566,11 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </form>
-          {id && <div className="mt-6"><PanneauBible programmeId={id} roleUtilisateur={roleUtilisateur} /></div>}
+          {id && (
+            <div className="mt-6">
+              <PanneauBible programmeId={id} programme={programme} roleUtilisateur={roleUtilisateur} />
+            </div>
+          )}
           </>
         )}
       </div>

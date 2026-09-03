@@ -210,6 +210,15 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   seedés (`safae.admin` Al Aoula, `hamid.admin` Arryadia). Migration : `migration-p41.sql`.
   *Test : Younes/Arryadia demande « 45 minutes » (exclusif Al Aoula) → hamid.admin transmet →
   safae.admin approuve → le titre devient déplaçable pour Arryadia.*
+- **P38 — Synopsis exporté en PDF (rôle Rédacteur)** ✅ LIVRÉ (hors feuille de route) : sur
+  l'écran **Synopsis**, trois boutons **PDF français / PDF arabe / PDF bilingue** produisent
+  le document à partir du texte courant (en-tête titre + genre + date, puis sections FR et/ou
+  ملخص en RTL). L'arabe est rendu fidèlement via `html2canvas` (mise en page HTML capturée en
+  image) — jsPDF en mode texte ne sait pas relier les lettres arabes. **Téléchargement seul**,
+  rien n'est stocké. Les mêmes boutons apparaissent dans le panneau Bible de l'onglet
+  Métadonnées quand un synopsis est enregistré (consultation par d'autres rôles). Pas de
+  migration. *Test : salma.redac génère puis exporte les 3 formats ; l'arabe est lié et aligné
+  à droite.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

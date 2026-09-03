@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, FileDown } from 'lucide-react'
 import { listerProgrammesParChaine, obtenirBible, enregistrerBible } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { genererSynopsisFactice } from '../lib/bibleDemo.js'
+import { exporterSynopsisPdf } from '../lib/exportSynopsisPdf.js'
 
 // Écran Synopsis (P35b, rôle Rédacteur) : génère un synopsis FR/AR à partir de
 // la bible du programme. Génération SIMULÉE (gabarit, pas d'IA) — résultat
@@ -15,6 +16,7 @@ export default function Synopsis({ chaineActive }) {
   const [ar, setAr] = useState('')
   const [chargement, setChargement] = useState(true)
   const [enregistrement, setEnregistrement] = useState(false)
+  const [exportEnCours, setExportEnCours] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [message, setMessage] = useState(null)
 
@@ -52,6 +54,24 @@ export default function Synopsis({ chaineActive }) {
     setFr(nfr)
     setAr(nar)
     setMessage('Synopsis généré (démo) — relisez / ajustez puis enregistrez.')
+  }
+
+  async function telecharger(langue) {
+    setExportEnCours(langue)
+    setErreur(null)
+    try {
+      await exporterSynopsisPdf({
+        programme,
+        chaineNom: chaineActive.nom,
+        synopsisFr: fr,
+        synopsisAr: ar,
+        langue,
+      })
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    } finally {
+      setExportEnCours(null)
+    }
   }
 
   async function enregistrer() {
@@ -141,7 +161,26 @@ export default function Synopsis({ chaineActive }) {
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-500">Télécharger&nbsp;:</span>
+              {[
+                { code: 'FR', label: 'PDF français', off: !fr.trim() },
+                { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
+                { code: 'BILINGUE', label: 'PDF bilingue', off: !fr.trim() && !ar.trim() },
+              ].map((b) => (
+                <button
+                  key={b.code}
+                  type="button"
+                  onClick={() => telecharger(b.code)}
+                  disabled={b.off || exportEnCours !== null}
+                  className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
+                >
+                  <FileDown size={15} />
+                  {exportEnCours === b.code ? 'Génération…' : b.label}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={enregistrer}

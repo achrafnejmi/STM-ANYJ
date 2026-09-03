@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { FileText, Upload } from 'lucide-react'
+import { FileText, Upload, FileDown } from 'lucide-react'
 import { obtenirBible, enregistrerBible, televerserBible, urlBible } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { peutGererBible } from '../lib/roles.js'
+import { exporterSynopsisPdf } from '../lib/exportSynopsisPdf.js'
 
 const TAILLE_MAX = 10 * 1024 * 1024 // 10 Mo
 
@@ -10,14 +11,33 @@ const TAILLE_MAX = 10 * 1024 * 1024 // 10 Mo
 // dépôt du PDF descriptif + consultation (PDF, texte OCR, synopsis FR/AR déjà
 // saisis via l'écran Bible / Synopsis dédié). L'analyse OCR et la génération de
 // synopsis restent sur les écrans des rôles Documentaliste / Rédacteur.
-export default function PanneauBible({ programmeId, roleUtilisateur }) {
+export default function PanneauBible({ programmeId, programme, roleUtilisateur }) {
   const [bible, setBible] = useState(null)
   const [chargement, setChargement] = useState(true)
   const [televersement, setTeleversement] = useState(false)
+  const [exportEnCours, setExportEnCours] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [message, setMessage] = useState(null)
 
   const editable = peutGererBible(roleUtilisateur)
+
+  async function telechargerSynopsis(langue) {
+    setExportEnCours(langue)
+    setErreur(null)
+    try {
+      await exporterSynopsisPdf({
+        programme,
+        chaineNom: '',
+        synopsisFr: bible?.synopsis_fr ?? '',
+        synopsisAr: bible?.synopsis_ar ?? '',
+        langue,
+      })
+    } catch (err) {
+      setErreur(`Échec de l'export PDF : ${err.message}`)
+    } finally {
+      setExportEnCours(null)
+    }
+  }
 
   useEffect(() => {
     if (!programmeId) return
@@ -124,6 +144,28 @@ export default function PanneauBible({ programmeId, roleUtilisateur }) {
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {(bible?.synopsis_fr || bible?.synopsis_ar) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-500">Télécharger le synopsis&nbsp;:</span>
+              {[
+                { code: 'FR', label: 'PDF français', off: !bible?.synopsis_fr },
+                { code: 'AR', label: 'PDF arabe', off: !bible?.synopsis_ar },
+                { code: 'BILINGUE', label: 'PDF bilingue', off: !bible?.synopsis_fr && !bible?.synopsis_ar },
+              ].map((b) => (
+                <button
+                  key={b.code}
+                  type="button"
+                  onClick={() => telechargerSynopsis(b.code)}
+                  disabled={b.off || exportEnCours !== null}
+                  className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
+                >
+                  <FileDown size={15} />
+                  {exportEnCours === b.code ? 'Génération…' : b.label}
+                </button>
+              ))}
             </div>
           )}
         </div>
