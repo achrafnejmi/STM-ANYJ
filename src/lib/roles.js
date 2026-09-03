@@ -9,6 +9,7 @@ export const ROLES = [
   { code: 'ADMIN_CHAINE', label: 'Administrateur de chaîne' },
   { code: 'PROGRAMMATEUR', label: 'Programmateur' },
   { code: 'ACQUISITIONS', label: "Chargé d'acquisitions" },
+  { code: 'GESTION_DROITS_STOCK', label: 'Gestion des droits et du stock' },
   { code: 'DOCUMENTALISTE', label: 'Documentaliste' },
   { code: 'REDACTEUR', label: 'Rédacteur' },
   { code: 'CONTROLE_PAD', label: 'Contrôle PAD' },
@@ -50,6 +51,10 @@ export const SECTIONS_PAR_ROLE = {
   ],
   PROGRAMMATEUR: ['GRILLE_TYPE', 'GRILLE_LINEAIRE'],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
+  // Comme ACQUISITIONS pour les écrans (Programmes + Contrats & droits), mais
+  // c'est le seul rôle (avec le Super Admin) habilité à émettre une nouvelle
+  // demande de validation PAD depuis le panneau Épisodes — cf. peutDemanderPad.
+  GESTION_DROITS_STOCK: ['PROGRAMMES', 'CONTRATS'],
   DOCUMENTALISTE: ['BIBLE'],
   REDACTEUR: ['SYNOPSIS'],
   CONTROLE_PAD: ['CONTROLE_PAD'],
@@ -76,6 +81,13 @@ export function premiereSection(role, sectionsExistantes) {
 
 export function chaineVerrouillee(role) {
   return role === 'ADMIN_CHAINE'
+}
+
+// Émission d'une nouvelle demande de validation PAD (bouton du panneau
+// Épisodes) : réservée à la Gestion des droits et du stock, plus le Super
+// Administrateur qui voit tout.
+export function peutDemanderPad(role) {
+  return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
 }
 
 export function libelleRole(code) {

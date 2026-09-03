@@ -9,6 +9,7 @@ import {
   creerDemandePad,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
+import { peutDemanderPad } from '../lib/roles.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
 import Placeholder from '../components/Placeholder.jsx'
@@ -44,7 +45,7 @@ function versFormulaire(episode) {
   }
 }
 
-export default function EpisodesPanel({ programmeId, chaineActive, onEpisodesChange }) {
+export default function EpisodesPanel({ programmeId, chaineActive, roleUtilisateur, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -322,7 +323,7 @@ export default function EpisodesPanel({ programmeId, chaineActive, onEpisodesCha
                     />
                     PAD (prêt à diffuser)
                   </label>
-                  {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && (
+                  {episodeId !== 'NOUVEAU' && !form.pad && chaineActive && peutDemanderPad(roleUtilisateur) && (
                     <div>
                       <button
                         type="button"

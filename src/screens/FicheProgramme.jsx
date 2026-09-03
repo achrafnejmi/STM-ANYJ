@@ -85,7 +85,7 @@ function versFormulaire(programme, chaineActive) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange, onNotificationCreee }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange, onNotificationCreee, roleUtilisateur }) {
   const [id, setId] = useState(idInitial)
   const valeurVide = { ...FORM_VIDE, chaineExclusiveId: chaineActive.id }
   const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
@@ -459,6 +459,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         <EpisodesPanel
           programmeId={id}
           chaineActive={chaineActive}
+          roleUtilisateur={roleUtilisateur}
           onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)}
         />
       )}
