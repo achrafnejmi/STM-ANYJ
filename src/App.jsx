@@ -14,7 +14,7 @@ import {
   creerNotifications,
   marquerNotificationLue,
   marquerToutesNotificationsLues,
-  obtenirOuCreerUtilisateur,
+  obtenirUtilisateur,
 } from './lib/db.js'
 import { calculerNotificationsDroitsManquantes } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
@@ -82,7 +82,7 @@ function App() {
   // sécurité (connexion sans mot de passe, RLS ouvertes). Pilote le filtrage
   // de la Sidebar, la garde de route et le verrou de chaîne. Chargé une fois
   // à la connexion. `utilisateurCourant` = la ligne complète (nom_affiche,
-  // chaine_id) ; `roleUtilisateur` = son rôle (fallback 'UTILISATEUR' = tout).
+  // chaine_id) ; `roleUtilisateur` = son rôle.
   const [utilisateurCourant, setUtilisateurCourant] = useState(null)
   const [roleUtilisateur, setRoleUtilisateur] = useState(null)
 
@@ -92,12 +92,26 @@ function App() {
       setRoleUtilisateur(null)
       return
     }
-    obtenirOuCreerUtilisateur(utilisateur)
+    let annule = false
+    obtenirUtilisateur(utilisateur)
       .then((u) => {
-        setUtilisateurCourant(u ?? null)
-        setRoleUtilisateur(u?.role ?? 'UTILISATEUR')
+        if (annule) return
+        // P38 : identifiant inconnu (plus de création à la volée) → session
+        // invalide, retour à l'écran de connexion.
+        if (!u) {
+          deconnecter()
+          setUtilisateur(null)
+          setUtilisateurCourant(null)
+          setRoleUtilisateur(null)
+          return
+        }
+        setUtilisateurCourant(u)
+        setRoleUtilisateur(u.role)
       })
       .catch((err) => console.error('Chargement du rôle utilisateur impossible :', err))
+    return () => {
+      annule = true
+    }
   }, [utilisateur])
 
   // Verrou de chaîne : l'Administrateur de chaîne est forcé sur SA chaîne

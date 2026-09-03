@@ -732,12 +732,10 @@ export async function marquerToutesNotificationsLues(chaineId) {
 
 // --- utilisateur (P30 rôles ; P35 : 8 rôles + nom_affiche + chaine_id) ---
 
-// Upsert best-effort (jamais d'écrasement d'un rôle déjà attribué :
-// ignoreDuplicates fait que la ligne existante n'est pas touchée), puis
-// relecture pour renvoyer la ligne réelle (rôle / nom_affiche / chaine_id).
-export async function obtenirOuCreerUtilisateur(nom) {
-  const { error } = await supabase.from('utilisateur').upsert({ nom_utilisateur: nom }, { onConflict: 'nom_utilisateur', ignoreDuplicates: true })
-  if (error) throw error
+// Lecture seule (P38) : la connexion n'accepte plus qu'un identifiant déjà
+// enregistré — plus de création implicite d'un compte à la volée. Renvoie
+// `null` si l'identifiant est inconnu (l'appelant invalide alors la session).
+export async function obtenirUtilisateur(nom) {
   return verifie(await supabase.from('utilisateur').select('*').eq('nom_utilisateur', nom).maybeSingle())
 }
 

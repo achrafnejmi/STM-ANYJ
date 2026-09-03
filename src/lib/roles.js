@@ -54,9 +54,6 @@ export const SECTIONS_PAR_ROLE = {
   REDACTEUR: ['SYNOPSIS'],
   CONTROLE_PAD: ['CONTROLE_PAD'],
   MARKETING: ['ACCUEIL', 'GRILLE_NON_LINEAIRE'],
-  // Rétro-compat P30 : tout, en attendant la migration des rôles.
-  ADMIN: TOUTES,
-  UTILISATEUR: TOUTES,
 }
 
 // `role` peut être null pendant le chargement async → fallback « tout » pour

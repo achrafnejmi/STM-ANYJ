@@ -35,7 +35,7 @@ export default function Administration({ roleUtilisateur }) {
   const [erreur, setErreur] = useState(null)
   // P35 : la gestion des utilisateurs & rôles est réservée au Super
   // Administrateur (l'Administrateur de chaîne voit le reste d'Administration).
-  const estSuperAdmin = roleUtilisateur === 'SUPER_ADMIN' || roleUtilisateur === 'ADMIN'
+  const estSuperAdmin = roleUtilisateur === 'SUPER_ADMIN'
 
   useEffect(() => {
     rafraichir()

@@ -9,7 +9,7 @@ import { CHAINES } from '../lib/chaines.js'
 import { useNotification } from './NotificationProvider.jsx'
 
 export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, onRafraichir }) {
-  const [nouveau, setNouveau] = useState({ nom_utilisateur: '', nom_affiche: '', role: 'UTILISATEUR', chaine_id: '' })
+  const [nouveau, setNouveau] = useState({ nom_utilisateur: '', nom_affiche: '', role: 'PROGRAMMATEUR', chaine_id: '' })
   const [erreur, setErreur] = useState(null)
   const notifier = useNotification()
 
@@ -35,7 +35,7 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
         role: nouveau.role,
         chaine_id: nouveau.chaine_id || null,
       })
-      setNouveau({ nom_utilisateur: '', nom_affiche: '', role: 'UTILISATEUR', chaine_id: '' })
+      setNouveau({ nom_utilisateur: '', nom_affiche: '', role: 'PROGRAMMATEUR', chaine_id: '' })
       setErreur(null)
       notifier.succes(`Utilisateur « ${identifiant} » créé.`)
       onRafraichir()
