@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles, FileDown } from 'lucide-react'
-import { listerProgrammesParChaine, obtenirBible, enregistrerBible } from '../lib/db.js'
+import { Sparkles, FileDown, FileText, ChevronDown, ChevronRight } from 'lucide-react'
+import { listerProgrammesParChaine, obtenirBible, enregistrerBible, urlBible } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { genererSynopsisFactice } from '../lib/bibleDemo.js'
 import { exporterSynopsisPdf } from '../lib/exportSynopsisPdf.js'
 
-// Écran Synopsis (P35b, rôle Rédacteur) : génère un synopsis FR/AR à partir de
-// la bible du programme. Génération SIMULÉE (gabarit, pas d'IA) — résultat
-// éditable puis enregistré dans la table `bible`.
+// Écran Synopsis (P35b, rôle Rédacteur ; P38 : sortie PDF uniquement). Le
+// journaliste consulte la bible, génère le synopsis FR/AR (gabarit simulé, pas
+// d'IA) puis le télécharge en PDF (FR / AR / bilingue). Plus de champs de saisie
+// éditables : le texte généré est enregistré et affiché en aperçu seul.
 export default function Synopsis({ chaineActive }) {
   const [programmes, setProgrammes] = useState([])
   const [programmeId, setProgrammeId] = useState('')
   const [bible, setBible] = useState(null)
   const [fr, setFr] = useState('')
   const [ar, setAr] = useState('')
+  const [ocrOuvert, setOcrOuvert] = useState(false)
   const [chargement, setChargement] = useState(true)
-  const [enregistrement, setEnregistrement] = useState(false)
+  const [generation, setGeneration] = useState(false)
   const [exportEnCours, setExportEnCours] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [message, setMessage] = useState(null)
@@ -32,6 +34,8 @@ export default function Synopsis({ chaineActive }) {
   }, [chaineActive])
 
   useEffect(() => {
+    setOcrOuvert(false)
+    setMessage(null)
     if (!programmeId) {
       setBible(null)
       setFr('')
@@ -49,11 +53,23 @@ export default function Synopsis({ chaineActive }) {
 
   const programme = useMemo(() => programmes.find((p) => p.id === programmeId) ?? null, [programmes, programmeId])
 
-  function generer() {
-    const { fr: nfr, ar: nar } = genererSynopsisFactice(programme, bible?.ocr_texte)
-    setFr(nfr)
-    setAr(nar)
-    setMessage('Synopsis généré (démo) — relisez / ajustez puis enregistrez.')
+  // Génère puis enregistre directement (aucune édition manuelle) — le synopsis
+  // devient consultable partout (fiche programme, onglet Métadonnées).
+  async function generer() {
+    setGeneration(true)
+    setErreur(null)
+    try {
+      const { fr: nfr, ar: nar } = genererSynopsisFactice(programme, bible?.ocr_texte)
+      setFr(nfr)
+      setAr(nar)
+      const maj = await enregistrerBible(programmeId, { synopsis_fr: nfr, synopsis_ar: nar, cree_par: lireUtilisateur() })
+      setBible(maj)
+      setMessage('Synopsis généré et enregistré — téléchargez le PDF.')
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setGeneration(false)
+    }
   }
 
   async function telecharger(langue) {
@@ -74,27 +90,15 @@ export default function Synopsis({ chaineActive }) {
     }
   }
 
-  async function enregistrer() {
-    setEnregistrement(true)
-    setErreur(null)
-    try {
-      const maj = await enregistrerBible(programmeId, { synopsis_fr: fr, synopsis_ar: ar, cree_par: lireUtilisateur() })
-      setBible(maj)
-      setMessage('Synopsis enregistré.')
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setEnregistrement(false)
-    }
-  }
+  const bibleDeposee = Boolean(bible?.fichier_chemin)
 
   return (
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Synopsis — {chaineActive.nom}</h1>
         <p className="text-sm text-slate-500">
-          Rédaction du synopsis FR / AR à partir de la bible. <span className="font-medium">Génération simulée</span> pour
-          la démonstration.
+          Génération du synopsis FR / AR à partir de la bible, en PDF.{' '}
+          <span className="font-medium">Génération simulée</span> pour la démonstration.
         </p>
       </div>
 
@@ -119,12 +123,52 @@ export default function Synopsis({ chaineActive }) {
             </select>
           </div>
 
-          {!bible?.ocr_texte && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              La bible de ce programme n'a pas encore été analysée — voir l'écran <strong>Bible</strong>. La génération
-              reste possible mais sera moins précise.
-            </p>
-          )}
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">Bible</h2>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  bibleDeposee ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                {bibleDeposee ? 'Déposée' : 'Non déposée'}
+              </span>
+            </div>
+            {bibleDeposee ? (
+              <a
+                href={urlBible(bible.fichier_chemin)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-sm text-snrt-navy hover:underline"
+              >
+                <FileText size={15} />
+                Ouvrir le PDF de la bible
+              </a>
+            ) : (
+              <p className="mt-1 text-sm text-slate-500">
+                Aucun PDF déposé — voir l'écran <strong>Bible</strong>. La génération reste possible mais sera moins
+                précise.
+              </p>
+            )}
+            {bible?.ocr_texte && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setOcrOuvert((v) => !v)}
+                  className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-800"
+                >
+                  {ocrOuvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Consulter le texte OCR de la bible
+                </button>
+                {ocrOuvert && (
+                  <pre className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700">
+                    {bible.ocr_texte}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+
           {erreur && <p className="text-sm text-red-600">{erreur}</p>}
           {message && <p className="text-sm text-emerald-600">{message}</p>}
 
@@ -132,63 +176,51 @@ export default function Synopsis({ chaineActive }) {
             <button
               type="button"
               onClick={generer}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+              disabled={generation}
+              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
             >
               <Sparkles size={15} />
-              Générer le synopsis (démo)
+              {generation ? 'Génération…' : 'Générer le synopsis (démo)'}
             </button>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="mb-2 text-sm font-semibold text-slate-900">Synopsis (français)</h2>
-              <textarea
-                value={fr}
-                onChange={(e) => setFr(e.target.value)}
-                rows={10}
-                className="w-full rounded-md border border-slate-300 p-2 text-sm"
-              />
+          {(fr || ar) && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {fr && (
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (français)</h3>
+                  <p className="whitespace-pre-wrap text-sm text-slate-700">{fr}</p>
+                </div>
+              )}
+              {ar && (
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (العربية)</h3>
+                  <p dir="rtl" className="whitespace-pre-wrap text-sm text-slate-700">
+                    {ar}
+                  </p>
+                </div>
+              )}
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="mb-2 text-sm font-semibold text-slate-900">Synopsis (العربية)</h2>
-              <textarea
-                value={ar}
-                onChange={(e) => setAr(e.target.value)}
-                dir="rtl"
-                rows={10}
-                className="w-full rounded-md border border-slate-300 p-2 text-sm"
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-slate-500">Télécharger&nbsp;:</span>
-              {[
-                { code: 'FR', label: 'PDF français', off: !fr.trim() },
-                { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
-                { code: 'BILINGUE', label: 'PDF bilingue', off: !fr.trim() && !ar.trim() },
-              ].map((b) => (
-                <button
-                  key={b.code}
-                  type="button"
-                  onClick={() => telecharger(b.code)}
-                  disabled={b.off || exportEnCours !== null}
-                  className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
-                >
-                  <FileDown size={15} />
-                  {exportEnCours === b.code ? 'Génération…' : b.label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={enregistrer}
-              disabled={enregistrement || (fr === (bible?.synopsis_fr ?? '') && ar === (bible?.synopsis_ar ?? ''))}
-              className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-            >
-              {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+            <span className="text-sm font-medium text-slate-500">Télécharger&nbsp;:</span>
+            {[
+              { code: 'FR', label: 'PDF français', off: !fr.trim() },
+              { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
+              { code: 'BILINGUE', label: 'PDF bilingue', off: !fr.trim() && !ar.trim() },
+            ].map((b) => (
+              <button
+                key={b.code}
+                type="button"
+                onClick={() => telecharger(b.code)}
+                disabled={b.off || exportEnCours !== null}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
+              >
+                <FileDown size={15} />
+                {exportEnCours === b.code ? 'Génération…' : b.label}
+              </button>
+            ))}
           </div>
         </>
       )}
