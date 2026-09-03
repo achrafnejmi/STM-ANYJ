@@ -38,16 +38,21 @@ export default function Administration({ roleUtilisateur }) {
   const estSuperAdmin = roleUtilisateur === 'SUPER_ADMIN'
 
   useEffect(() => {
-    rafraichir()
+    rafraichir(true)
   }, [])
+
+  // Rechargement après une écriture d'un tableau enfant : silencieux (pas de
+  // bascule plein écran « Chargement… », qui ferait remonter le scroll et
+  // sortirait l'utilisateur de la section qu'il était en train d'éditer).
+  const rafraichirSilencieux = () => rafraichir(false)
 
   // Chargée sans condition sur `estAdmin` (permis par les RLS de toute façon,
   // coût négligeable) — seul l'AFFICHAGE de la section est gardé par le rôle,
   // ce qui évite toute dépendance sur l'ordre d'arrivée du rôle (chargé de
   // façon async par App.jsx après la connexion, potentiellement après le
   // premier rendu de cet écran).
-  async function rafraichir() {
-    setChargement(true)
+  async function rafraichir(avecSpinner = false) {
+    if (avecSpinner) setChargement(true)
     setErreur(null)
     try {
       const [lignesGenres, lignesTranches, lignesChaines, lignesUtilisateurs] = await Promise.all([
@@ -67,7 +72,7 @@ export default function Administration({ roleUtilisateur }) {
     } catch (err) {
       setErreur(err.message)
     } finally {
-      setChargement(false)
+      if (avecSpinner) setChargement(false)
     }
   }
 
@@ -82,12 +87,12 @@ export default function Administration({ roleUtilisateur }) {
 
       {erreur && <p className="text-sm text-red-600">{erreur}</p>}
 
-      <TableauGenres genres={genres} onRafraichir={rafraichir} />
-      <TableauTranches tranches={tranches} onRafraichir={rafraichir} />
-      <TableauChaines chaines={chaines} onRafraichir={rafraichir} />
+      <TableauGenres genres={genres} onRafraichir={rafraichirSilencieux} />
+      <TableauTranches tranches={tranches} onRafraichir={rafraichirSilencieux} />
+      <TableauChaines chaines={chaines} onRafraichir={rafraichirSilencieux} />
 
       {estSuperAdmin && (
-        <TableauUtilisateurs utilisateurs={utilisateurs} utilisateurActif={lireUtilisateur()} onRafraichir={rafraichir} />
+        <TableauUtilisateurs utilisateurs={utilisateurs} utilisateurActif={lireUtilisateur()} onRafraichir={rafraichirSilencieux} />
       )}
 
       <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
