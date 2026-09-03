@@ -753,6 +753,13 @@ export async function mettreAJourUtilisateur(nom, champs) {
   return verifiePremiere(await supabase.from('utilisateur').update(champs).eq('nom_utilisateur', nom).select())
 }
 
+// Suppression d'un compte de démo (aucune FK vers `utilisateur` : `cree_par`,
+// `demandeur`… sont du texte libre, rien n'est cassé). L'appelant empêche la
+// suppression de la session courante.
+export async function supprimerUtilisateur(nom) {
+  verifie(await supabase.from('utilisateur').delete().eq('nom_utilisateur', nom).select())
+}
+
 // --- chaine (retouche post-P29 : gestion en Administration) ---
 // Liste fermée à 5 lignes (M1, migration-p9.sql) — édition seulement (nom,
 // nom_ar, ligne_editoriale, couleur_token), jamais d'ajout/suppression :

@@ -2,20 +2,25 @@
 // affiché distinct de l'identifiant, chaîne d'affectation, création).
 // Édition en ligne, écriture immédiate ; création via une ligne de saisie.
 import { useState } from 'react'
-import { creerUtilisateur, mettreAJourUtilisateur } from '../lib/db.js'
+import { Trash2 } from 'lucide-react'
+import { creerUtilisateur, mettreAJourUtilisateur, supprimerUtilisateur } from '../lib/db.js'
 import { ROLES } from '../lib/roles.js'
 import { CHAINES } from '../lib/chaines.js'
+import { useNotification } from './NotificationProvider.jsx'
 
 export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, onRafraichir }) {
   const [nouveau, setNouveau] = useState({ nom_utilisateur: '', nom_affiche: '', role: 'UTILISATEUR', chaine_id: '' })
   const [erreur, setErreur] = useState(null)
+  const notifier = useNotification()
 
-  async function patch(nom, champs) {
+  async function patch(nom, champs, message) {
     try {
       await mettreAJourUtilisateur(nom, champs)
+      notifier.succes(message ?? `Modifications de « ${nom} » enregistrées.`)
       onRafraichir()
     } catch (err) {
       setErreur(err.message)
+      notifier.erreur(err.message)
     }
   }
 
@@ -32,9 +37,28 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
       })
       setNouveau({ nom_utilisateur: '', nom_affiche: '', role: 'UTILISATEUR', chaine_id: '' })
       setErreur(null)
+      notifier.succes(`Utilisateur « ${identifiant} » créé.`)
       onRafraichir()
     } catch (err) {
       setErreur(err.message)
+      notifier.erreur(err.message)
+    }
+  }
+
+  async function supprimer(nom) {
+    const ok = await notifier.confirmer({
+      titre: 'Supprimer l\'utilisateur',
+      message: `Supprimer définitivement « ${nom} » ? (compte de démonstration, sans incidence sur les données métier)`,
+      labelConfirmer: 'Supprimer',
+    })
+    if (!ok) return
+    try {
+      await supprimerUtilisateur(nom)
+      notifier.succes(`Utilisateur « ${nom} » supprimé.`)
+      onRafraichir()
+    } catch (err) {
+      setErreur(err.message)
+      notifier.erreur(err.message)
     }
   }
 
@@ -55,6 +79,7 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
               <th className="py-2 pr-3 font-medium">Nom affiché</th>
               <th className="py-2 pr-3 font-medium">Rôle</th>
               <th className="py-2 pr-3 font-medium">Chaîne</th>
+              <th className="py-2 pr-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
@@ -70,14 +95,19 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
                   <input
                     type="text"
                     defaultValue={u.nom_affiche ?? ''}
-                    onBlur={(e) => e.target.value !== (u.nom_affiche ?? '') && patch(u.nom_utilisateur, { nom_affiche: e.target.value })}
+                    onBlur={(e) =>
+                      e.target.value !== (u.nom_affiche ?? '') &&
+                      patch(u.nom_utilisateur, { nom_affiche: e.target.value }, `Nom affiché de « ${u.nom_utilisateur} » enregistré.`)
+                    }
                     className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm"
                   />
                 </td>
                 <td className="py-1.5 pr-3">
                   <select
                     value={u.role}
-                    onChange={(e) => patch(u.nom_utilisateur, { role: e.target.value })}
+                    onChange={(e) =>
+                      patch(u.nom_utilisateur, { role: e.target.value }, `Rôle de « ${u.nom_utilisateur} » mis à jour.`)
+                    }
                     className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                   >
                     {ROLES.map((r) => (
@@ -91,7 +121,13 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
                 <td className="py-1.5 pr-3">
                   <select
                     value={u.chaine_id ?? ''}
-                    onChange={(e) => patch(u.nom_utilisateur, { chaine_id: e.target.value || null })}
+                    onChange={(e) =>
+                      patch(
+                        u.nom_utilisateur,
+                        { chaine_id: e.target.value || null },
+                        `Chaîne de « ${u.nom_utilisateur} » mise à jour.`
+                      )
+                    }
                     className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                   >
                     <option value="">— (toutes)</option>
@@ -102,11 +138,23 @@ export default function TableauUtilisateurs({ utilisateurs, utilisateurActif, on
                     ))}
                   </select>
                 </td>
+                <td className="py-1.5 pr-3 text-right">
+                  {u.nom_utilisateur !== utilisateurActif && (
+                    <button
+                      type="button"
+                      onClick={() => supprimer(u.nom_utilisateur)}
+                      title="Supprimer cet utilisateur"
+                      className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
             {utilisateurs.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-3 pl-3 text-sm text-slate-500">
+                <td colSpan={5} className="py-3 pl-3 text-sm text-slate-500">
                   Aucun utilisateur connu.
                 </td>
               </tr>
