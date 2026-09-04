@@ -237,6 +237,14 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   Tableau de bord et tableau « Bibles & synopsis » **orientés langue** (KPI FR seuls pour la
   Rédactrice FR, etc.). Comptes de démo : `salma.redac` → Rédactrice FR, `khadija.redac` →
   Rédactrice AR. Migration : `migration-p42.sql`.
+- **P41 — Fiche programme : catalogue par la Gestion droits/stock + onglets Supports & Événements
+  secondaires** ✅ LIVRÉ (hors feuille de route) : `peutGererCatalogue` inclut désormais
+  `GESTION_DROITS_STOCK` (création / suppression de programme, édition de l'exclusivité). Les
+  deux sous-onglets de l'épisode (fiche → Épisodes) sont implémentés d'après l'ancien STM :
+  **Supports** (numéro de support, type, Tc in) et **Événements secondaires** (type parmi une
+  nomenclature, start time, durée en secondes) — tables `support` / `evenement_secondaire`,
+  ajout/suppression réservés à `peutGererCatalogue`, lecture seule pour les autres. Migration :
+  `migration-p43.sql`.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

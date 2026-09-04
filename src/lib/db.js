@@ -166,6 +166,34 @@ export async function listerTousLesEpisodes() {
   )
 }
 
+// --- support / evenement_secondaire d'un épisode (P41) ---
+
+export async function listerSupportsParEpisode(episodeId) {
+  return verifie(await supabase.from('support').select('*').eq('episode_id', episodeId).order('cree_le'))
+}
+
+export async function creerSupport(champs) {
+  return verifiePremiere(await supabase.from('support').insert(champs).select())
+}
+
+export async function supprimerSupport(id) {
+  verifie(await supabase.from('support').delete().eq('id', id).select())
+}
+
+export async function listerEvenementsSecondairesParEpisode(episodeId) {
+  return verifie(
+    await supabase.from('evenement_secondaire').select('*').eq('episode_id', episodeId).order('cree_le')
+  )
+}
+
+export async function creerEvenementSecondaire(champs) {
+  return verifiePremiere(await supabase.from('evenement_secondaire').insert(champs).select())
+}
+
+export async function supprimerEvenementSecondaire(id) {
+  verifie(await supabase.from('evenement_secondaire').delete().eq('id', id).select())
+}
+
 // --- grille (P23) : plusieurs grilles nommées par chaîne, une seule live ---
 
 export async function listerGrillesParChaine(chaineId) {

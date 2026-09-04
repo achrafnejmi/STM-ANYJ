@@ -12,11 +12,12 @@ import {
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
-import { peutDemanderPad, peutMettreEnPad, peutRelancerPad } from '../lib/roles.js'
+import { peutDemanderPad, peutMettreEnPad, peutRelancerPad, peutGererCatalogue } from '../lib/roles.js'
 import { messageDemandePad, messageRelancePad } from '../lib/notifications.js'
 import { calculerParEpisode } from '../lib/historique.js'
 import { formaterDateLongue } from '../lib/semaine.js'
-import Placeholder from '../components/Placeholder.jsx'
+import PanneauSupports from '../components/PanneauSupports.jsx'
+import PanneauEvenementsSecondaires from '../components/PanneauEvenementsSecondaires.jsx'
 import { useNotification, useGardeModifications } from '../components/NotificationProvider.jsx'
 
 const ONGLETS = [
@@ -346,8 +347,18 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                 ))}
               </div>
 
-              {onglet === 'SUPPORTS' && <Placeholder titre="Supports" />}
-              {onglet === 'EVENEMENTS' && <Placeholder titre="Événements secondaires" />}
+              {onglet === 'SUPPORTS' &&
+                (episodeId === 'NOUVEAU' ? (
+                  <p className="text-sm text-slate-500">Enregistrez d'abord l'épisode.</p>
+                ) : (
+                  <PanneauSupports episodeId={episodeId} editable={peutGererCatalogue(roleUtilisateur)} />
+                ))}
+              {onglet === 'EVENEMENTS' &&
+                (episodeId === 'NOUVEAU' ? (
+                  <p className="text-sm text-slate-500">Enregistrez d'abord l'épisode.</p>
+                ) : (
+                  <PanneauEvenementsSecondaires episodeId={episodeId} editable={peutGererCatalogue(roleUtilisateur)} />
+                ))}
               {onglet === 'INFOS' && (
                 <form onSubmit={enregistrer} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">

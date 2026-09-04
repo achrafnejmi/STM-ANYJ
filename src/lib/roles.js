@@ -127,11 +127,16 @@ export function peutRelancerPad(role) {
   return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
 }
 
-// Gestion du catalogue (P37) : créer / supprimer un programme, éditer son
-// exclusivité. Réservé au catalogage (Acquisitions), à l'Admin de chaîne et au
-// Super Admin — un Programmateur n'ajoute pas de programme.
+// Gestion du catalogue (P37 ; P41 : + Gestion des droits et du stock) : créer /
+// supprimer un programme, éditer son exclusivité, gérer supports & événements
+// secondaires des épisodes. Un Programmateur n'ajoute pas de programme.
 export function peutGererCatalogue(role) {
-  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'ACQUISITIONS'
+  return (
+    role === 'SUPER_ADMIN' ||
+    role === 'ADMIN_CHAINE' ||
+    role === 'ACQUISITIONS' ||
+    role === 'GESTION_DROITS_STOCK'
+  )
 }
 
 // Initier une demande de programmation d'un titre exclusif à une autre chaîne
