@@ -251,6 +251,13 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   (`migration-p44.sql`). La gestion de contrats fournisseur/paiement de l'ancien STM reste
   **hors périmètre** : décision du cahier (« la saisie des contrats demeure dans le module
   Acquisitions existant ») — Snomark garde `reference_contrat` + passages autorisés/consommés.
+- **P43 — Publications non-linéaires par épisode** ✅ LIVRÉ (extension hors cahier) : colonne
+  `episode_id` (nullable) sur `publication_reseau` / `publication_vod` (`migration-p45.sql`).
+  Sélecteur **Épisode** dans le panneau de publication (défaut « Programme entier » ; un
+  glisser d'épisode depuis le catalogue le présélectionne) ; **filtre Programme + Épisode**
+  dépendant dans la barre d'outils des deux onglets ; badge `ÉP.NN` sur les cartes ; colonne
+  **Épisode** à l'export et dans la sous-vue « Non-linéaire » de l'onglet Historique de la
+  fiche (filtre Épisode désormais partagé avec la sous-vue Linéaire).
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

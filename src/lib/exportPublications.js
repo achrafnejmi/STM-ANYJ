@@ -9,7 +9,7 @@ import { statutPublication } from './statutsPublication.js'
 // unique consommé par les 3 formats (Excel/PDF/Word), même précédent que
 // construireDonneesBilan.
 export function construireDonneesPublications({ libelleOnglet, chaineNom, periodeLabel, publications, avecFormat }) {
-  const colonnes = ['Statut', 'Date', 'Heure', 'Plateforme', ...(avecFormat ? ['Format'] : []), 'Titre', 'Lien']
+  const colonnes = ['Statut', 'Date', 'Heure', 'Plateforme', ...(avecFormat ? ['Format'] : []), 'Titre', 'Épisode', 'Lien']
   const lignes = publications.map((p) => [
     statutPublication(p.statut).libelle,
     p.date_publication,
@@ -17,6 +17,7 @@ export function construireDonneesPublications({ libelleOnglet, chaineNom, period
     p.plateforme,
     ...(avecFormat ? [p.format] : []),
     p.titre || p.programmeTitre || '—',
+    p.episodeLabel || '—',
     p.lien || '—',
   ])
   return {

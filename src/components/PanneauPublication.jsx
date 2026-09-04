@@ -5,7 +5,7 @@
 // onglets, seul le champ Format apparaît/disparaît selon `config.formats`.
 import { useEffect, useId, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
-import { listerDiffusionsLineairesParProgramme, creerNotifications } from '../lib/db.js'
+import { listerDiffusionsLineairesParProgramme, listerEpisodes, creerNotifications } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { messagePublicationNonLineaire } from '../lib/notifications.js'
 import { enregistrerAction } from '../lib/undoManager.js'
@@ -23,6 +23,7 @@ function ecranPour(config) {
 export default function PanneauPublication({
   publication,
   programmeInitial,
+  episodeInitial,
   dateInitiale,
   programmes,
   chaineActive,
@@ -36,6 +37,7 @@ export default function PanneauPublication({
   const estEdition = !!publication
   const [valeurInitiale] = useState(() => ({
     programme_id: publication?.programme_id ?? programmeInitial ?? '',
+    episode_id: publication?.episode_id ?? episodeInitial ?? '',
     plateforme: publication?.plateforme ?? config.plateformes[0].code,
     format: publication?.format ?? '',
     date_publication: publication?.date_publication ?? dateInitiale ?? aujourdHuiISO(),
@@ -53,7 +55,9 @@ export default function PanneauPublication({
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const [diffusionsLineaires, setDiffusionsLineaires] = useState([])
+  const [episodes, setEpisodes] = useState([])
   const idProgramme = useId()
+  const idEpisode = useId()
   const idPlateforme = useId()
   const idFormat = useId()
   const idDate = useId()
@@ -64,16 +68,24 @@ export default function PanneauPublication({
   const idVisuel = useId()
   const idStatut = useId()
 
-  // Indicateur lecture seule "déjà diffusé en linéaire" — aide au calage de
-  // la promo, aucun couplage d'écriture entre les deux modèles.
+  // Indicateur lecture seule "déjà diffusé en linéaire" + liste des épisodes du
+  // programme choisi (pour le sélecteur Épisode, P43). Un changement de
+  // programme qui rend l'épisode courant invalide le remet à "programme entier".
   useEffect(() => {
     if (!form.programme_id) {
       setDiffusionsLineaires([])
+      setEpisodes([])
       return
     }
     listerDiffusionsLineairesParProgramme(form.programme_id)
       .then(setDiffusionsLineaires)
       .catch(() => setDiffusionsLineaires([]))
+    listerEpisodes(form.programme_id)
+      .then((lignes) => {
+        setEpisodes(lignes)
+        setForm((f) => (f.episode_id && !lignes.some((ep) => ep.id === f.episode_id) ? { ...f, episode_id: '' } : f))
+      })
+      .catch(() => setEpisodes([]))
   }, [form.programme_id])
 
   async function enregistrer(e) {
@@ -91,6 +103,7 @@ export default function PanneauPublication({
     const champs = {
       chaine_id: chaineActive.id,
       programme_id: form.programme_id,
+      episode_id: form.episode_id || null,
       plateforme: form.plateforme,
       ...(config.formats ? { format: form.format } : {}),
       date_publication: form.date_publication,
@@ -101,7 +114,10 @@ export default function PanneauPublication({
       visuel: form.visuel.trim() || null,
       statut: form.statut,
     }
-    const titreProgramme = programmes.find((p) => p.id === form.programme_id)?.titre || 'publication'
+    const numeroEp = episodes.find((ep) => ep.id === form.episode_id)?.numero
+    const titreProgramme =
+      (programmes.find((p) => p.id === form.programme_id)?.titre || 'publication') +
+      (numeroEp != null ? ` — ÉP. ${numeroEp}` : '')
     const etaitPublie = estEdition && publication.statut === 'PUBLIE'
     // Notifie le rôle Marketing / Digital quand une publication passe à PUBLIÉ
     // (P35c) — notification par chaîne, non ciblée par utilisateur (cf. plan).
@@ -201,6 +217,28 @@ export default function PanneauPublication({
             ))}
           </select>
         </div>
+
+        {episodes.length > 0 && (
+          <div>
+            <label htmlFor={idEpisode} className="mb-1 block text-xs font-medium text-slate-700">
+              Épisode
+            </label>
+            <select
+              id={idEpisode}
+              value={form.episode_id}
+              onChange={(e) => setForm({ ...form, episode_id: e.target.value })}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">— Programme entier —</option>
+              {episodes.map((ep) => (
+                <option key={ep.id} value={ep.id}>
+                  ÉP.{String(ep.numero ?? '?').padStart(2, '0')}
+                  {ep.titre ? ` — ${ep.titre}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {diffusionsLineaires.length > 0 && (
           <p className="rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-500">

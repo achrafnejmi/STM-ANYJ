@@ -74,34 +74,34 @@ export default function HistoriqueTitrePanel({ programmeId }) {
   const episodesParId = new Map(episodes.map((e) => [e.id, e]))
 
   // --- non-linéaire : posts réseaux sociaux + mises en ligne VOD, fusionnés ---
+  // P43 : rattachement épisode (`episode_id`) — pris en compte dans l'affichage
+  // et le filtre Épisode partagé avec la sous-vue Linéaire.
   const publicationsPassees = useMemo(() => {
+    const labelEp = new Map(episodes.map((e) => [e.id, e.numero != null ? `ÉP.${String(e.numero).padStart(2, '0')}` : '—']))
+    const commun = (p, type, canal) => ({
+      id: p.id,
+      date: p.date_publication,
+      heure: p.heure_publication,
+      type,
+      canal,
+      titre: p.titre,
+      statut: p.statut,
+      episode_id: p.episode_id ?? null,
+      episodeLabel: p.episode_id ? (labelEp.get(p.episode_id) ?? 'ÉP.') : 'Programme entier',
+    })
     const reseau = publicationsReseau
       .filter((p) => p.date_publication < aujourdHui)
-      .map((p) => ({
-        id: p.id,
-        date: p.date_publication,
-        heure: p.heure_publication,
-        type: 'Réseau social',
-        canal: `${LIBELLE_PLATEFORME[p.plateforme] ?? p.plateforme} · ${LIBELLE_FORMAT[p.format] ?? p.format}`,
-        titre: p.titre,
-        statut: p.statut,
-      }))
+      .map((p) => commun(p, 'Réseau social', `${LIBELLE_PLATEFORME[p.plateforme] ?? p.plateforme} · ${LIBELLE_FORMAT[p.format] ?? p.format}`))
     const vod = publicationsVod
       .filter((p) => p.date_publication < aujourdHui)
-      .map((p) => ({
-        id: p.id,
-        date: p.date_publication,
-        heure: p.heure_publication,
-        type: 'VOD',
-        canal: LIBELLE_PLATEFORME[p.plateforme] ?? p.plateforme,
-        titre: p.titre,
-        statut: p.statut,
-      }))
-    return [...reseau, ...vod].sort((a, b) => {
-      if (a.date !== b.date) return a.date < b.date ? 1 : -1
-      return (b.heure ?? '') < (a.heure ?? '') ? -1 : 1
-    })
-  }, [publicationsReseau, publicationsVod, aujourdHui])
+      .map((p) => commun(p, 'VOD', LIBELLE_PLATEFORME[p.plateforme] ?? p.plateforme))
+    return [...reseau, ...vod]
+      .filter((p) => !filtreEpisode || p.episode_id === filtreEpisode)
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1
+        return (b.heure ?? '') < (a.heure ?? '') ? -1 : 1
+      })
+  }, [publicationsReseau, publicationsVod, episodes, filtreEpisode, aujourdHui])
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-6">
@@ -239,12 +239,30 @@ export default function HistoriqueTitrePanel({ programmeId }) {
 
       {!chargement && !erreur && ongletCanal === 'NON_LINEAIRE' && (
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-slate-700">Publications non-linéaires (passées)</h3>
-          <p className="mb-3 text-xs text-slate-500">
-            Posts réseaux sociaux et mises en ligne VOD — pas de rattachement épisode à ce niveau.
-          </p>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-700">Publications non-linéaires (passées)</h3>
+            {episodes.length > 0 && (
+              <select
+                value={filtreEpisode}
+                onChange={(e) => setFiltreEpisode(e.target.value)}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+              >
+                <option value="">Tous les épisodes</option>
+                {episodes.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
+                    {ep.titre ? ` — ${ep.titre}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           {publicationsPassees.length === 0 && (
-            <p className="text-sm text-slate-500">Aucune publication non-linéaire passée pour ce titre.</p>
+            <p className="text-sm text-slate-500">
+              {filtreEpisode
+                ? 'Aucune publication non-linéaire passée pour cet épisode.'
+                : 'Aucune publication non-linéaire passée pour ce titre.'}
+            </p>
           )}
           {publicationsPassees.length > 0 && (
             <div className="max-h-96 overflow-y-auto rounded-md border border-slate-200">
@@ -255,6 +273,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
                     <th className="py-2 pr-4 font-medium">Heure</th>
                     <th className="py-2 pr-4 font-medium">Type</th>
                     <th className="py-2 pr-4 font-medium">Canal</th>
+                    <th className="py-2 pr-4 font-medium">Épisode</th>
                     <th className="py-2 pr-4 font-medium">Titre</th>
                     <th className="py-2 pr-4 font-medium">Statut</th>
                   </tr>
@@ -266,6 +285,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
                       <td className="py-2 pr-4 text-slate-700">{p.heure ? p.heure.slice(0, 5) : '—'}</td>
                       <td className="py-2 pr-4 text-slate-700">{p.type}</td>
                       <td className="py-2 pr-4 text-slate-700">{p.canal}</td>
+                      <td className="py-2 pr-4 text-slate-700">{p.episodeLabel}</td>
                       <td className="py-2 pr-4 text-slate-700">{p.titre || '—'}</td>
                       <td className="py-2 pr-4">
                         <span

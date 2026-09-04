@@ -19,6 +19,7 @@ import {
   formaterPlageSemaine,
   formaterDateLongue,
 } from '../lib/semaine.js'
+import { listerTousLesEpisodes, listerEpisodes } from '../lib/db.js'
 import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
 import { couleurPlateforme } from '../lib/couleursPlateforme.js'
 import { statutPublication } from '../lib/statutsPublication.js'
@@ -60,6 +61,10 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   const { confirmer } = useNotification()
   const [filtrePlateforme, setFiltrePlateforme] = useState('')
   const [filtreFormat, setFiltreFormat] = useState('')
+  const [filtreProgramme, setFiltreProgramme] = useState('')
+  const [filtreEpisode, setFiltreEpisode] = useState('')
+  const [episodesFiltre, setEpisodesFiltre] = useState([])
+  const [tousEpisodes, setTousEpisodes] = useState([])
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
@@ -69,6 +74,8 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
     setErreur(null)
     setFiltrePlateforme('')
     setFiltreFormat('')
+    setFiltreProgramme('')
+    setFiltreEpisode('')
     config
       .lister(chaineActive.id)
       .then(setPublications)
@@ -76,6 +83,25 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
       .finally(() => setChargement(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- config est un objet statique par onglet, pas une dépendance réactive
   }, [chaineActive, config.table])
+
+  // Épisodes de toute la chaîne (P43) — pour le badge ÉP.NN des cartes et l'export.
+  useEffect(() => {
+    listerTousLesEpisodes()
+      .then(setTousEpisodes)
+      .catch(() => setTousEpisodes([]))
+  }, [chaineActive])
+
+  // Liste dépendante du filtre Épisode : épisodes du programme sélectionné.
+  useEffect(() => {
+    setFiltreEpisode('')
+    if (!filtreProgramme) {
+      setEpisodesFiltre([])
+      return
+    }
+    listerEpisodes(filtreProgramme)
+      .then(setEpisodesFiltre)
+      .catch(() => setEpisodesFiltre([]))
+  }, [filtreProgramme])
 
   // Pile annuler/rétablir (P30 rollback) : rafraîchie après chaque écriture.
   // Pas de documentId (un seul calendrier continu par chaîne, pas de
@@ -109,14 +135,23 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
   )
 
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
+  const numeroEpisodeParId = useMemo(() => new Map(tousEpisodes.map((e) => [e.id, e.numero])), [tousEpisodes])
+  const etiquetteEpisode = (episodeId) => {
+    if (!episodeId) return ''
+    const n = numeroEpisodeParId.get(episodeId)
+    return n != null ? `ÉP.${String(n).padStart(2, '0')}` : 'ÉP.'
+  }
 
   const publicationsFiltrees = useMemo(
     () =>
       publications.filter(
         (p) =>
-          (!filtrePlateforme || p.plateforme === filtrePlateforme) && (!filtreFormat || p.format === filtreFormat)
+          (!filtrePlateforme || p.plateforme === filtrePlateforme) &&
+          (!filtreFormat || p.format === filtreFormat) &&
+          (!filtreProgramme || p.programme_id === filtreProgramme) &&
+          (!filtreEpisode || p.episode_id === filtreEpisode)
       ),
-    [publications, filtrePlateforme, filtreFormat]
+    [publications, filtrePlateforme, filtreFormat, filtreProgramme, filtreEpisode]
   )
 
   const parJour = useMemo(() => {
@@ -217,7 +252,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
-    changerPanneau({ programmeId: payload.programmeId, date: jour })
+    changerPanneau({ programmeId: payload.programmeId, episodeId: payload.episodeId ?? null, date: jour })
   }
 
   const periodeLabel = vue === 'SEMAINE' ? formaterPlageSemaine(lundi) : formaterDateLongue(dateReference)
@@ -229,7 +264,11 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
       periodeLabel,
       publications: publicationsFiltrees
         .filter((p) => jours.includes(p.date_publication))
-        .map((p) => ({ ...p, programmeTitre: programmesParId.get(p.programme_id)?.titre })),
+        .map((p) => ({
+          ...p,
+          programmeTitre: programmesParId.get(p.programme_id)?.titre,
+          episodeLabel: etiquetteEpisode(p.episode_id) || '—',
+        })),
       avecFormat: !!config.formats,
     })
   }
@@ -347,6 +386,33 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
                 ))}
               </select>
             )}
+            <select
+              value={filtreProgramme}
+              onChange={(e) => setFiltreProgramme(e.target.value)}
+              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-600"
+            >
+              <option value="">Tous les programmes</option>
+              {programmes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.titre}
+                </option>
+              ))}
+            </select>
+            {filtreProgramme && (
+              <select
+                value={filtreEpisode}
+                onChange={(e) => setFiltreEpisode(e.target.value)}
+                className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-600"
+              >
+                <option value="">Tous les épisodes</option>
+                {episodesFiltre.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    ÉP.{String(ep.numero ?? '?').padStart(2, '0')}
+                    {ep.titre ? ` — ${ep.titre}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => naviguer(-1)} className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50">
@@ -450,6 +516,11 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
                                 </span>
                               )}
                               {p.format && <span className="text-slate-400">{p.format}</span>}
+                              {p.episode_id && (
+                                <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600">
+                                  {etiquetteEpisode(p.episode_id)}
+                                </span>
+                              )}
                               {p.heure_publication && <span className="ml-auto font-mono text-slate-500">{p.heure_publication.slice(0, 5)}</span>}
                             </div>
                             <div className="truncate font-medium text-slate-800">{p.titre || programmesParId.get(p.programme_id)?.titre || '—'}</div>
@@ -472,9 +543,10 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
 
       {panneau && (
         <PanneauPublication
-          key={panneau.publication?.id ?? `nouveau:${panneau.programmeId ?? ''}:${panneau.date ?? ''}`}
+          key={panneau.publication?.id ?? `nouveau:${panneau.programmeId ?? ''}:${panneau.episodeId ?? ''}:${panneau.date ?? ''}`}
           publication={panneau.publication ?? null}
           programmeInitial={panneau.programmeId}
+          episodeInitial={panneau.episodeId}
           dateInitiale={panneau.date}
           programmes={programmes}
           chaineActive={chaineActive}
