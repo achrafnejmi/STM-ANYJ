@@ -6,7 +6,7 @@ import CarteIndicateur from '../components/CarteIndicateur.jsx'
 
 // Tableau de bord rédaction (P39, rôle Rédacteur) : uniquement les KPI du
 // périmètre synopsis (couverture bibles, avancement synopsis), pas les
-// indicateurs généraux. Réutilise CarteIndicateur (comme PilotageDroitsStock).
+// indicateurs généraux.
 export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis }) {
   const [programmes, setProgrammes] = useState([])
   const [bibles, setBibles] = useState([])
@@ -50,12 +50,7 @@ export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis })
         <>
           <Bloc couleur="bg-snrt-blue" titre="Bibles">
             <CarteIndicateur libelle="Programmes au catalogue" valeur={stats.total} ton="info" />
-            <CarteIndicateur
-              libelle="Bibles déposées"
-              valeur={`${stats.avecBible} / ${stats.total}`}
-              ton="favorable"
-              sousTexte={`${pourcentage(stats.avecBible, stats.total)} % du catalogue`}
-            />
+            <CarteProgression libelle="Bibles déposées" partie={stats.avecBible} total={stats.total} />
             <CarteIndicateur
               libelle="Sans bible"
               valeur={stats.sansBible}
@@ -65,26 +60,21 @@ export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis })
           </Bloc>
 
           <Bloc couleur="bg-snrt-green" titre="Synopsis">
-            <CarteIndicateur
-              libelle="Synopsis rédigés"
-              valeur={`${stats.traites} / ${stats.total}`}
-              ton="favorable"
-              sousTexte={`${pourcentage(stats.traites, stats.total)} % du catalogue`}
-            />
+            <CarteProgression libelle="Synopsis rédigés" partie={stats.traites} total={stats.total} />
             <CarteIndicateur
               libelle="À rédiger"
               valeur={stats.aRediger}
               ton={stats.aRediger > 0 ? 'vigilance' : 'favorable'}
               sousTexte="bible prête, synopsis manquant"
             />
-            <CarteIndicateur libelle="FR seul" valeur={stats.frSeul} ton="neutre" />
-            <CarteIndicateur libelle="AR seul" valeur={stats.arSeul} ton="neutre" />
-            <CarteIndicateur
-              libelle="Complets (FR + AR)"
-              valeur={stats.complets}
-              ton="favorable"
-              sousTexte={`${pourcentage(stats.complets, stats.total)} % du catalogue`}
-            />
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="text-xs font-medium text-slate-500">Détail des synopsis</div>
+              <ul className="mt-2 space-y-2 text-sm">
+                <LigneDetail couleur="bg-snrt-blue" libelle="Français seul" valeur={stats.frSeul} />
+                <LigneDetail couleur="bg-snrt-orange" libelle="Arabe seul" valeur={stats.arSeul} />
+                <LigneDetail couleur="bg-snrt-green" libelle="Complet (FR + AR)" valeur={stats.complets} />
+              </ul>
+            </div>
           </Bloc>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
@@ -130,7 +120,39 @@ function Bloc({ couleur, titre, children }) {
         <span className={`h-4 w-1 rounded-full ${couleur}`} />
         <h2 className="text-sm font-semibold text-slate-900">{titre}</h2>
       </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{children}</div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </div>
+  )
+}
+
+// Carte « couverture » : le pourcentage est la valeur mise en avant, avec la
+// fraction et une barre de progression pour le rendre explicite.
+function CarteProgression({ libelle, partie, total }) {
+  const pct = pourcentage(partie, total)
+  return (
+    <div className="rounded-lg border border-slate-200 border-l-4 border-l-snrt-green bg-white p-4">
+      <div className="text-xs font-medium text-slate-500">{libelle}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold text-slate-900">{pct}&nbsp;%</span>
+        <span className="text-sm text-slate-400">
+          {partie} / {total} programmes
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+        <div className="h-1.5 rounded-full bg-snrt-green" style={{ width: `${Math.max(pct, 2)}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function LigneDetail({ couleur, libelle, valeur }) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="flex items-center gap-2 text-slate-600">
+        <span className={`h-2 w-2 rounded-full ${couleur}`} />
+        {libelle}
+      </span>
+      <span className="font-semibold tabular-nums text-slate-900">{valeur}</span>
+    </li>
   )
 }
