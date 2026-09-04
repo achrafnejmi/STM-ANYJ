@@ -11,7 +11,8 @@ export const ROLES = [
   { code: 'ACQUISITIONS', label: "Chargé d'acquisitions" },
   { code: 'GESTION_DROITS_STOCK', label: 'Gestion des droits et du stock' },
   { code: 'DOCUMENTALISTE', label: 'Documentaliste' },
-  { code: 'REDACTEUR', label: 'Rédacteur' },
+  { code: 'REDACTEUR_FR', label: 'Rédacteur (FR)' },
+  { code: 'REDACTEUR_AR', label: 'Rédacteur (AR)' },
   { code: 'CONTROLE_PAD', label: 'Contrôle PAD' },
   { code: 'MARKETING', label: 'Marketing / Digital' },
 ]
@@ -31,7 +32,8 @@ const TOUTES = [
   'CONDUCTEUR',
   'ADMINISTRATION',
   'BIBLE',
-  'SYNOPSIS',
+  'SYNOPSIS_FR',
+  'SYNOPSIS_AR',
   'PILOTAGE_DROITS_STOCK',
   'SUIVI_PAD',
   'CONTROLE_PAD',
@@ -75,7 +77,8 @@ export const SECTIONS_PAR_ROLE = {
   // demande de validation PAD — cf. peutDemanderPad.
   GESTION_DROITS_STOCK: ['PILOTAGE_DROITS_STOCK', 'SUIVI_PAD', 'PROGRAMMES', 'CONTRATS'],
   DOCUMENTALISTE: ['BIBLE'],
-  REDACTEUR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS'],
+  REDACTEUR_FR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_FR'],
+  REDACTEUR_AR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_AR'],
   CONTROLE_PAD: ['CONTROLE_PAD'],
   MARKETING: ['ACCUEIL', 'GRILLE_NON_LINEAIRE'],
 }
@@ -166,4 +169,10 @@ export function notificationVisible(notif, role) {
 
 export function libelleRole(code) {
   return ROLES.find((r) => r.code === code)?.label ?? code ?? ''
+}
+
+// Langue de rédaction d'un rôle Rédacteur (P40) — `null` pour tout autre rôle
+// (vue combinée FR + AR).
+export function langueRedacteur(role) {
+  return role === 'REDACTEUR_FR' ? 'FR' : role === 'REDACTEUR_AR' ? 'AR' : null
 }

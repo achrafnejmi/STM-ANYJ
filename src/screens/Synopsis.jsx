@@ -5,11 +5,12 @@ import { lireUtilisateur } from '../lib/session.js'
 import { genererSynopsisFactice } from '../lib/bibleDemo.js'
 import { exporterSynopsisPdf } from '../lib/exportSynopsisPdf.js'
 
-// Écran Synopsis (P35b, rôle Rédacteur ; P38 : sortie PDF uniquement). Le
-// journaliste consulte la bible, génère le synopsis FR/AR (gabarit simulé, pas
-// d'IA) puis le télécharge en PDF (FR / AR / bilingue). Plus de champs de saisie
-// éditables : le texte généré est enregistré et affiché en aperçu seul.
-export default function Synopsis({ chaineActive, synopsisCible }) {
+// Écran « Rédaction du synopsis » (P35b ; P38 : sortie PDF ; P40 : scindé par
+// langue). Le journaliste consulte la bible, génère (gabarit simulé) puis
+// modifie / télécharge le synopsis. La prop `langue` ('FR' | 'AR') restreint
+// l'écran à cette seule langue — on n'écrit alors QUE la colonne correspondante
+// de `bible`, sans toucher l'autre langue (travail de l'autre journaliste).
+export default function Synopsis({ chaineActive, synopsisCible, langue }) {
   const [programmes, setProgrammes] = useState([])
   const [programmeId, setProgrammeId] = useState('')
   const [bible, setBible] = useState(null)
@@ -23,6 +24,10 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
   const [exportEnCours, setExportEnCours] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [message, setMessage] = useState(null)
+
+  const montrerFr = langue !== 'AR'
+  const montrerAr = langue !== 'FR'
+  const titreLangue = langue === 'AR' ? ' (arabe)' : langue === 'FR' ? ' (français)' : ''
 
   useEffect(() => {
     setChargement(true)
@@ -54,25 +59,28 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
       .catch((err) => setErreur(err.message))
   }, [programmeId])
 
-  // Ouverture ciblée depuis l'espace de suivi du Rédacteur (P39) : présélectionne
-  // le programme demandé (l'effet de chargement conserve `prev` s'il est dans la
-  // liste de la chaîne, donc cette cible l'emporte).
+  // Ouverture ciblée depuis l'espace de suivi (P39) : présélectionne le programme.
   useEffect(() => {
     if (synopsisCible?.id) setProgrammeId(synopsisCible.id)
   }, [synopsisCible?.cle]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const programme = useMemo(() => programmes.find((p) => p.id === programmeId) ?? null, [programmes, programmeId])
 
-  // Génère puis enregistre directement (aucune édition manuelle) — le synopsis
-  // devient consultable partout (fiche programme, onglet Métadonnées).
+  // Champs à écrire pour la langue courante (isolation FR / AR).
+  function champsLangue(nfr, nar) {
+    if (langue === 'FR') return { synopsis_fr: nfr }
+    if (langue === 'AR') return { synopsis_ar: nar }
+    return { synopsis_fr: nfr, synopsis_ar: nar }
+  }
+
   async function generer() {
     setGeneration(true)
     setErreur(null)
     try {
       const { fr: nfr, ar: nar } = genererSynopsisFactice(programme, bible?.ocr_texte)
-      setFr(nfr)
-      setAr(nar)
-      const maj = await enregistrerBible(programmeId, { synopsis_fr: nfr, synopsis_ar: nar, cree_par: lireUtilisateur() })
+      if (montrerFr) setFr(nfr)
+      if (montrerAr) setAr(nar)
+      const maj = await enregistrerBible(programmeId, { ...champsLangue(nfr, nar), cree_par: lireUtilisateur() })
       setBible(maj)
       setEdition(false)
       setMessage('Synopsis généré et enregistré — modifiez si besoin, puis téléchargez le PDF.')
@@ -87,7 +95,7 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
     setEnregistrement(true)
     setErreur(null)
     try {
-      const maj = await enregistrerBible(programmeId, { synopsis_fr: fr, synopsis_ar: ar, cree_par: lireUtilisateur() })
+      const maj = await enregistrerBible(programmeId, { ...champsLangue(fr, ar), cree_par: lireUtilisateur() })
       setBible(maj)
       setEdition(false)
       setMessage('Modifications enregistrées.')
@@ -99,13 +107,13 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
   }
 
   function annulerEdition() {
-    setFr(bible?.synopsis_fr ?? '')
-    setAr(bible?.synopsis_ar ?? '')
+    if (montrerFr) setFr(bible?.synopsis_fr ?? '')
+    if (montrerAr) setAr(bible?.synopsis_ar ?? '')
     setEdition(false)
   }
 
-  async function telecharger(langue) {
-    setExportEnCours(langue)
+  async function telecharger(codeLangue) {
+    setExportEnCours(codeLangue)
     setErreur(null)
     try {
       await exporterSynopsisPdf({
@@ -113,7 +121,7 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
         chaineNom: chaineActive.nom,
         synopsisFr: fr,
         synopsisAr: ar,
-        langue,
+        langue: codeLangue,
       })
     } catch (err) {
       setErreur(`Échec de l'export PDF : ${err.message}`)
@@ -123,14 +131,21 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
   }
 
   const bibleDeposee = Boolean(bible?.fichier_chemin)
+  const texteScope = langue === 'AR' ? ar : langue === 'FR' ? fr : fr || ar
+  const boutonsPdf = [
+    montrerFr && { code: 'FR', label: 'PDF français', off: !fr.trim() },
+    montrerAr && { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
+  ].filter(Boolean)
 
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Synopsis — {chaineActive.nom}</h1>
+        <h1 className="text-lg font-semibold text-slate-900">
+          Rédaction du synopsis{titreLangue} — {chaineActive.nom}
+        </h1>
         <p className="text-sm text-slate-500">
-          Génération du synopsis FR / AR à partir de la bible, en PDF.{' '}
-          <span className="font-medium">Génération simulée</span> pour la démonstration.
+          Génération à partir de la bible, en PDF. <span className="font-medium">Génération simulée</span> pour la
+          démonstration.
         </p>
       </div>
 
@@ -216,7 +231,7 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
             </button>
           </div>
 
-          {(fr || ar || edition) && (
+          {(texteScope || edition) && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-900">Synopsis</h2>
@@ -240,7 +255,7 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
                     </button>
                   </div>
                 ) : (
-                  (fr || ar) && (
+                  texteScope && (
                     <button
                       type="button"
                       onClick={() => setEdition(true)}
@@ -253,46 +268,49 @@ export default function Synopsis({ chaineActive, synopsisCible }) {
                 )}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (français)</h3>
-                  {edition ? (
-                    <textarea
-                      value={fr}
-                      onChange={(e) => setFr(e.target.value)}
-                      rows={10}
-                      className="w-full rounded-md border border-slate-300 p-2 text-sm"
-                    />
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm text-slate-700">{fr || <span className="text-slate-400">—</span>}</p>
-                  )}
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (العربية)</h3>
-                  {edition ? (
-                    <textarea
-                      value={ar}
-                      onChange={(e) => setAr(e.target.value)}
-                      dir="rtl"
-                      rows={10}
-                      className="w-full rounded-md border border-slate-300 p-2 text-sm"
-                    />
-                  ) : (
-                    <p dir="rtl" className="whitespace-pre-wrap text-sm text-slate-700">
-                      {ar || <span className="text-slate-400">—</span>}
-                    </p>
-                  )}
-                </div>
+              <div className={`grid gap-4 ${montrerFr && montrerAr ? 'lg:grid-cols-2' : ''}`}>
+                {montrerFr && (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (français)</h3>
+                    {edition ? (
+                      <textarea
+                        value={fr}
+                        onChange={(e) => setFr(e.target.value)}
+                        rows={10}
+                        className="w-full rounded-md border border-slate-300 p-2 text-sm"
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">
+                        {fr || <span className="text-slate-400">—</span>}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {montrerAr && (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <h3 className="mb-1 text-sm font-semibold text-slate-900">Synopsis (العربية)</h3>
+                    {edition ? (
+                      <textarea
+                        value={ar}
+                        onChange={(e) => setAr(e.target.value)}
+                        dir="rtl"
+                        rows={10}
+                        className="w-full rounded-md border border-slate-300 p-2 text-sm"
+                      />
+                    ) : (
+                      <p dir="rtl" className="whitespace-pre-wrap text-sm text-slate-700">
+                        {ar || <span className="text-slate-400">—</span>}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
             <span className="text-sm font-medium text-slate-500">Télécharger&nbsp;:</span>
-            {[
-              { code: 'FR', label: 'PDF français', off: !fr.trim() },
-              { code: 'AR', label: 'PDF arabe', off: !ar.trim() },
-            ].map((b) => (
+            {boutonsPdf.map((b) => (
               <button
                 key={b.code}
                 type="button"

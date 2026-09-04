@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { listerProgrammesParChaine, listerBibles } from '../lib/db.js'
-import { calculerSuiviRedaction } from '../lib/suiviRedaction.js'
+import { calculerSuiviRedaction, traiteEnLangue, aRedigerEnLangue } from '../lib/suiviRedaction.js'
 
-const FILTRES = [
-  { code: 'TOUS', label: 'Tous', test: () => true },
-  { code: 'AVEC_BIBLE', label: 'Avec bible', test: (l) => l.bibleDeposee },
-  { code: 'SANS_BIBLE', label: 'Sans bible', test: (l) => !l.bibleDeposee },
-  { code: 'A_REDIGER', label: 'À rédiger', test: (l) => l.aRediger },
-  { code: 'TRAITES', label: 'Traités', test: (l) => l.traite },
-]
+// Les filtres « À rédiger » / « Traités » tiennent compte de la langue du rôle
+// (P40) — `langue` nulle ⇒ statut combiné.
+function filtres(langue) {
+  return [
+    { code: 'TOUS', label: 'Tous', test: () => true },
+    { code: 'AVEC_BIBLE', label: 'Avec bible', test: (l) => l.bibleDeposee },
+    { code: 'SANS_BIBLE', label: 'Sans bible', test: (l) => !l.bibleDeposee },
+    { code: 'A_REDIGER', label: 'À rédiger', test: (l) => aRedigerEnLangue(l, langue) },
+    { code: 'TRAITES', label: 'Traités', test: (l) => traiteEnLangue(l, langue) },
+  ]
+}
 
 function Pastille({ actif, children }) {
   return (
@@ -26,12 +30,15 @@ function Pastille({ actif, children }) {
 // Tableau « Bibles & synopsis » (P39, rôle Rédacteur) : vue d'ensemble de tous
 // les programmes de la chaîne avec l'état bible / OCR / synopsis, et un raccourci
 // pour aller rédiger.
-export default function BiblesSynopsis({ chaineActive, onOuvrirSynopsis }) {
+export default function BiblesSynopsis({ chaineActive, onOuvrirSynopsis, langue }) {
   const [programmes, setProgrammes] = useState([])
   const [bibles, setBibles] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtre, setFiltre] = useState('TOUS')
+
+  const FILTRES = useMemo(() => filtres(langue), [langue])
+  const titreLangue = langue === 'AR' ? ' (arabe)' : langue === 'FR' ? ' (français)' : ''
 
   useEffect(() => {
     setChargement(true)
@@ -56,7 +63,9 @@ export default function BiblesSynopsis({ chaineActive, onOuvrirSynopsis }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Bibles &amp; synopsis — {chaineActive.nom}</h1>
+        <h1 className="text-lg font-semibold text-slate-900">
+          Bibles &amp; synopsis{titreLangue} — {chaineActive.nom}
+        </h1>
         <p className="text-sm text-slate-500">
           État de la bible et du synopsis pour chaque programme du catalogue.
         </p>
@@ -112,7 +121,11 @@ export default function BiblesSynopsis({ chaineActive, onOuvrirSynopsis }) {
                       <Pastille actif={l.ocrAnalyse}>{l.ocrAnalyse ? 'Analysé' : '—'}</Pastille>
                     </td>
                     <td className="py-2 pr-4">
-                      {l.synopsisFr || l.synopsisAr ? (
+                      {langue === 'FR' ? (
+                        <Pastille actif={l.synopsisFr}>{l.synopsisFr ? 'Rédigé' : '—'}</Pastille>
+                      ) : langue === 'AR' ? (
+                        <Pastille actif={l.synopsisAr}>{l.synopsisAr ? 'Rédigé' : '—'}</Pastille>
+                      ) : l.synopsisFr || l.synopsisAr ? (
                         <span className="flex gap-1">
                           <Pastille actif={l.synopsisFr}>FR</Pastille>
                           <Pastille actif={l.synopsisAr}>AR</Pastille>

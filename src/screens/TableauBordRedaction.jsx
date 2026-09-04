@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { listerProgrammesParChaine, listerBibles } from '../lib/db.js'
-import { calculerSuiviRedaction, pourcentage } from '../lib/suiviRedaction.js'
+import { calculerSuiviRedaction, aRedigerEnLangue, pourcentage } from '../lib/suiviRedaction.js'
 import CarteIndicateur from '../components/CarteIndicateur.jsx'
 
-// Tableau de bord rédaction (P39, rôle Rédacteur) : uniquement les KPI du
-// périmètre synopsis (couverture bibles, avancement synopsis), pas les
-// indicateurs généraux.
-export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis }) {
+// Tableau de bord rédaction (P39 ; P40 : orienté langue). `langue` ('FR' | 'AR')
+// restreint les KPI synopsis à cette langue ; `null` (Super Admin) ⇒ vue
+// combinée avec le détail FR / AR / complet.
+export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis, langue }) {
   const [programmes, setProgrammes] = useState([])
   const [bibles, setBibles] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -29,16 +29,23 @@ export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis })
   const aRediger = useMemo(
     () =>
       lignes
-        .filter((l) => l.aRediger)
+        .filter((l) => aRedigerEnLangue(l, langue))
         .sort((a, b) => (a.programme.titre ?? '').localeCompare(b.programme.titre ?? ''))
         .slice(0, 10),
-    [lignes]
+    [lignes, langue]
   )
+
+  const titreLangue = langue === 'AR' ? ' (arabe)' : langue === 'FR' ? ' (français)' : ''
+  const traitesLangue = langue === 'AR' ? stats.traitesAr : langue === 'FR' ? stats.traitesFr : stats.traites
+  const aRedigerLangue = langue === 'AR' ? stats.aRedigerAr : langue === 'FR' ? stats.aRedigerFr : stats.aRediger
+  const suffixeLangue = langue ? ` ${langue}` : ''
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Tableau de bord rédaction — {chaineActive.nom}</h1>
+        <h1 className="text-lg font-semibold text-slate-900">
+          Tableau de bord rédaction{titreLangue} — {chaineActive.nom}
+        </h1>
         <p className="text-sm text-slate-500">Couverture des bibles et avancement des synopsis.</p>
       </div>
 
@@ -60,28 +67,30 @@ export default function TableauBordRedaction({ chaineActive, onOuvrirSynopsis })
           </Bloc>
 
           <Bloc couleur="bg-snrt-green" titre="Synopsis">
-            <CarteProgression libelle="Synopsis rédigés" partie={stats.traites} total={stats.total} />
+            <CarteProgression libelle={`Synopsis${suffixeLangue} rédigés`} partie={traitesLangue} total={stats.total} />
             <CarteIndicateur
-              libelle="À rédiger"
-              valeur={stats.aRediger}
-              ton={stats.aRediger > 0 ? 'vigilance' : 'favorable'}
+              libelle={`À rédiger${suffixeLangue}`}
+              valeur={aRedigerLangue}
+              ton={aRedigerLangue > 0 ? 'vigilance' : 'favorable'}
               sousTexte="bible prête, synopsis manquant"
             />
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="text-xs font-medium text-slate-500">Détail des synopsis</div>
-              <ul className="mt-2 space-y-2 text-sm">
-                <LigneDetail couleur="bg-snrt-blue" libelle="Français seul" valeur={stats.frSeul} />
-                <LigneDetail couleur="bg-snrt-orange" libelle="Arabe seul" valeur={stats.arSeul} />
-                <LigneDetail couleur="bg-snrt-green" libelle="Complet (FR + AR)" valeur={stats.complets} />
-              </ul>
-            </div>
+            {!langue && (
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="text-xs font-medium text-slate-500">Détail des synopsis</div>
+                <ul className="mt-2 space-y-2 text-sm">
+                  <LigneDetail couleur="bg-snrt-blue" libelle="Français seul" valeur={stats.frSeul} />
+                  <LigneDetail couleur="bg-snrt-orange" libelle="Arabe seul" valeur={stats.arSeul} />
+                  <LigneDetail couleur="bg-snrt-green" libelle="Complet (FR + AR)" valeur={stats.complets} />
+                </ul>
+              </div>
+            )}
           </Bloc>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <div className="mb-4 flex items-center gap-2">
               <span className="h-4 w-1 rounded-full bg-snrt-orange" />
               <h2 className="text-base font-semibold text-slate-900">
-                À rédiger en priorité <span className="text-slate-400">({stats.aRediger})</span>
+                À rédiger en priorité <span className="text-slate-400">({aRedigerLangue})</span>
               </h2>
             </div>
             {aRediger.length === 0 ? (
@@ -125,8 +134,6 @@ function Bloc({ couleur, titre, children }) {
   )
 }
 
-// Carte « couverture » : le pourcentage est la valeur mise en avant, avec la
-// fraction et une barre de progression pour le rendre explicite.
 function CarteProgression({ libelle, partie, total }) {
   const pct = pourcentage(partie, total)
   return (

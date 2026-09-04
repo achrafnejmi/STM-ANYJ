@@ -40,12 +40,28 @@ export function calculerSuiviRedaction(programmes, bibles) {
       avecBible,
       sansBible: total - avecBible,
       traites,
+      traitesFr: lignes.filter((l) => l.synopsisFr).length,
+      traitesAr: lignes.filter((l) => l.synopsisAr).length,
       aRediger: lignes.filter((l) => l.aRediger).length,
+      aRedigerFr: lignes.filter((l) => l.bibleDeposee && !l.synopsisFr).length,
+      aRedigerAr: lignes.filter((l) => l.bibleDeposee && !l.synopsisAr).length,
       frSeul: lignes.filter((l) => l.synopsisFr && !l.synopsisAr).length,
       arSeul: lignes.filter((l) => l.synopsisAr && !l.synopsisFr).length,
       complets: lignes.filter((l) => l.complet).length,
     },
   }
+}
+
+// Statut d'une ligne pour une langue donnée (P40) — `langue` nulle ⇒ statut
+// combiné (au moins une des deux langues).
+export function traiteEnLangue(ligne, langue) {
+  if (langue === 'FR') return ligne.synopsisFr
+  if (langue === 'AR') return ligne.synopsisAr
+  return ligne.traite
+}
+
+export function aRedigerEnLangue(ligne, langue) {
+  return ligne.bibleDeposee && !traiteEnLangue(ligne, langue)
 }
 
 // Pourcentage entier borné (0 si dénominateur nul).

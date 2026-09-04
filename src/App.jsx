@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { lireUtilisateur, deconnecter } from './lib/session.js'
 import { lireChaineActive, definirChaineActive, chargerChaines, CHAINES } from './lib/chaines.js'
 import { SECTIONS, sectionVersHash, hashVersSection } from './lib/navigation.js'
-import { peutVoirSection, premiereSection, chaineVerrouillee, libelleRole, notificationVisible } from './lib/roles.js'
+import { peutVoirSection, premiereSection, chaineVerrouillee, libelleRole, notificationVisible, langueRedacteur } from './lib/roles.js'
 import { get as lireStockage, set as ecrireStockage } from './lib/storage.js'
 import { chargerGenres } from './lib/genres.js'
 import { chargerTranches } from './lib/tranches.js'
@@ -46,7 +46,8 @@ const ECRANS = {
   PROGRAMMES: Programmes,
   CONTRATS: Contrats,
   BIBLE: Bible,
-  SYNOPSIS: Synopsis,
+  SYNOPSIS_FR: Synopsis,
+  SYNOPSIS_AR: Synopsis,
   BIBLES_SYNOPSIS: BiblesSynopsis,
   TABLEAU_BORD_REDACTION: TableauBordRedaction,
   GRILLE_TYPE: GrilleType,
@@ -270,10 +271,11 @@ function App() {
     setProgrammeCible({ id, cle: crypto.randomUUID(), onglet })
   }
 
-  // Ouvre l'écran Synopsis présélectionné sur un programme (raccourcis de
-  // l'espace de suivi du Rédacteur, P39) — même mécanisme que ouvrirProgramme.
+  // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un
+  // programme — vers la section de la langue que le rôle courant peut voir.
   function ouvrirSynopsis(id) {
-    naviguer('SYNOPSIS')
+    const cible = ['SYNOPSIS_FR', 'SYNOPSIS_AR'].find((s) => peutVoirSection(roleUtilisateur, s)) ?? 'SYNOPSIS_FR'
+    naviguer(cible)
     setSynopsisCible({ id, cle: crypto.randomUUID() })
   }
 
@@ -302,6 +304,12 @@ function App() {
   }
 
   const Ecran = ECRANS[section]
+
+  // Langue transmise aux écrans de rédaction (P40) : imposée par la section
+  // SYNOPSIS_FR / SYNOPSIS_AR ; sinon celle du rôle Rédacteur (tableau de bord /
+  // tableau « Bibles & synopsis » orientés langue), `null` pour tout autre rôle.
+  const langueEcran =
+    section === 'SYNOPSIS_FR' ? 'FR' : section === 'SYNOPSIS_AR' ? 'AR' : langueRedacteur(roleUtilisateur)
 
   // Cloche filtrée par rôle (P36) : une notification routée (destinataire_role
   // non nul) n'apparaît que pour le rôle visé (et le Super Administrateur).
@@ -342,6 +350,7 @@ function App() {
             onAnomaliesBloquantes={setNbAnomaliesBloquantes}
             programmeCible={programmeCible}
             synopsisCible={synopsisCible}
+            langue={langueEcran}
             onOuvrirProgramme={ouvrirProgramme}
             onOuvrirSynopsis={ouvrirSynopsis}
             onNotificationCreee={rafraichirNotifications}

@@ -230,6 +230,13 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   rédigés %, détail FR seul / AR seul / complets). Calcul pur `suiviRedaction.js`. Pas de
   migration. *Test : salma.redac voit les deux sections ; « Rédiger » depuis le tableau ou la
   liste ouvre le bon programme dans Synopsis.*
+  **P40** : la rédaction est scindée par langue en **deux rôles** — `REDACTEUR_FR` /
+  `REDACTEUR_AR`. Section « Synopsis » renommée **« Rédaction du synopsis »** et dédoublée
+  (« — FR » / « — AR ») : chaque rôle ne voit, ne génère, n'édite et n'exporte que sa langue
+  (écriture ciblée `synopsis_fr` **ou** `synopsis_ar`, l'autre langue n'est jamais touchée).
+  Tableau de bord et tableau « Bibles & synopsis » **orientés langue** (KPI FR seuls pour la
+  Rédactrice FR, etc.). Comptes de démo : `salma.redac` → Rédactrice FR, `khadija.redac` →
+  Rédactrice AR. Migration : `migration-p42.sql`.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
