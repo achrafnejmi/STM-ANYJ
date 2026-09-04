@@ -27,6 +27,8 @@ import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
 import Bible from './screens/Bible.jsx'
 import Synopsis from './screens/Synopsis.jsx'
+import BiblesSynopsis from './screens/BiblesSynopsis.jsx'
+import TableauBordRedaction from './screens/TableauBordRedaction.jsx'
 import GrilleType from './screens/GrilleType.jsx'
 import GrilleLineaire from './screens/GrilleLineaire.jsx'
 import AutoProgrammation from './screens/AutoProgrammation.jsx'
@@ -45,6 +47,8 @@ const ECRANS = {
   CONTRATS: Contrats,
   BIBLE: Bible,
   SYNOPSIS: Synopsis,
+  BIBLES_SYNOPSIS: BiblesSynopsis,
+  TABLEAU_BORD_REDACTION: TableauBordRedaction,
   GRILLE_TYPE: GrilleType,
   GRILLE_LINEAIRE: GrilleLineaire,
   AUTO_PROGRAMMATION: AutoProgrammation,
@@ -78,6 +82,7 @@ function App() {
   // programme est rouvert deux fois de suite, pour que l'effet de
   // Programmes.jsx se redéclenche à chaque fois.
   const [programmeCible, setProgrammeCible] = useState(null)
+  const [synopsisCible, setSynopsisCible] = useState(null)
   // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
   // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
   // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
@@ -265,6 +270,13 @@ function App() {
     setProgrammeCible({ id, cle: crypto.randomUUID(), onglet })
   }
 
+  // Ouvre l'écran Synopsis présélectionné sur un programme (raccourcis de
+  // l'espace de suivi du Rédacteur, P39) — même mécanisme que ouvrirProgramme.
+  function ouvrirSynopsis(id) {
+    naviguer('SYNOPSIS')
+    setSynopsisCible({ id, cle: crypto.randomUUID() })
+  }
+
   // Clic sur une notification : marque lue puis ouvre la fiche du programme
   // visé — sur l'onglet Droits pour une alerte de fin de droits, Général
   // sinon (même mécanisme que RechercheGlobale.jsx/Contrats.jsx).
@@ -329,7 +341,9 @@ function App() {
             chaineActive={chaineActive}
             onAnomaliesBloquantes={setNbAnomaliesBloquantes}
             programmeCible={programmeCible}
+            synopsisCible={synopsisCible}
             onOuvrirProgramme={ouvrirProgramme}
+            onOuvrirSynopsis={ouvrirSynopsis}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
           />

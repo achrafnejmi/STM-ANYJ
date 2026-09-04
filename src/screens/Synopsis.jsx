@@ -9,7 +9,7 @@ import { exporterSynopsisPdf } from '../lib/exportSynopsisPdf.js'
 // journaliste consulte la bible, génère le synopsis FR/AR (gabarit simulé, pas
 // d'IA) puis le télécharge en PDF (FR / AR / bilingue). Plus de champs de saisie
 // éditables : le texte généré est enregistré et affiché en aperçu seul.
-export default function Synopsis({ chaineActive }) {
+export default function Synopsis({ chaineActive, synopsisCible }) {
   const [programmes, setProgrammes] = useState([])
   const [programmeId, setProgrammeId] = useState('')
   const [bible, setBible] = useState(null)
@@ -53,6 +53,13 @@ export default function Synopsis({ chaineActive }) {
       })
       .catch((err) => setErreur(err.message))
   }, [programmeId])
+
+  // Ouverture ciblée depuis l'espace de suivi du Rédacteur (P39) : présélectionne
+  // le programme demandé (l'effet de chargement conserve `prev` s'il est dans la
+  // liste de la chaîne, donc cette cible l'emporte).
+  useEffect(() => {
+    if (synopsisCible?.id) setProgrammeId(synopsisCible.id)
+  }, [synopsisCible?.cle]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const programme = useMemo(() => programmes.find((p) => p.id === programmeId) ?? null, [programmes, programmeId])
 

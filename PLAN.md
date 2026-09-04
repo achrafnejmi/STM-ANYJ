@@ -221,6 +221,15 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   éditable via un bouton **Modifier / Enregistrer** (plus de zones de saisie permanentes ; la
   génération enregistre directement). *Test : salma.redac génère → aperçu → Modifier → corrige
   → Enregistrer → PDF FR / PDF AR ; l'arabe est lié et aligné à droite.*
+- **P39 — Espace de suivi du Rédacteur** ✅ LIVRÉ (hors feuille de route) : deux sections en
+  plus de Synopsis, réservées au **Rédacteur** (+ Super Admin). **Bibles & synopsis** : tableau
+  de tous les programmes de la chaîne avec l'état bible déposée / OCR analysé / synopsis FR-AR,
+  filtres (Tous / Avec bible / Sans bible / À rédiger / Traités), raccourci « Rédiger » qui
+  ouvre l'écran Synopsis **présélectionné** sur le programme. **Tableau de bord rédaction** :
+  KPI du seul périmètre synopsis (bibles déposées %, à rédiger + liste prioritaire, synopsis
+  rédigés %, détail FR seul / AR seul / complets). Calcul pur `suiviRedaction.js`. Pas de
+  migration. *Test : salma.redac voit les deux sections ; « Rédiger » depuis le tableau ou la
+  liste ouvre le bon programme dans Synopsis.*
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
