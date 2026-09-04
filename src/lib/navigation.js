@@ -16,7 +16,7 @@ export const SECTIONS = [
   { id: 'PLAN_MEDIA', label: 'Plan média', icone: Megaphone },
   { id: 'GRILLE_NON_LINEAIRE', label: 'Grille non-linéaire', icone: Share2 },
   { id: 'CONDUCTEUR', label: 'Conducteur', icone: ListOrdered },
-  { id: 'DEMANDES_PROGRAMMATION', label: 'Demandes de programmation', icone: GitPullRequestArrow },
+  { id: 'DEMANDES_PROGRAMMATION', label: 'Demandes de diffusion', icone: GitPullRequestArrow },
   { id: 'PILOTAGE_DROITS_STOCK', label: 'Pilotage droits & stock', icone: Gauge },
   { id: 'SUIVI_PAD', label: 'Suivi PAD', icone: ClipboardCheck },
   { id: 'CONTROLE_PAD', label: 'Contrôle PAD', icone: BadgeCheck },
