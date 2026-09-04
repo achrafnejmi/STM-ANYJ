@@ -258,6 +258,12 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   dépendant dans la barre d'outils des deux onglets ; badge `ÉP.NN` sur les cartes ; colonne
   **Épisode** à l'export et dans la sous-vue « Non-linéaire » de l'onglet Historique de la
   fiche (filtre Épisode désormais partagé avec la sous-vue Linéaire).
+- **P44 — Historique du titre unifié dans un modal** ✅ LIVRÉ : le bouton « Voir les
+  diffusions passées » du catalogue (grille linéaire ET non-linéaire) ouvre désormais un
+  `Modal` contenant `HistoriqueTitrePanel` (au lieu du mini `PopoverHistorique`, supprimé) —
+  bascule **Linéaire / Non-linéaire présélectionnée selon la grille d'origine**, filtres
+  **Épisode + Chaîne** (Linéaire) et **Épisode + Plateforme** (Non-linéaire). Ces deux filtres
+  sont aussi disponibles dans l'onglet Historique de la fiche programme. Sans migration.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

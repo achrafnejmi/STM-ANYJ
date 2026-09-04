@@ -254,7 +254,7 @@ export async function listerDiffusionsLineairesParGrille(grilleId) {
 
 // Historique (approximation, P10) : diffusion_lineaire passées d'un programme,
 // pas un constat d'antenne réel (aucune table "Diffusion constatée" n'existe
-// encore — voir migration-p10.sql). Utilisée par PopoverHistorique et par le
+// encore — voir migration-p10.sql). Utilisée par HistoriqueTitrePanel et par le
 // calcul de "dernière diffusion" par épisode dans CataloguePanel.
 export async function listerDiffusionsLineairesParProgramme(programmeId) {
   return verifie(

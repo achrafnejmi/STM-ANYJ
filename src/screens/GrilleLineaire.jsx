@@ -81,7 +81,7 @@ import {
 } from '../lib/semaine.js'
 import Modal from '../components/Modal.jsx'
 import CataloguePanel from '../components/CataloguePanel.jsx'
-import PopoverHistorique from '../components/PopoverHistorique.jsx'
+import HistoriqueTitrePanel from '../components/HistoriqueTitrePanel.jsx'
 import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
@@ -1290,7 +1290,13 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
       )}
 
       {historiqueOuvert && (
-        <PopoverHistorique programme={historiqueOuvert} onFermer={() => setHistoriqueOuvert(null)} />
+        <Modal
+          titre={`Historique — ${historiqueOuvert.titre}`}
+          large
+          onFermer={() => setHistoriqueOuvert(null)}
+        >
+          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} canalInitial="LINEAIRE" sansCadre />
+        </Modal>
       )}
 
       {blocSelectionne && grilleActive && (

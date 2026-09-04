@@ -30,7 +30,8 @@ import {
 } from '../lib/exportPublications.js'
 import LogoPlateforme from './LogosPlateformes.jsx'
 import CataloguePanel from './CataloguePanel.jsx'
-import PopoverHistorique from './PopoverHistorique.jsx'
+import Modal from './Modal.jsx'
+import HistoriqueTitrePanel from './HistoriqueTitrePanel.jsx'
 import PanneauPublication from './PanneauPublication.jsx'
 import BoutonExporter from './BoutonExporter.jsx'
 import { useNotification } from './NotificationProvider.jsx'
@@ -539,7 +540,11 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
         )}
       </div>
 
-      {historiqueOuvert && <PopoverHistorique programme={historiqueOuvert} onFermer={() => setHistoriqueOuvert(null)} />}
+      {historiqueOuvert && (
+        <Modal titre={`Historique — ${historiqueOuvert.titre}`} large onFermer={() => setHistoriqueOuvert(null)}>
+          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} canalInitial="NON_LINEAIRE" sansCadre />
+        </Modal>
+      )}
 
       {panneau && (
         <PanneauPublication

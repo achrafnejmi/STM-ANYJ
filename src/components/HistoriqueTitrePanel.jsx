@@ -32,8 +32,8 @@ const LIBELLE_STATUT = { BROUILLON: 'Brouillon', PROGRAMME: 'Programmé', PUBLIE
 // (posts réseaux sociaux + mises en ligne VOD). Deux sous-vues : Linéaire
 // (défaut, existant) et Non-linéaire. Aucune pagination (EXG-M6-01 « sans
 // limitation de nombre ») — conteneur scrollable uniquement.
-export default function HistoriqueTitrePanel({ programmeId }) {
-  const [ongletCanal, setOngletCanal] = useState('LINEAIRE') // LINEAIRE | NON_LINEAIRE
+export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINEAIRE', sansCadre = false }) {
+  const [ongletCanal, setOngletCanal] = useState(canalInitial) // LINEAIRE | NON_LINEAIRE
   const [diffusions, setDiffusions] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [publicationsReseau, setPublicationsReseau] = useState([])
@@ -41,10 +41,15 @@ export default function HistoriqueTitrePanel({ programmeId }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtreEpisode, setFiltreEpisode] = useState('')
+  const [filtreChaine, setFiltreChaine] = useState('')
+  const [filtrePlateforme, setFiltrePlateforme] = useState('')
 
   useEffect(() => {
     setChargement(true)
     setErreur(null)
+    setFiltreEpisode('')
+    setFiltreChaine('')
+    setFiltrePlateforme('')
     Promise.all([
       listerDiffusionsLineairesParProgramme(programmeId),
       listerEpisodes(programmeId),
@@ -69,7 +74,10 @@ export default function HistoriqueTitrePanel({ programmeId }) {
   // qu'en interne, pour déterminer la 1re occurrence de chaque épisode).
   const passees = diffusions.filter((d) => d.date < aujourdHui)
   const annotees = annoterNature(passees)
-  const anoteesFiltrees = filtreEpisode ? annotees.filter((d) => d.episode_id === filtreEpisode) : annotees
+  const chainesPassees = [...new Set(passees.map((d) => d.chaine).filter(Boolean))].sort()
+  const anoteesFiltrees = annotees.filter(
+    (d) => (!filtreEpisode || d.episode_id === filtreEpisode) && (!filtreChaine || d.chaine === filtreChaine)
+  )
   const historiqueParEpisode = calculerParEpisode(diffusions)
   const episodesParId = new Map(episodes.map((e) => [e.id, e]))
 
@@ -84,6 +92,7 @@ export default function HistoriqueTitrePanel({ programmeId }) {
       heure: p.heure_publication,
       type,
       canal,
+      plateformeCode: p.plateforme,
       titre: p.titre,
       statut: p.statut,
       episode_id: p.episode_id ?? null,
@@ -96,18 +105,33 @@ export default function HistoriqueTitrePanel({ programmeId }) {
       .filter((p) => p.date_publication < aujourdHui)
       .map((p) => commun(p, 'VOD', LIBELLE_PLATEFORME[p.plateforme] ?? p.plateforme))
     return [...reseau, ...vod]
-      .filter((p) => !filtreEpisode || p.episode_id === filtreEpisode)
+      .filter(
+        (p) =>
+          (!filtreEpisode || p.episode_id === filtreEpisode) &&
+          (!filtrePlateforme || p.plateformeCode === filtrePlateforme)
+      )
       .sort((a, b) => {
         if (a.date !== b.date) return a.date < b.date ? 1 : -1
         return (b.heure ?? '') < (a.heure ?? '') ? -1 : 1
       })
-  }, [publicationsReseau, publicationsVod, episodes, filtreEpisode, aujourdHui])
+  }, [publicationsReseau, publicationsVod, episodes, filtreEpisode, filtrePlateforme, aujourdHui])
+
+  const plateformesPassees = useMemo(
+    () => [
+      ...new Set(
+        [...publicationsReseau, ...publicationsVod]
+          .filter((p) => p.date_publication < aujourdHui)
+          .map((p) => p.plateforme)
+      ),
+    ],
+    [publicationsReseau, publicationsVod, aujourdHui]
+  )
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6">
+    <div className={sansCadre ? '' : 'rounded-lg border border-slate-200 bg-white p-6'}>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">Historique</h2>
-        <div className="flex rounded-md border border-slate-300 text-sm">
+        {!sansCadre && <h2 className="text-base font-semibold text-slate-900">Historique</h2>}
+        <div className={`flex rounded-md border border-slate-300 text-sm ${sansCadre ? 'ml-auto' : ''}`}>
           <button
             type="button"
             onClick={() => setOngletCanal('LINEAIRE')}
@@ -131,23 +155,39 @@ export default function HistoriqueTitrePanel({ programmeId }) {
       {!chargement && !erreur && ongletCanal === 'LINEAIRE' && (
         <>
           <div className="mb-6">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-slate-700">Diffusions programmées (passées)</h3>
-              {episodes.length > 0 && (
-                <select
-                  value={filtreEpisode}
-                  onChange={(e) => setFiltreEpisode(e.target.value)}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
-                >
-                  <option value="">Tous les épisodes</option>
-                  {episodes.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
-                      {ep.titre ? ` — ${ep.titre}` : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {chainesPassees.length > 1 && (
+                  <select
+                    value={filtreChaine}
+                    onChange={(e) => setFiltreChaine(e.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                  >
+                    <option value="">Toutes les chaînes</option>
+                    {chainesPassees.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {episodes.length > 0 && (
+                  <select
+                    value={filtreEpisode}
+                    onChange={(e) => setFiltreEpisode(e.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                  >
+                    <option value="">Tous les épisodes</option>
+                    {episodes.map((ep) => (
+                      <option key={ep.id} value={ep.id}>
+                        {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
+                        {ep.titre ? ` — ${ep.titre}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
             {anoteesFiltrees.length === 0 && (
               <p className="text-sm text-slate-500">
@@ -239,23 +279,39 @@ export default function HistoriqueTitrePanel({ programmeId }) {
 
       {!chargement && !erreur && ongletCanal === 'NON_LINEAIRE' && (
         <div>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-700">Publications non-linéaires (passées)</h3>
-            {episodes.length > 0 && (
-              <select
-                value={filtreEpisode}
-                onChange={(e) => setFiltreEpisode(e.target.value)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
-              >
-                <option value="">Tous les épisodes</option>
-                {episodes.map((ep) => (
-                  <option key={ep.id} value={ep.id}>
-                    {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
-                    {ep.titre ? ` — ${ep.titre}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {plateformesPassees.length > 1 && (
+                <select
+                  value={filtrePlateforme}
+                  onChange={(e) => setFiltrePlateforme(e.target.value)}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                >
+                  <option value="">Toutes les plateformes</option>
+                  {plateformesPassees.map((code) => (
+                    <option key={code} value={code}>
+                      {LIBELLE_PLATEFORME[code] ?? code}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {episodes.length > 0 && (
+                <select
+                  value={filtreEpisode}
+                  onChange={(e) => setFiltreEpisode(e.target.value)}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                >
+                  <option value="">Tous les épisodes</option>
+                  {episodes.map((ep) => (
+                    <option key={ep.id} value={ep.id}>
+                      {ep.numero != null ? `ÉP.${String(ep.numero).padStart(2, '0')}` : '—'}
+                      {ep.titre ? ` — ${ep.titre}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
           {publicationsPassees.length === 0 && (
             <p className="text-sm text-slate-500">
