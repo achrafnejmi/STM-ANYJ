@@ -60,7 +60,7 @@ function versFormulaire(episode) {
   }
 }
 
-export default function EpisodesPanel({ programmeId, programmeTitre, chaineActive, roleUtilisateur, onNotificationCreee, onEpisodesChange }) {
+export default function EpisodesPanel({ programmeId, programmeTitre, chaineActive, roleUtilisateur, lectureSeule = false, onNotificationCreee, onEpisodesChange }) {
   const [episodes, setEpisodes] = useState([])
   const [diffusions, setDiffusions] = useState([])
   const [chargement, setChargement] = useState(true)
@@ -266,14 +266,16 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
     <div className="rounded-lg border border-slate-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-slate-900">Épisodes</h2>
-        <button
-          type="button"
-          onClick={nouvelEpisode}
-          className="flex items-center gap-1.5 rounded-full bg-emerald-600 p-2 text-white hover:bg-emerald-700"
-          title="Ajouter un épisode"
-        >
-          <Plus size={16} />
-        </button>
+        {!lectureSeule && (
+          <button
+            type="button"
+            onClick={nouvelEpisode}
+            className="flex items-center gap-1.5 rounded-full bg-emerald-600 p-2 text-white hover:bg-emerald-700"
+            title="Ajouter un épisode"
+          >
+            <Plus size={16} />
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_2fr]">
@@ -284,7 +286,7 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                 <th className="py-2 pr-4 font-medium">N°</th>
                 <th className="py-2 pr-4 font-medium">Titre</th>
                 <th className="py-2 pr-4 font-medium">PAD</th>
-                <th className="py-2 pr-4"></th>
+                {!lectureSeule && <th className="py-2 pr-4"></th>}
               </tr>
             </thead>
             <tbody>
@@ -299,24 +301,26 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                   <td className="py-2 pr-4 text-slate-700">{ep.numero ?? '—'}</td>
                   <td className="py-2 pr-4 text-slate-700">{ep.titre || '—'}</td>
                   <td className="py-2 pr-4">{ep.pad && <CheckCircle2 size={16} className="text-snrt-success" />}</td>
-                  <td className="py-2 pr-4">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        supprimer(ep.id)
-                      }}
-                      className="text-red-500 hover:text-red-700"
-                      title="Supprimer"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
+                  {!lectureSeule && (
+                    <td className="py-2 pr-4">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          supprimer(ep.id)
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {!chargement && episodes.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-3 text-sm text-slate-500">
+                  <td colSpan={lectureSeule ? 3 : 4} className="py-3 text-sm text-slate-500">
                     Aucun épisode pour ce programme.
                   </td>
                 </tr>
@@ -360,7 +364,9 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                   <PanneauEvenementsSecondaires episodeId={episodeId} editable={peutGererCatalogue(roleUtilisateur)} />
                 ))}
               {onglet === 'INFOS' && (
-                <form onSubmit={enregistrer} className="space-y-4">
+                <form onSubmit={enregistrer}>
+                  {/* fieldset désactivé (P45) : lecture seule pour Marketing / Digital. */}
+                  <fieldset disabled={lectureSeule} className="min-w-0 space-y-4 border-0 p-0 m-0">
                   <div className="grid grid-cols-2 gap-4">
                     <Champ label="N°" type="number" value={form.numero} onChange={(v) => setForm({ ...form, numero: v })} />
                     <Champ
@@ -468,6 +474,7 @@ export default function EpisodesPanel({ programmeId, programmeTitre, chaineActiv
                   >
                     {enregistrement ? 'Enregistrement…' : 'Enregistrer l\'épisode'}
                   </button>
+                  </fieldset>
                 </form>
               )}
             </>

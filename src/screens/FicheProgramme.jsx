@@ -16,7 +16,7 @@ import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
 import { messageNouveauProgramme, messageDemandeProgAT } from '../lib/notifications.js'
-import { peutGererCatalogue, peutDemanderProgrammation } from '../lib/roles.js'
+import { peutCreerProgramme, peutEditerProgramme, peutDemanderProgrammation } from '../lib/roles.js'
 import { chaineAutoriseeProgramme, estExclusifAutreChaine } from '../lib/exclusivite.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import PanneauBible from '../components/PanneauBible.jsx'
@@ -285,6 +285,10 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     }
   }
 
+  // Lecture seule (P45) : Marketing / Digital consulte la fiche (dont l'onglet
+  // Historique) sans pouvoir enregistrer quoi que ce soit.
+  const lectureSeule = !peutEditerProgramme(roleUtilisateur)
+
   // Exclusivité inter-chaînes (P37) : ce titre est-il exclusif à une AUTRE
   // chaîne que celle active, et cette chaîne a-t-elle déjà l'autorisation ?
   const estExclusifAutre = !!programme && estExclusifAutreChaine(programme, chaineActive.id)
@@ -333,8 +337,8 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
     return <p className="text-sm text-slate-500">Chargement…</p>
   }
 
-  // Un rôle sans gestion du catalogue ne crée pas de programme (P37).
-  if (!id && !peutGererCatalogue(roleUtilisateur)) {
+  // La création d'un programme est réservée au catalogage (P45).
+  if (!id && !peutCreerProgramme(roleUtilisateur)) {
     return (
       <div className="space-y-4">
         <button type="button" onClick={onRetour} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700">
@@ -342,7 +346,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           Retour à la liste
         </button>
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          La création d'un programme est réservée au catalogage (Acquisitions), à l'administrateur de chaîne et au
+          La création d'un programme est réservée au Chargé d'acquisitions, à la Gestion des droits et du stock et au
           super administrateur.
         </p>
       </div>
@@ -362,7 +366,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           <ArrowLeft size={16} />
           Retour à la liste
         </button>
-        {id && peutGererCatalogue(roleUtilisateur) && (
+        {id && peutCreerProgramme(roleUtilisateur) && (
           <button
             type="button"
             onClick={supprimer}
@@ -402,7 +406,9 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         </div>
 
         {onglet === 'GENERAL' && (
-          <form onSubmit={enregistrer} className="space-y-4">
+          <form onSubmit={enregistrer}>
+            {/* fieldset désactivé (P45) : lecture seule pour Marketing / Digital. */}
+            <fieldset disabled={lectureSeule} className="min-w-0 space-y-4 border-0 p-0 m-0">
             <div className="grid grid-cols-2 gap-4">
               <Champ label="Titre *" required value={form.titre} onChange={(v) => setForm({ ...form, titre: v })} />
               <Champ
@@ -534,12 +540,15 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             >
               {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
             </button>
+            </fieldset>
           </form>
         )}
 
         {onglet === 'METADONNEES' && (
           <>
-          <form onSubmit={enregistrer} className="space-y-4">
+          <form onSubmit={enregistrer}>
+            {/* fieldset désactivé (P45) : lecture seule pour Marketing / Digital. */}
+            <fieldset disabled={lectureSeule} className="min-w-0 space-y-4 border-0 p-0 m-0">
             <div className="grid grid-cols-[10rem_1fr] gap-6">
               <div className="flex flex-col gap-1">
                 {LANGUES.map((l) => (
@@ -609,6 +618,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             >
               {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
             </button>
+            </fieldset>
           </form>
           {id && (
             <div className="mt-6">
@@ -625,12 +635,14 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           programmeTitre={form.titre}
           chaineActive={chaineActive}
           roleUtilisateur={roleUtilisateur}
+          lectureSeule={lectureSeule}
           onNotificationCreee={onNotificationCreee}
           onEpisodesChange={(episodes) => setNombreEpisodes(episodes.length)}
         />
       )}
       {onglet === 'DROITS' && id && (
-        <div className="space-y-6">
+        // fieldset désactivé (P45) : lecture seule pour Marketing / Digital.
+        <fieldset disabled={lectureSeule} className="min-w-0 space-y-6 border-0 p-0 m-0">
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Contrat</h2>
             <form onSubmit={enregistrer} className="mb-4 flex items-end gap-3">
@@ -680,7 +692,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             {erreur && <p className="mt-4 text-sm text-red-600">{erreur}</p>}
           </div>
           <FenetresDroitsPanel programmeId={id} />
-        </div>
+        </fieldset>
       )}
       {onglet === 'HISTORIQUE' && id && <HistoriqueTitrePanel programmeId={id} />}
     </div>

@@ -264,6 +264,17 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   bascule **Linéaire / Non-linéaire présélectionnée selon la grille d'origine**, filtres
   **Épisode + Chaîne** (Linéaire) et **Épisode + Plateforme** (Non-linéaire). Ces deux filtres
   sont aussi disponibles dans l'onglet Historique de la fiche programme. Sans migration.
+- **P45 — Programmes en lecture seule pour Marketing / Digital + création recentrée** ✅ LIVRÉ :
+  le rôle **Marketing / Digital** obtient toute la section **Programmes**, mais en **lecture
+  seule** (`peutEditerProgramme` — nouveau) : il consulte le catalogue et surtout l'onglet
+  **Historique** (diffusions linéaires + non-linéaires d'un titre) ; aucun bouton
+  d'enregistrement (onglets Général / Métadonnées / Droits enveloppés dans un
+  `fieldset[disabled]`), ni « Nouveau programme », ni « Supprimer », ni ajout / édition
+  d'épisode. La **création ET la suppression** d'un programme passent sur `peutCreerProgramme`
+  (nouveau) = **Chargé d'acquisitions + Gestion des droits et du stock + Super Admin** —
+  l'**Administrateur de chaîne n'y a plus accès** (il conserve l'édition des métadonnées et
+  des épisodes). `peutGererCatalogue` (supports & événements secondaires) inchangé. Sans
+  migration.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 

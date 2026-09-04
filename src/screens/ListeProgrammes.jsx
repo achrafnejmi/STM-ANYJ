@@ -11,7 +11,7 @@ import {
   listerDiffusionsLineairesParChaine,
 } from '../lib/db.js'
 import { GENRES } from '../lib/genres.js'
-import { peutGererCatalogue } from '../lib/roles.js'
+import { peutCreerProgramme } from '../lib/roles.js'
 import { calculerDerniereParProgramme } from '../lib/historique.js'
 import { formaterDateLongue, formaterDureeMinutes } from '../lib/semaine.js'
 import { construireDonneesProgrammes, construireLignesExcelProgrammes, construireNomFichierProgrammes, ENTETE_PROGRAMMES } from '../lib/exportProgrammes.js'
@@ -249,7 +249,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, rol
           </div>
           <div className="flex items-center gap-2">
             <BoutonExporter onExcel={exporterExcel} onWord={exporterWord} onPdf={exporterPdf} />
-            {peutGererCatalogue(roleUtilisateur) && (
+            {peutCreerProgramme(roleUtilisateur) && (
               <button
                 type="button"
                 onClick={onNouveau}

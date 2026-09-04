@@ -80,7 +80,11 @@ export const SECTIONS_PAR_ROLE = {
   REDACTEUR_FR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_FR'],
   REDACTEUR_AR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_AR'],
   CONTROLE_PAD: ['CONTROLE_PAD'],
-  MARKETING: ['ACCUEIL', 'GRILLE_NON_LINEAIRE'],
+  // P45 : accès à toute la section Programmes, mais en LECTURE SEULE (cf.
+  // peutEditerProgramme) — Marketing / Digital consulte le catalogue et
+  // surtout l'onglet Historique (diffusions linéaires + non-linéaires d'un
+  // titre) ; il ne crée, n'édite ni ne supprime rien.
+  MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
 }
 
 // `role` peut être null pendant le chargement async → fallback « tout » pour
@@ -127,13 +131,38 @@ export function peutRelancerPad(role) {
   return role === 'GESTION_DROITS_STOCK' || role === 'SUPER_ADMIN'
 }
 
-// Gestion du catalogue (P37 ; P41 : + Gestion des droits et du stock) : créer /
-// supprimer un programme, éditer son exclusivité, gérer supports & événements
-// secondaires des épisodes. Un Programmateur n'ajoute pas de programme.
+// Gestion du catalogue (P37 ; P41 : + Gestion des droits et du stock) : éditer
+// l'exclusivité d'un programme, gérer supports & événements secondaires des
+// épisodes. Un Programmateur ne touche pas au catalogue.
+// NB : depuis P45, la création / suppression d'un programme a son propre
+// périmètre (peutCreerProgramme) et l'édition de la fiche le sien
+// (peutEditerProgramme).
 export function peutGererCatalogue(role) {
   return (
     role === 'SUPER_ADMIN' ||
     role === 'ADMIN_CHAINE' ||
+    role === 'ACQUISITIONS' ||
+    role === 'GESTION_DROITS_STOCK'
+  )
+}
+
+// Créer / supprimer un programme (P45) : réservé au catalogage — Chargé
+// d'acquisitions, Gestion des droits et du stock, Super Admin. L'Admin de
+// chaîne ne crée ni ne supprime de programme (décision P45) ; il conserve
+// l'édition des métadonnées et des épisodes (cf. peutEditerProgramme).
+export function peutCreerProgramme(role) {
+  return role === 'SUPER_ADMIN' || role === 'ACQUISITIONS' || role === 'GESTION_DROITS_STOCK'
+}
+
+// Éditer une fiche programme (P45) : enregistrer les onglets Général /
+// Métadonnées / Droits et gérer les épisodes. Ouvert à tous les rôles qui
+// atteignent la section Programmes SAUF Marketing / Digital, qui y accède en
+// lecture seule pour consulter l'historique des titres.
+export function peutEditerProgramme(role) {
+  return (
+    role === 'SUPER_ADMIN' ||
+    role === 'ADMIN_CHAINE' ||
+    role === 'PROGRAMMATEUR' ||
     role === 'ACQUISITIONS' ||
     role === 'GESTION_DROITS_STOCK'
   )
