@@ -45,6 +45,9 @@ const LANGUES = [
   { id: 'EN', label: 'English', champTitre: 'titre_en', champDescription: 'description_en', rtl: false },
 ]
 
+// Métadonnées de production (P42, cahier des charges § modèle de données).
+const TYPES_PRODUCTION = ['Production interne', 'Coproduction', 'Production externe', 'Acquisition', 'Captation']
+
 const FORM_VIDE = {
   titre: '',
   titre_ar: '',
@@ -57,6 +60,11 @@ const FORM_VIDE = {
   description_ar: '',
   description_en: '',
   auteur: '',
+  type_production: '',
+  producteur: '',
+  realisation: '',
+  interpretes: '',
+  mots_cles: '',
   // P22 — modèle d'exclusivité : chaine_id NULL = partagé toutes chaînes
   // (par défaut). `exclusif` pilote l'interrupteur ; `chaineExclusiveId`
   // reste renseigné même quand `exclusif` est faux (mémorise le dernier choix
@@ -84,6 +92,11 @@ function versFormulaire(programme, chaineActive) {
     description_ar: programme.description_ar ?? '',
     description_en: programme.description_en ?? '',
     auteur: programme.auteur ?? '',
+    type_production: programme.type_production ?? '',
+    producteur: programme.producteur ?? '',
+    realisation: programme.realisation ?? '',
+    interpretes: programme.interpretes ?? '',
+    mots_cles: programme.mots_cles ?? '',
     exclusif: programme.chaine_id != null,
     chaineExclusiveId: programme.chaine_id ?? chaineActive.id,
     reference_contrat: programme.reference_contrat ?? '',
@@ -171,6 +184,11 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       description_ar: form.description_ar.trim() || null,
       description_en: form.description_en.trim() || null,
       auteur: form.auteur.trim() || null,
+      type_production: form.type_production.trim() || null,
+      producteur: form.producteur.trim() || null,
+      realisation: form.realisation.trim() || null,
+      interpretes: form.interpretes.trim() || null,
+      mots_cles: form.mots_cles.trim() || null,
       reference_contrat: form.reference_contrat.trim() || null,
     }
     if (!champs.titre) {
@@ -557,6 +575,32 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 </div>
               </div>
             </div>
+
+            <div className="border-t border-slate-100 pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-slate-900">Production</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <ChampSelect
+                  label="Type de production"
+                  value={form.type_production}
+                  onChange={(v) => setForm({ ...form, type_production: v })}
+                  options={TYPES_PRODUCTION.map((t) => ({ valeur: t, libelle: t }))}
+                  vide="— Choisir —"
+                />
+                <Champ label="Producteur" value={form.producteur} onChange={(v) => setForm({ ...form, producteur: v })} />
+                <Champ label="Réalisation" value={form.realisation} onChange={(v) => setForm({ ...form, realisation: v })} />
+                <Champ label="Mots-clés" value={form.mots_cles} onChange={(v) => setForm({ ...form, mots_cles: v })} />
+              </div>
+              <div className="mt-4">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Interprètes</label>
+                <textarea
+                  value={form.interpretes}
+                  onChange={(e) => setForm({ ...form, interpretes: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
             {erreur && <p className="text-sm text-red-600">{erreur}</p>}
             <button
               type="submit"

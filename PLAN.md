@@ -245,6 +245,12 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   nomenclature, start time, durée en secondes) — tables `support` / `evenement_secondaire`,
   ajout/suppression réservés à `peutGererCatalogue`, lecture seule pour les autres. Migration :
   `migration-p43.sql`.
+- **P42 — Métadonnées de production sur la fiche programme** ✅ LIVRÉ (hors feuille de route) :
+  ajout à l'onglet Métadonnées des champs éditoriaux du cahier des charges absents de Snomark —
+  **Type de production** (liste), **Producteur**, **Réalisation**, **Interprètes**, **Mots-clés**
+  (`migration-p44.sql`). La gestion de contrats fournisseur/paiement de l'ancien STM reste
+  **hors périmètre** : décision du cahier (« la saisie des contrats demeure dans le module
+  Acquisitions existant ») — Snomark garde `reference_contrat` + passages autorisés/consommés.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
