@@ -105,8 +105,12 @@ export function premiereSection(role, sectionsExistantes) {
   return autorisees.find((id) => sectionsExistantes.includes(id)) ?? 'ACCUEIL'
 }
 
-export function chaineVerrouillee(role) {
-  return role === 'ADMIN_CHAINE'
+// Verrou de chaîne : l'Administrateur de chaîne, ET tout utilisateur explicitement
+// rattaché à une chaîne dans Administration (utilisateur.chaine_id non nul), sont
+// forcés sur CETTE chaîne — sélecteur verrouillé côté TopBar, chaîne imposée à la
+// connexion. Les comptes sans chaîne (chaine_id null) gardent le sélecteur libre.
+export function chaineVerrouillee(role, utilisateur) {
+  return role === 'ADMIN_CHAINE' || utilisateur?.chaine_id != null
 }
 
 // Émission d'une nouvelle demande de validation PAD (bouton du panneau

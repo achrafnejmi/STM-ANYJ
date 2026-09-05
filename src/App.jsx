@@ -126,10 +126,11 @@ function App() {
     }
   }, [utilisateur])
 
-  // Verrou de chaîne : l'Administrateur de chaîne est forcé sur SA chaîne
-  // (sélecteur de chaîne verrouillé côté TopBar).
+  // Verrou de chaîne : l'Administrateur de chaîne — et tout utilisateur rattaché à
+  // une chaîne dans Administration — est forcé sur SA chaîne (sélecteur de chaîne
+  // verrouillé côté TopBar).
   useEffect(() => {
-    if (!chaineVerrouillee(roleUtilisateur) || !utilisateurCourant?.chaine_id) return
+    if (!chaineVerrouillee(roleUtilisateur, utilisateurCourant) || !utilisateurCourant?.chaine_id) return
     const cible = CHAINES.find((c) => c.id === utilisateurCourant.chaine_id)
     if (cible && cible.code !== chaineActive.code) changerChaine(cible.code)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changerChaine/chaineActive stables ici
@@ -336,7 +337,7 @@ function App() {
           onToggleSidebar={() => setSidebarOuverte((v) => !v)}
           chaineActive={chaineActive}
           onChangerChaine={changerChaine}
-          chaineVerrouillee={chaineVerrouillee(roleUtilisateur)}
+          chaineVerrouillee={chaineVerrouillee(roleUtilisateur, utilisateurCourant)}
           onOuvrirRecherche={() => setRechercheOuverte(true)}
           onOuvrirNotifications={() => {
             setNotificationsOuvertes(true)

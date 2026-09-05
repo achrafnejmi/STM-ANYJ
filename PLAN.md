@@ -275,6 +275,16 @@ d'architecture transverse (contexte React global), pas une simple retouche d'éc
   l'**Administrateur de chaîne n'y a plus accès** (il conserve l'édition des métadonnées et
   des épisodes). `peutGererCatalogue` (supports & événements secondaires) inchangé. Sans
   migration.
+- **P46 — Menu : « Demandes de diffusion »** ✅ LIVRÉ : l'entrée de sidebar « Demandes de
+  programmation » passait sur deux lignes (mot « programmation » insécable) ; libellé
+  raccourci en **« Demandes de diffusion »**. L'id `DEMANDES_PROGRAMMATION`, le hash d'URL,
+  le routage des notifications et le titre de page sont inchangés. Sans migration.
+- **P48 — Verrou de chaîne pour tout utilisateur rattaché à une chaîne** ✅ LIVRÉ : le
+  forçage de la chaîne active (chaîne imposée à la connexion + sélecteur `TopBar` désactivé)
+  ne concernait que l'`ADMIN_CHAINE` — un Programmateur (ex. `P.messoudi` / Arryadia) restait
+  sur la chaîne par défaut. `chaineVerrouillee(role, utilisateur)` renvoie désormais `true`
+  dès que `utilisateur.chaine_id` est renseigné dans Administration, quel que soit le rôle ;
+  les comptes « — (toutes) » gardent le sélecteur libre. Sans migration.
 
 ## 9. Extension hors cahier — Grille non-linéaire
 
