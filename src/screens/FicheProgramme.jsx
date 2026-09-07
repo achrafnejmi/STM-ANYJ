@@ -199,6 +199,21 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       notifier.info('Aucune modification à enregistrer.')
       return
     }
+    // P37a — production externe sans contrat : NON bloquant, mais on demande une
+    // confirmation explicite avant d'enregistrer (le contrat reste ajoutable
+    // ensuite dans l'onglet Droits).
+    const externeSansContrat =
+      champs.production === 'EXTERNE' && !champs.reference_contrat && !programme?.attestation_chemin
+    if (externeSansContrat) {
+      const ok = await notifier.confirmer({
+        titre: 'Contrat manquant',
+        message:
+          "Production externe sans contrat : aucune référence ni fichier joint. Enregistrer quand même ? Le contrat pourra être ajouté plus tard dans l'onglet Droits.",
+        labelConfirmer: 'Enregistrer sans contrat',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
     setEnregistrement(true)
     try {
       if (id) {
@@ -230,12 +245,10 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           .then(() => onNotificationCreee?.())
           .catch((err) => console.error('Notification « nouveau programme » impossible :', err))
       }
-      // P37a — production externe : le contrat est attendu mais NON bloquant.
-      // Alerte informative seulement si ni référence ni fichier ; l'enregistrement
-      // vient d'aboutir dans tous les cas.
-      if (champs.production === 'EXTERNE' && !champs.reference_contrat && !programme?.attestation_chemin) {
-        notifier.info(
-          "Production externe sans contrat : ajoutez une référence ou joignez le fichier dans l'onglet Droits."
+      // P37a — enregistrement confirmé sans contrat : rappel visible (toast rouge).
+      if (externeSansContrat) {
+        notifier.erreur(
+          "Programme enregistré sans contrat — production externe : contrat à fournir dans l'onglet Droits."
         )
       }
     } catch (err) {
