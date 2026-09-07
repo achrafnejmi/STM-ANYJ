@@ -48,6 +48,7 @@ import { blocsActifsCeJour } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
 import { chaineAutoriseeProgramme } from '../lib/exclusivite.js'
 import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
+import { etatRemplissageJour, resumeRemplissage } from '../lib/remplissageGrille.js'
 import {
   PRESETS_ZOOM,
   INDEX_ZOOM_DEFAUT,
@@ -76,6 +77,7 @@ import {
   formaterAnnee,
   heureEnMinutes,
   minutesEnHeure,
+  formaterDureeMinutes,
   DEBUT_JOURNEE_ANTENNE,
   minutesDepuisDebutAntenne,
 } from '../lib/semaine.js'
@@ -131,7 +133,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
   const dragRef = useRef(null)
   const chargementIdRef = useRef(0)
-  const { confirmer, succes } = useNotification()
+  const { confirmer, succes, info, erreur: notifierErreur } = useNotification()
 
   // Garde-fou "modifications non enregistrées" (P21 Lot G) : passe par ici
   // pour changer/fermer le bloc inspecté — bloc_Modifie est reporté par
@@ -303,6 +305,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   }, [diffusionsGrilleActiveVue, jours])
 
   const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
+
+  // Remplissage de la journée d'antenne (P41a — grid check) : état par jour de
+  // la période affichée (grille active + vecteur), pour la pastille permanente
+  // et le toast récapitulatif à l'enregistrement.
+  const remplissageParJour = useMemo(() => {
+    const map = new Map()
+    for (const j of jours) map.set(j, etatRemplissageJour(diffusionsParJour.get(j) ?? []))
+    return map
+  }, [jours, diffusionsParJour])
+  const resumeRemplissagePeriode = useMemo(
+    () => resumeRemplissage([...remplissageParJour.values()]),
+    [remplissageParJour]
+  )
 
   // Anomalies LOCALES (cahier §4.9.1) : calculées sur la grille actuellement
   // ouverte, période affichée — feedback d'édition pendant qu'on construit un
@@ -507,6 +522,24 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   async function ouvrirAnomalies() {
     if (!(await changerBlocSelectionne(null))) return
     setAnomaliesOuvertes(true)
+  }
+
+  // Enregistrement (P21 Lot G) : chaque geste écrit déjà en base ; ce bouton
+  // confirme l'état à jour et, depuis P41a, récapitule le remplissage de la
+  // journée d'antenne sur la période affichée (jours vides / proches ou au-delà
+  // de 24 h) — un seul toast, uniquement sur ce geste explicite.
+  function enregistrerGrille() {
+    succes('Grille enregistrée ✓')
+    const r = resumeRemplissagePeriode
+    const pluriel = (n) => (n > 1 ? 's' : '')
+    const alertes = []
+    if (r.nbVides > 0) alertes.push(`${r.nbVides} jour${pluriel(r.nbVides)} sans programme`)
+    if (r.nbDebordent > 0) alertes.push(`${r.nbDebordent} jour${pluriel(r.nbDebordent)} ≥ 24 h`)
+    if (r.nbPresque > 0) alertes.push(`${r.nbPresque} jour${pluriel(r.nbPresque)} proche${pluriel(r.nbPresque)} de 24 h`)
+    if (alertes.length === 0) return
+    const message = `Remplissage — ${alertes.join(', ')}.`
+    if (r.nbDebordent > 0) notifierErreur(message)
+    else info(message)
   }
 
   async function allerVersAnomalie(id) {
@@ -1026,7 +1059,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => succes('Grille enregistrée ✓')}
+              onClick={enregistrerGrille}
               title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
               className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
             >
@@ -1053,6 +1086,14 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
         {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
 
+      {/* P41a — grille (ou onglet) sans aucune diffusion : bandeau ambre. */}
+      {!chargement && grilleActive && diffusionsGrilleActive.length === 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <CircleAlert size={16} className="shrink-0" />
+          Cette grille ne contient aucune diffusion.
+        </div>
+      )}
+
       <div className="flex items-start gap-4">
         {!pleinEcran && (
           <CataloguePanel
@@ -1068,15 +1109,27 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
             <div className="max-h-[70vh] overflow-y-auto">
               <div className="grid" style={{ gridTemplateColumns: `56px repeat(${jours.length}, minmax(140px, 1fr))` }}>
                 <div className="sticky top-0 z-10 bg-white" style={{ gridRow: 1, gridColumn: 1 }} />
-                {jours.map((j, i) => (
-                  <div
-                    key={j}
-                    style={{ gridRow: 1, gridColumn: i + 2 }}
-                    className="sticky top-0 z-10 border-b border-slate-200 bg-white px-2 py-2 text-center text-xs font-medium text-slate-600"
-                  >
-                    {formaterJourCourt(j)}
-                  </div>
-                ))}
+                {jours.map((j, i) => {
+                  const remplissage = remplissageParJour.get(j)
+                  return (
+                    <div
+                      key={j}
+                      style={{ gridRow: 1, gridColumn: i + 2 }}
+                      className="sticky top-0 z-10 border-b border-slate-200 bg-white px-2 py-2 text-center text-xs font-medium text-slate-600"
+                    >
+                      <div>{formaterJourCourt(j)}</div>
+                      {remplissage && (
+                        <div className="mt-1 flex justify-center">
+                          <PastilleRemplissage
+                            etat={remplissage.etat}
+                            minutes={remplissage.minutes}
+                            ecartMinutes={remplissage.ecartMinutes}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
 
                 <div className="relative" style={{ gridRow: 2, gridColumn: 1, height: calculerHauteurTotale(presetZoom) }}>
                   {MARQUES_HEURES.map((m) => (
@@ -1261,6 +1314,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
             dateReference={dateReference}
             jours={jours}
             diffusionsParJour={diffusionsParJour}
+            remplissageParJour={remplissageParJour}
             programmesParId={programmesParId}
             onOuvrirJour={ouvrirJourDepuisApercu}
           />
@@ -1270,6 +1324,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
           <VueAnnee
             moisListe={moisDeLAnnee(dateReference)}
             diffusionsGrilleActive={diffusionsGrilleActiveVue}
+            remplissageParJour={remplissageParJour}
             onOuvrirMois={ouvrirMoisDepuisApercu}
           />
         )}
@@ -1396,15 +1451,47 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   )
 }
 
+// Pastille de remplissage de la journée d'antenne (P41a — grid check).
+// Couleur = état ; le libellé porte les heures cumulées, le title le détail.
+const STYLE_PASTILLE_REMPLISSAGE = {
+  VIDE: 'bg-slate-100 text-slate-500',
+  INCOMPLET: 'bg-slate-100 text-slate-500',
+  PRESQUE: 'bg-amber-100 text-amber-700',
+  COMPLET: 'bg-snrt-success/10 text-snrt-success',
+  DEBORDE: 'bg-red-100 text-red-700',
+}
+
+function PastilleRemplissage({ etat, minutes, ecartMinutes }) {
+  const classe = STYLE_PASTILLE_REMPLISSAGE[etat] ?? STYLE_PASTILLE_REMPLISSAGE.INCOMPLET
+  const texte = etat === 'VIDE' ? 'vide' : formaterDureeMinutes(minutes)
+  const detail =
+    etat === 'VIDE'
+      ? 'Aucune diffusion ce jour'
+      : etat === 'DEBORDE'
+        ? `${formaterDureeMinutes(minutes)} programmées — dépasse 24 h de ${formaterDureeMinutes(ecartMinutes)}`
+        : etat === 'COMPLET'
+          ? '24 h pile'
+          : `${formaterDureeMinutes(minutes)} programmées sur 24 h`
+  return (
+    <span
+      title={detail}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${classe}`}
+    >
+      {texte}
+    </span>
+  )
+}
+
 // Vue Mois (P25) : aperçu en lecture seule — calendrier 7 colonnes, une
 // cellule par jour de `jours` (déjà la grille calendrier complète, jours
 // hors-mois inclus pour ne jamais avoir de semaine incomplète). Résumé par
-// cellule = puces de couleur par genre présent + nombre de diffusions.
+// cellule = puces de couleur par genre présent + nombre de diffusions
+// + pastille de remplissage (P41a).
 // Aucune création/édition ici (RG confirmée) — seul le clic sur une cellule
 // bascule en vue Jour à cette date pour éditer normalement.
 const JOURS_SEMAINE_ABBR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
-function VueCalendrierMois({ dateReference, jours, diffusionsParJour, programmesParId, onOuvrirJour }) {
+function VueCalendrierMois({ dateReference, jours, diffusionsParJour, remplissageParJour, programmesParId, onOuvrirJour }) {
   const aujourdHui = aujourdHuiISO()
   return (
     <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
@@ -1418,6 +1505,7 @@ function VueCalendrierMois({ dateReference, jours, diffusionsParJour, programmes
           const diffusionsJour = diffusionsParJour.get(jour) ?? []
           const horsMois = !estMemeMois(jour, dateReference)
           const estAujourdHui = jour === aujourdHui
+          const remplissage = remplissageParJour?.get(jour)
           const genresPresents = [...new Set(diffusionsJour.map((d) => programmesParId.get(d.programme_id)?.genre || ''))]
           return (
             <button
@@ -1447,6 +1535,15 @@ function VueCalendrierMois({ dateReference, jours, diffusionsParJour, programmes
                   </span>
                 </>
               )}
+              {!horsMois && remplissage && (
+                <div className="mt-auto">
+                  <PastilleRemplissage
+                    etat={remplissage.etat}
+                    minutes={remplissage.minutes}
+                    ecartMinutes={remplissage.ecartMinutes}
+                  />
+                </div>
+              )}
             </button>
           )
         })}
@@ -1459,13 +1556,16 @@ function VueCalendrierMois({ dateReference, jours, diffusionsParJour, programmes
 // léger (nombre total de diffusions ce mois, filtre simple sur les
 // diffusions déjà chargées en mémoire, pas de détail jour par jour). Clic
 // sur une tuile bascule en vue Mois à ce mois.
-function VueAnnee({ moisListe, diffusionsGrilleActive, onOuvrirMois }) {
+function VueAnnee({ moisListe, diffusionsGrilleActive, remplissageParJour, onOuvrirMois }) {
+  const etatsRemplissage = remplissageParJour ? [...remplissageParJour.entries()] : []
   return (
     <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {moisListe.map(({ mois, annee, premierJour }) => {
           const prefixe = premierJour.slice(0, 7) // "AAAA-MM"
           const nb = diffusionsGrilleActive.filter((d) => d.date.startsWith(prefixe)).length
+          // P41a — synthèse du remplissage du mois : jours vides / au-delà de 24 h.
+          const r = resumeRemplissage(etatsRemplissage.filter(([d]) => d.startsWith(prefixe)).map(([, e]) => e))
           return (
             <button
               key={`${annee}-${mois}`}
@@ -1477,6 +1577,17 @@ function VueAnnee({ moisListe, diffusionsGrilleActive, onOuvrirMois }) {
               <span className="text-xs text-slate-500">
                 {nb} diffusion{nb > 1 ? 's' : ''}
               </span>
+              {(r.nbDebordent > 0 || r.nbVides > 0) && (
+                <span className="text-[11px]">
+                  {r.nbDebordent > 0 && <span className="text-red-600">{r.nbDebordent} j ≥ 24 h</span>}
+                  {r.nbDebordent > 0 && r.nbVides > 0 && <span className="text-slate-400"> · </span>}
+                  {r.nbVides > 0 && (
+                    <span className="text-slate-500">
+                      {r.nbVides} j vide{r.nbVides > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </span>
+              )}
             </button>
           )
         })}
