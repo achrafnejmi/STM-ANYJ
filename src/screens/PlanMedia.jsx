@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import { Clock, List as ListIcon, Search, Upload, Settings } from 'lucide-react';
 import { VerticalTimeline } from '../helpers/VerticalTimeline';
+import PlanMediaAdministration from '../helpers/PlanMediaAdministration.jsx';
 import './PlanMedia.css';
 
 export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = false }) {
   // Navigation principale entre Gestion Plan Média, Validation Pige et Administration Plan Média
   const [vuePrincipale, setVuePrincipale] = useState('PLAN_MEDIA');
+
+  // Stock d'annonces centralisé partagé entre la liste de droite et l'administration
+  const [stockAnnonces, setStockAnnonces] = useState([
+    { id: 101, type: 'Spot', title: 'Campagne SNRT', duration: '30s', categorie: 'enfant' },
+    { id: 102, type: 'Bande-annonce', title: 'BA Soirée Cinéma', duration: '45s', categorie: 'jeune' },
+    { id: 103, type: 'Habillage', title: 'Jingle Pub', duration: '05s', categorie: 'grand' },
+    { id: 104, type: 'Autopromotion', title: 'Promo Rentrée', duration: '20s', categorie: 'budget' },
+  ]);
 
   // États pour les filtres et la recherche de la timeline (colonne gauche)
   const [filtresTimeline, setFiltresTimeline] = useState(['annonce', 'programme']);
@@ -19,8 +28,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
   const [fichierPige, setFichierPige] = useState(null);
 
   const toggleFiltreTimeline = (filtre) => {
-    setFiltresTimeline(prev => 
-      prev.includes(filtre) 
+    setFiltresTimeline(prev =>
+      prev.includes(filtre)
         ? prev.filter(f => f !== filtre)
         : [...prev, filtre]
     );
@@ -33,21 +42,23 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     { id: 3, time: '07:00', name: 'Coupure Libre', details: { type: 'Publicité', duree: '00:05:00' } },
   ];
 
-  // Fake data for the right-hand list
-  const mockList = [
-    { id: 101, type: 'Spot', title: 'Campagne SNRT', duration: '30s', categorie: 'enfant' },
-    { id: 102, type: 'Bande-annonce', title: 'BA Soirée Cinéma', duration: '45s', categorie: 'jeune' },
-    { id: 103, type: 'Habillage', title: 'Jingle Pub', duration: '05s', categorie: 'grand' },
-    { id: 104, type: 'Autopromotion', title: 'Promo Rentrée', duration: '20s', categorie: 'budget' },
-  ];
+  // Filtrage dynamique du stock d'annonces pour la colonne de droite
+  const listeFiltree = stockAnnonces.filter((item) => {
+    const matchRecherche = rechercheListe.trim() === '' || item.title.toLowerCase().includes(rechercheListe.toLowerCase());
+    return matchRecherche;
+  }).sort((a, b) => {
+    const scoreA = a.pourcentages?.[filtreOrdre] || 0;
+    const scoreB = b.pourcentages?.[filtreOrdre] || 0;
+    return scoreB - scoreA; // Tri décroissant (du plus grand pourcentage au plus petit)
+  });
 
   return (
     <div className="space-y-6">
-      
+
       {/* Barre d'outils globale (Top) avec les 3 boutons de navigation */}
       <div className="rounded-lg border border-slate-200 bg-white p-6">
         <header className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
-          <h1 className="text-lg font-semibold text-slate-800">Plan Média — {chaineActive?.nom || 'Workspace'}</h1>
+          <h1 className="text-lg font-semibold text-slate-800" style={{ color: "#00607a" }}>Plan Média — {chaineActive?.nom || 'Workspace'}</h1>
         </header>
         <div className="flex flex-wrap items-end justify-between gap-4">
           {/* Navigation 3 boutons */}
@@ -55,33 +66,30 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             <button
               type="button"
               onClick={() => setVuePrincipale('PLAN_MEDIA')}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                vuePrincipale === 'PLAN_MEDIA'
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA'
                   ? 'bg-snrt-navy text-white'
                   : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
+                }`}
             >
               Gestion Plan Média
             </button>
             <button
               type="button"
               onClick={() => setVuePrincipale('PIGE_VALIDATION')}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                vuePrincipale === 'PIGE_VALIDATION'
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PIGE_VALIDATION'
                   ? 'bg-snrt-navy text-white'
                   : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
+                }`}
             >
               Validation Pige
             </button>
             <button
               type="button"
               onClick={() => setVuePrincipale('PLAN_MEDIA_ADMIN')}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                vuePrincipale === 'PLAN_MEDIA_ADMIN'
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA_ADMIN'
                   ? 'bg-snrt-navy text-white'
                   : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
+                }`}
             >
               Administration Plan Média
             </button>
@@ -92,11 +100,11 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
       {/* Affichage conditionnel selon la vue principale choisie */}
       {vuePrincipale === 'PLAN_MEDIA' ? (
         /* Main Layout : Timeline - Formulaire - Liste */
-        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 250px)' }}>
-          
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 300px)' }}>
+
           {/* 1. Colonne Gauche : Timeline */}
-          <aside 
-            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col" 
+          <aside
+            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col relative z-30"
             style={{ flex: '0 0 250px', overflowY: 'auto', overflowX: 'hidden' }}
           >
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
@@ -111,11 +119,10 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   key={f}
                   type="button"
                   onClick={() => toggleFiltreTimeline(f)}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${
-                    filtresTimeline.includes(f)
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtresTimeline.includes(f)
                       ? 'bg-snrt-navy text-white'
                       : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
+                    }`}
                 >
                   {f}
                 </button>
@@ -125,11 +132,11 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             {/* Barre de recherche */}
             <div className="relative mb-6 shrink-0">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={rechercheTimeline}
                 onChange={(e) => setRechercheTimeline(e.target.value)}
-                placeholder="Rechercher..." 
+                placeholder="Rechercher..."
                 className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
               />
             </div>
@@ -139,8 +146,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           </aside>
 
           {/* 2. Colonne Milieu : Formulaire */}
-          <main 
-            className="rounded-lg border border-slate-200 bg-white p-6" 
+          <main
+            className="rounded-lg border border-slate-200 bg-white p-6"
             style={{ flex: '1 1 auto', overflowY: 'auto' }}
           >
             <div className="pm-form">
@@ -191,16 +198,16 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             </div>
           </main>
 
-          {/* 3. Colonne Droite : Liste avec filtres et recherche */}
-          <aside 
-            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col" 
+          {/* 3. Colonne Droite : Liste connectée au stock global d'administration */}
+          <aside
+            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col"
             style={{ flex: '0 0 320px', overflowY: 'auto' }}
           >
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
               <ListIcon size={16} className="text-snrt-navy" />
-              <span>Éléments disponibles</span>
+              <span>Éléments disponibles ({listeFiltree.length})</span>
             </div>
-            
+
             {/* 4 Boutons de filtres (enfant, jeune, grand, budget) */}
             <div className="mb-3 grid grid-cols-2 gap-1.5 shrink-0">
               {['enfant', 'jeune', 'grand', 'budget'].map((btn) => (
@@ -208,11 +215,10 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   key={btn}
                   type="button"
                   onClick={() => setFiltreOrdre(btn)}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${
-                    filtreOrdre === btn
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
                       ? 'bg-snrt-navy text-white'
                       : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
+                    }`}
                 >
                   {btn}
                 </button>
@@ -222,31 +228,35 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             {/* Barre de recherche de la liste */}
             <div className="relative mb-4 shrink-0">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={rechercheListe}
                 onChange={(e) => setRechercheListe(e.target.value)}
-                placeholder="Rechercher dans la liste..." 
+                placeholder="Rechercher dans la liste..."
                 className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
               />
             </div>
 
-            {/* Contenu de la liste */}
+            {/* Contenu de la liste dynamique */}
             <div className="space-y-3 overflow-y-auto flex-1">
-              {mockList.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="group cursor-pointer rounded-md border border-slate-200 p-3 transition-colors hover:border-snrt-accent hover:bg-snrt-accent/5"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-snrt-navy">{item.type}</span>
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 group-hover:bg-white">
-                      {item.duration}
-                    </span>
+              {listeFiltree.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-6">Aucun élément trouvé.</p>
+              ) : (
+                listeFiltree.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group cursor-pointer rounded-md border border-slate-200 p-3 transition-colors hover:border-snrt-accent hover:bg-snrt-accent/5"
+                  >
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-snrt-navy">{item.type}</span>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 group-hover:bg-white">
+                        {item.duration}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-800">{item.title}</p>
                   </div>
-                  <p className="text-sm font-medium text-slate-800">{item.title}</p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </aside>
 
@@ -262,8 +272,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             <p className="text-sm text-slate-500 mt-1">Téléchargez un fichier Excel pour lancer le traitement et l'analyse.</p>
           </div>
           <div className="mt-4">
-            <input 
-              type="file" 
+            <input
+              type="file"
               accept=".xlsx, .xls"
               onChange={(e) => setFichierPige(e.target.files[0])}
               className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-snrt-navy file:text-white hover:file:bg-snrt-navy-hover cursor-pointer"
@@ -274,16 +284,12 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           </div>
         </div>
       ) : (
-        /* Vue Administration Plan Média */
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center min-h-[500px] flex flex-col items-center justify-center space-y-4">
-          <div className="rounded-full bg-slate-100 p-4 text-snrt-navy">
-            <Settings size={32} />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">Administration Plan Média</h2>
-            <p className="text-sm text-slate-500 mt-1">Paramètres avancés, règles de génération et gestion des privilèges.</p>
-          </div>
-        </div>
+        /* Vue Administration Plan Média connectée au stock global */
+        <PlanMediaAdministration
+          chaineId={chaineActive?.id}
+          stockAnnonces={stockAnnonces}
+          setStockAnnonces={setStockAnnonces}
+        />
       )}
 
     </div>
