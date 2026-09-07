@@ -51,7 +51,7 @@ import PaletteGenres from '../components/PaletteGenres.jsx'
 import PanneauBlocGrilleType from '../components/PanneauBlocGrilleType.jsx'
 import PanneauImportGrilleType from '../components/PanneauImportGrilleType.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
-import SegmentedControl from '../components/SegmentedControl.jsx'
+import SelecteurCompact from '../components/SelecteurCompact.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const MARQUES_HEURES = genererMarquesHeures()
@@ -829,8 +829,7 @@ export default function GrilleType({ chaineActive }) {
 
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
           <div className="flex flex-wrap items-center gap-2">
-            <SegmentedControl
-              variante="zoom"
+            <SelecteurCompact
               title="Précision d'affichage"
               options={PRESETS_ZOOM.map((preset, i) => [String(i), preset.label])}
               value={String(indexZoom)}

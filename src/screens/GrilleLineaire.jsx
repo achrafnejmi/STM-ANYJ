@@ -86,6 +86,7 @@ import InspecteurBloc from '../components/InspecteurBloc.jsx'
 import PanneauAnomalies from '../components/PanneauAnomalies.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
 import SegmentedControl from '../components/SegmentedControl.jsx'
+import SelecteurCompact from '../components/SelecteurCompact.jsx'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
 const DUREE_PAR_DEFAUT_MIN = 30
@@ -855,8 +856,8 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="flex flex-wrap items-center gap-2.5">
-            <SegmentedControl
-              variante="vue"
+            <SelecteurCompact
+              title="Portée d'affichage"
               options={[
                 ['JOUR', 'Jour'],
                 ['SEMAINE', 'Semaine'],
@@ -877,8 +878,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
               onChange={setVueVecteur}
             />
             {vueEditable && (
-              <SegmentedControl
-                variante="zoom"
+              <SelecteurCompact
                 title="Précision de programmation"
                 options={PRESETS_ZOOM.map((preset, i) => [String(i), preset.label])}
                 value={String(indexZoom)}
