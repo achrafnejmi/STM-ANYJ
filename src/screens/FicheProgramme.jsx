@@ -45,9 +45,6 @@ const LANGUES = [
   { id: 'EN', label: 'English', champTitre: 'titre_en', champDescription: 'description_en', rtl: false },
 ]
 
-// Métadonnées de production (P42, cahier des charges § modèle de données).
-const TYPES_PRODUCTION = ['Production interne', 'Coproduction', 'Production externe', 'Acquisition', 'Captation']
-
 const FORM_VIDE = {
   titre: '',
   titre_ar: '',
@@ -60,7 +57,9 @@ const FORM_VIDE = {
   description_ar: '',
   description_en: '',
   auteur: '',
-  type_production: '',
+  // P37a — production interne SNRT (droits illimités, sans contrat) par défaut ;
+  // EXTERNE fait apparaître le bloc Contrat de l'onglet Droits.
+  production: 'INTERNE',
   producteur: '',
   realisation: '',
   interpretes: '',
@@ -92,7 +91,7 @@ function versFormulaire(programme, chaineActive) {
     description_ar: programme.description_ar ?? '',
     description_en: programme.description_en ?? '',
     auteur: programme.auteur ?? '',
-    type_production: programme.type_production ?? '',
+    production: programme.production ?? 'INTERNE',
     producteur: programme.producteur ?? '',
     realisation: programme.realisation ?? '',
     interpretes: programme.interpretes ?? '',
@@ -120,6 +119,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   const [envoiDemandeProg, setEnvoiDemandeProg] = useState(false)
   const idDescription = useId()
   const idExclusif = useId()
+  const idProduction = useId()
   const notifier = useNotification()
 
   useEffect(() => {
@@ -184,7 +184,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       description_ar: form.description_ar.trim() || null,
       description_en: form.description_en.trim() || null,
       auteur: form.auteur.trim() || null,
-      type_production: form.type_production.trim() || null,
+      production: form.production,
       producteur: form.producteur.trim() || null,
       realisation: form.realisation.trim() || null,
       interpretes: form.interpretes.trim() || null,
@@ -229,6 +229,14 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
         )
           .then(() => onNotificationCreee?.())
           .catch((err) => console.error('Notification « nouveau programme » impossible :', err))
+      }
+      // P37a — production externe : le contrat est attendu mais NON bloquant.
+      // Alerte informative seulement si ni référence ni fichier ; l'enregistrement
+      // vient d'aboutir dans tous les cas.
+      if (champs.production === 'EXTERNE' && !champs.reference_contrat && !programme?.attestation_chemin) {
+        notifier.info(
+          "Production externe sans contrat : ajoutez une référence ou joignez le fichier dans l'onglet Droits."
+        )
       }
     } catch (err) {
       if (err.code === '23505') {
@@ -526,6 +534,32 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
               </div>
             )}
 
+            {/* P37a — type de production interne/externe : pilote le bloc Contrat
+                de l'onglet Droits. Même patron que « Exclusif à cette chaîne ». */}
+            <div className="border-t border-slate-100 pt-4">
+              <div className="flex items-center gap-3">
+                <Toggle
+                  id={idProduction}
+                  checked={form.production === 'EXTERNE'}
+                  onChange={(v) => setForm({ ...form, production: v ? 'EXTERNE' : 'INTERNE' })}
+                  label="Production externe"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm({ ...form, production: form.production === 'EXTERNE' ? 'INTERNE' : 'EXTERNE' })
+                  }
+                  className="text-sm font-medium text-slate-700"
+                >
+                  Production externe
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Production interne SNRT par défaut (droits illimités, sans contrat). Activez pour une
+                production externe : un contrat est attendu dans l'onglet Droits.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>
               <div>Créé le : {programme?.cree_le ? new Date(programme.cree_le).toLocaleString('fr-FR') : '—'}</div>
@@ -587,14 +621,9 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
 
             <div className="border-t border-slate-100 pt-4">
               <h3 className="mb-3 text-sm font-semibold text-slate-900">Production</h3>
+              {/* P37a — « Type de production » (liste libre) remplacé par le toggle
+                  interne/externe de l'onglet Général. */}
               <div className="grid grid-cols-2 gap-4">
-                <ChampSelect
-                  label="Type de production"
-                  value={form.type_production}
-                  onChange={(v) => setForm({ ...form, type_production: v })}
-                  options={TYPES_PRODUCTION.map((t) => ({ valeur: t, libelle: t }))}
-                  vide="— Choisir —"
-                />
                 <Champ label="Producteur" value={form.producteur} onChange={(v) => setForm({ ...form, producteur: v })} />
                 <Champ label="Réalisation" value={form.realisation} onChange={(v) => setForm({ ...form, realisation: v })} />
                 <Champ label="Mots-clés" value={form.mots_cles} onChange={(v) => setForm({ ...form, mots_cles: v })} />
@@ -643,6 +672,10 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       {onglet === 'DROITS' && id && (
         // fieldset désactivé (P45) : lecture seule pour Marketing / Digital.
         <fieldset disabled={lectureSeule} className="min-w-0 space-y-6 border-0 p-0 m-0">
+          {/* P37a — carte Contrat réservée aux productions externes (une production
+              interne n'a pas de contrat). Masquée sans jamais effacer la référence
+              ni le fichier déjà en base ; réapparaît intacte en rebascule externe. */}
+          {form.production === 'EXTERNE' ? (
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Contrat</h2>
             <form onSubmit={enregistrer} className="mb-4 flex items-end gap-3">
@@ -691,7 +724,24 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
             </div>
             {erreur && <p className="mt-4 text-sm text-red-600">{erreur}</p>}
           </div>
-          <FenetresDroitsPanel programmeId={id} />
+          ) : (
+            <p className="text-sm text-slate-500">Production interne : aucun contrat requis.</p>
+          )}
+          {/* P37a — production interne ⇒ droits illimités : le panneau reste monté
+              mais neutralisé (consultation indicative). */}
+          <div>
+            {form.production === 'INTERNE' && (
+              <p className="mb-2 text-xs text-slate-500">
+                Production interne : droits illimités — cette section est fournie à titre indicatif.
+              </p>
+            )}
+            <div
+              className={form.production === 'INTERNE' ? 'pointer-events-none opacity-60' : ''}
+              aria-disabled={form.production === 'INTERNE'}
+            >
+              <FenetresDroitsPanel programmeId={id} />
+            </div>
+          </div>
         </fieldset>
       )}
       {onglet === 'HISTORIQUE' && id && <HistoriqueTitrePanel programmeId={id} />}
