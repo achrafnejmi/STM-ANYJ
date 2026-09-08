@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType, AlignmentType } from 'docx'
+import html2canvas from 'html2canvas'
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +22,7 @@ import {
   ClipboardPaste,
   MoreHorizontal,
   FileSpreadsheet,
+  FileText,
   Save,
 } from 'lucide-react'
 import {
@@ -49,6 +51,9 @@ import { estProgrammable, estEpisodePret } from '../lib/droits.js'
 import { chaineAutoriseeProgramme } from '../lib/exclusivite.js'
 import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
 import { etatRemplissageJour, resumeRemplissage } from '../lib/remplissageGrille.js'
+import { gabaritGrilleChaine, libelleFormatHeure } from '../lib/gabaritsGrilleChaine.js'
+import { construireDonneesGrilleConventionnelle, nomFichierGrilleConventionnelle } from '../lib/exportGrilleChaine.js'
+import { annoterNature } from '../lib/historique.js'
 import {
   PRESETS_ZOOM,
   INDEX_ZOOM_DEFAUT,
@@ -489,6 +494,190 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
     }
   }
 
+  // ---- Export conventionnel par chaîne (P41b) ----------------------------------
+  // Gabarit fidèle au format papier réel de la chaîne (Al Aoula .docx,
+  // Al Maghribia .pdf, Tamazight .xlsx ; repli .docx pour les autres). La
+  // journée d'antenne variable (07:00 / 12:00) n'agit QU'ICI, au tri — le
+  // moteur reste en 06:00 (cf. gabaritsGrilleChaine.js).
+  function donneesExportGrilleConventionnelle() {
+    const gabarit = gabaritGrilleChaine(chaineActive.code)
+    const joursExport = vueEditable ? jours : joursDeLaSemaine(lundiDeLaSemaine(dateReference))
+    const parJour = new Map(joursExport.map((j) => [j, []]))
+    for (const d of diffusionsGrilleActiveVue) {
+      if (parJour.has(d.date)) parJour.get(d.date).push(d)
+    }
+    // Rediffusion (« إعادة ») : 1re occurrence chronologique d'un épisode dans
+    // la grille active = « Diffusion », suivantes = « Rediffusion »
+    // (historique.js). « مباشر » / « جديد » ne sont pas dérivables du modèle.
+    const natureParDiffusionId = new Map(annoterNature(diffusionsGrilleActive).map((d) => [d.id, d.nature]))
+    return construireDonneesGrilleConventionnelle({
+      chaineNom: chaineActive.nom,
+      chaineNomAr: chaineActive.nomAr,
+      gabarit,
+      jours: joursExport,
+      diffusionsParJour: parJour,
+      programmesParId,
+      episodesParId,
+      natureParDiffusionId,
+    })
+  }
+
+  async function exporterGrilleConventionnelleDocx(donnees, nomFichier) {
+    const P = (texte, opts = {}) =>
+      new Paragraph({
+        bidirectional: true,
+        alignment: AlignmentType.RIGHT,
+        children: [new TextRun({ text: String(texte ?? ''), ...opts })],
+      })
+    const cellule = (texte, gras) => new TableCell({ children: [P(texte, gras ? { bold: true } : {})] })
+    const enTete = new TableRow({
+      children: ['التوقيت', 'البرامج', 'المدة', 'الملاحظات'].map((l) => cellule(l, true)),
+    })
+
+    const children = [
+      new Paragraph({
+        text: `شبكة البرامج — ${donnees.chaineNomAr}`,
+        heading: HeadingLevel.HEADING_1,
+        bidirectional: true,
+        alignment: AlignmentType.RIGHT,
+      }),
+      P(donnees.periodeLabelAr),
+    ]
+    for (const bloc of donnees.joursBlocs) {
+      children.push(
+        new Paragraph({
+          text: bloc.libelleJourAr,
+          heading: HeadingLevel.HEADING_2,
+          bidirectional: true,
+          alignment: AlignmentType.RIGHT,
+        })
+      )
+      if (bloc.lignes.length === 0) {
+        children.push(P('—'))
+        continue
+      }
+      children.push(
+        new Table({
+          visuallyRightToLeft: true,
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            enTete,
+            ...bloc.lignes.map(
+              (l) => new TableRow({ children: [cellule(l.heure), cellule(l.titreAr), cellule(l.duree), cellule(l.obs)] })
+            ),
+          ],
+        })
+      )
+    }
+
+    const doc = new Document({ sections: [{ children }] })
+    const blob = await Packer.toBlob(doc)
+    const url = URL.createObjectURL(blob)
+    const lien = document.createElement('a')
+    lien.href = url
+    lien.download = nomFichier
+    lien.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exporterGrilleConventionnelleXlsx(donnees, nomFichier) {
+    const aoa = [
+      [donnees.periodeLabelFr],
+      [],
+      ['Emissions', 'أهم البرامج المقررة', 'التاريخ', 'الساعة', ''],
+    ]
+    for (const bloc of donnees.joursBlocs) {
+      for (const l of bloc.lignes) aoa.push([l.titre, l.titreAr, l.date, l.heure, l.heureFin])
+    }
+    const feuille = XLSX.utils.aoa_to_sheet(aoa)
+    feuille['!cols'] = [{ wch: 22 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 8 }]
+    const classeur = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(classeur, feuille, 'Grille')
+    XLSX.writeFile(classeur, nomFichier)
+  }
+
+  async function exporterGrilleConventionnellePdf(donnees, nomFichier) {
+    const echapper = (t) => {
+      const div = document.createElement('div')
+      div.textContent = t ?? ''
+      return div.innerHTML
+    }
+    const A4_L = 595.28
+    const A4_H = 841.89
+    const TH = 'border:1px solid #cbd5e1;padding:4px 6px;background:#f1f5f9;font-weight:600'
+    const TD = 'border:1px solid #e2e8f0;padding:3px 6px'
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    let premierePage = true
+
+    for (const bloc of donnees.joursBlocs) {
+      const noeud = document.createElement('div')
+      noeud.style.cssText =
+        'position:fixed;left:-10000px;top:0;width:794px;padding:40px;background:#ffffff;' +
+        'font-family:Tahoma,Arial,sans-serif;color:#0f172a;direction:rtl'
+      const corps =
+        bloc.lignes
+          .map(
+            (l) =>
+              `<tr><td style="${TD};text-align:center">${echapper(l.heure)}</td>` +
+              `<td style="${TD};text-align:right">${echapper(l.titreAr)}</td>` +
+              `<td style="${TD};text-align:center">${echapper(l.duree)}</td>` +
+              `<td style="${TD};text-align:center">${echapper(l.obs)}</td></tr>`
+          )
+          .join('') || `<tr><td colspan="4" style="${TD};text-align:center">—</td></tr>`
+      noeud.innerHTML =
+        `<div style="text-align:center;margin-bottom:6px"><img src="${donnees.gabarit.logo}" style="height:60px" alt="" /></div>` +
+        `<div style="text-align:center;font-size:13px;color:#475569">${echapper(donnees.periodeLabelAr)}</div>` +
+        `<h2 style="text-align:center;font-size:16px;margin:6px 0 12px">${echapper(bloc.libelleJourAr)}</h2>` +
+        `<table style="width:100%;border-collapse:collapse;font-size:12px" dir="rtl"><thead><tr>` +
+        `<th style="${TH}">التوقيت</th><th style="${TH}">البرامج</th><th style="${TH}">المدة</th><th style="${TH}">الملاحظات</th>` +
+        `</tr></thead><tbody>${corps}</tbody></table>` +
+        `<div style="text-align:center;font-size:10px;color:#94a3b8;margin-top:16px">${echapper(donnees.gabarit.pied)} — ${echapper(donnees.chaineNom)}</div>`
+      document.body.appendChild(noeud)
+      try {
+        const img = noeud.querySelector('img')
+        if (img && !img.complete) {
+          await new Promise((res) => {
+            img.onload = res
+            img.onerror = res
+          })
+        }
+        const canvas = await html2canvas(noeud, { scale: 2, backgroundColor: '#ffffff' })
+        const image = canvas.toDataURL('image/png')
+        const largeur = A4_L
+        const hauteur = (canvas.height * largeur) / canvas.width
+        let reste = hauteur
+        let position = 0
+        if (!premierePage) doc.addPage()
+        premierePage = false
+        doc.addImage(image, 'PNG', 0, position, largeur, hauteur)
+        reste -= A4_H
+        while (reste > 0) {
+          position -= A4_H
+          doc.addPage()
+          doc.addImage(image, 'PNG', 0, position, largeur, hauteur)
+          reste -= A4_H
+        }
+      } finally {
+        noeud.remove()
+      }
+    }
+    doc.save(nomFichier)
+  }
+
+  async function exporterGrilleConventionnelle() {
+    try {
+      const donnees = donneesExportGrilleConventionnelle()
+      const premier = donnees.joursBlocs[0]?.dateISO
+      const dernier = donnees.joursBlocs[donnees.joursBlocs.length - 1]?.dateISO
+      const nomFichier = nomFichierGrilleConventionnelle(chaineActive.nom, premier, dernier, donnees.gabarit.format)
+      if (donnees.gabarit.format === 'xlsx') exporterGrilleConventionnelleXlsx(donnees, nomFichier)
+      else if (donnees.gabarit.format === 'pdf') await exporterGrilleConventionnellePdf(donnees, nomFichier)
+      else await exporterGrilleConventionnelleDocx(donnees, nomFichier)
+    } catch (err) {
+      setErreur(`Échec de l'export de la grille (format chaîne) : ${err.message}`)
+    }
+  }
+
   function naviguer(delta) {
     if (vue === 'SEMAINE') return setDateReference((d) => ajouterJours(d, 7 * delta))
     if (vue === 'MOIS') return setDateReference((d) => ajouterMois(d, delta))
@@ -863,6 +1052,14 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                     Icone: FileSpreadsheet,
                     onClick: exporterTransmissionsExcelTNTSat,
                     title: 'Feuilles TNT + Satellite séparées, indépendamment de la bascule d’affichage',
+                  },
+                  {
+                    label: `Grille conventionnelle (${gabaritGrilleChaine(chaineActive.code).format})`,
+                    Icone: gabaritGrilleChaine(chaineActive.code).format === 'xlsx' ? FileSpreadsheet : FileText,
+                    onClick: exporterGrilleConventionnelle,
+                    couleurTexte: 'text-snrt-navy',
+                    couleurHover: 'hover:bg-snrt-navy/5',
+                    title: `Format ${chaineActive.nom} — journée d'antenne ${libelleFormatHeure(gabaritGrilleChaine(chaineActive.code).debutJourneeMinutes)} (période affichée)`,
                   },
                 ]}
               />

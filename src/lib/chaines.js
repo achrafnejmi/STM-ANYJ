@@ -54,6 +54,15 @@ export const CHAINES = [
     couleur: 'bg-snrt-blue',
     logo: '/brand/tm.png',
   },
+  {
+    id: 'b8d6bf45-0fad-4b2c-8e03-7fe849f2d99e',
+    code: 'AM',
+    nom: 'Al Maghribia',
+    nomAr: 'المغربية',
+    ligneEditoriale: 'Internationale',
+    couleur: 'bg-snrt-purple',
+    logo: '/brand/am.png',
+  },
 ]
 
 export function chaineParCode(code) {
