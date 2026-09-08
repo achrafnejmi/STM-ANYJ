@@ -23,6 +23,7 @@ import TopBar from './components/TopBar.jsx'
 import RechercheGlobale from './components/RechercheGlobale.jsx'
 import PanneauNotifications from './components/PanneauNotifications.jsx'
 import Accueil from './screens/Accueil.jsx'
+import DashboardAudit from './screens/DashboardAudit.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
 import Bible from './screens/Bible.jsx'
@@ -43,6 +44,7 @@ import Administration from './screens/Administration.jsx'
 
 const ECRANS = {
   ACCUEIL: Accueil,
+  DASHBOARD: DashboardAudit,
   PROGRAMMES: Programmes,
   CONTRATS: Contrats,
   BIBLE: Bible,

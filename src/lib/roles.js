@@ -15,6 +15,7 @@ export const ROLES = [
   { code: 'REDACTEUR_AR', label: 'Rédacteur (AR)' },
   { code: 'CONTROLE_PAD', label: 'Contrôle PAD' },
   { code: 'MARKETING', label: 'Marketing / Digital' },
+  { code: 'AUDIT', label: 'Audit' },
 ]
 
 // Toutes les sections connues (les 3 dernières n'existent qu'à partir de P35b/c
@@ -40,6 +41,7 @@ const TOUTES = [
   'DEMANDES_PROGRAMMATION',
   'BIBLES_SYNOPSIS',
   'TABLEAU_BORD_REDACTION',
+  'DASHBOARD',
 ]
 
 export const SECTIONS_PAR_ROLE = {
@@ -85,6 +87,9 @@ export const SECTIONS_PAR_ROLE = {
   // surtout l'onglet Historique (diffusions linéaires + non-linéaires d'un
   // titre) ; il ne crée, n'édite ni ne supprime rien.
   MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
+  // Audit (P43) : rôle en lecture seule, une seule section — le tableau de bord
+  // « Respect de la grille type ».
+  AUDIT: ['DASHBOARD'],
 }
 
 // `role` peut être null pendant le chargement async → fallback « tout » pour
