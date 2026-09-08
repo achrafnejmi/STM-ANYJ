@@ -91,10 +91,8 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
     return { titreTableau: null, colonnes: [], lignes: [], mode: null }
   }, [kpiActif, analyse])
 
-  // Rien à évaluer (aucune diffusion dans un bloc avec un genre) → pas un écart,
-  // la carte reste verte.
+  // Rien à évaluer (aucune diffusion dans un bloc avec un genre).
   const rienAEvaluer = analyse.nbEvaluees === 0
-  const tonTaux = rienAEvaluer || analyse.tauxConformite >= 90 ? 'favorable' : analyse.tauxConformite >= 70 ? 'vigilance' : 'alerte'
 
   return (
     <div className="space-y-6">
@@ -122,7 +120,8 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               sousTexte={
                 rienAEvaluer ? 'aucune diffusion à évaluer' : `${analyse.nbConformes} conformes / ${analyse.nbEvaluees} évaluées`
               }
-              ton={tonTaux}
+              ton="favorable"
+              fort
               onClick={() => basculer('tout')}
               actif={kpiActif === 'tout'}
               description="Diffusions dont le genre correspond au bloc de grille type actif à leur heure de début."
@@ -131,7 +130,8 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Écarts de genre"
               valeur={analyse.nbEcartsGenre}
               sousTexte="genre ≠ genre attendu du bloc"
-              ton={analyse.nbEcartsGenre > 0 ? 'alerte' : 'favorable'}
+              ton="alerte"
+              fort
               onClick={() => basculer('ecarts')}
               actif={kpiActif === 'ecarts'}
               description="Programmé dans un bloc de grille type, mais d'un autre genre que celui attendu."
@@ -140,7 +140,8 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Hors grille type"
               valeur={analyse.nbHorsBloc}
               sousTexte="aucun bloc à ce créneau"
-              ton={analyse.nbHorsBloc > 0 ? 'vigilance' : 'favorable'}
+              ton="vigilance"
+              fort
               onClick={() => basculer('horsBloc')}
               actif={kpiActif === 'horsBloc'}
               description="Diffusion avec un genre mais programmée hors de tout bloc de grille type."
@@ -149,7 +150,8 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Overrides assumés"
               valeur={analyse.nbOverridesAssumes}
               sousTexte="« programmer quand même » confirmé"
-              ton={analyse.nbOverridesAssumes > 0 ? 'info' : 'neutre'}
+              ton="info"
+              fort
               onClick={() => basculer('overrides')}
               actif={kpiActif === 'overrides'}
               description="Écarts que l'utilisateur a explicitement confirmés au moment du geste."
