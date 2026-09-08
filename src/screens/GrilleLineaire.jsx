@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType, AlignmentType } from 'docx'
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType, AlignmentType, ImageRun, BorderStyle } from 'docx'
 import html2canvas from 'html2canvas'
 import {
   ChevronLeft,
@@ -522,55 +522,115 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
     })
   }
 
+  // Gabarit Word fidèle à la grille papier réelle d'Al Aoula : A4 portrait,
+  // police Arial, un tableau par jour (ligne d'en-tête fusionnée jour + date,
+  // puis en-têtes de colonnes), 4 colonnes RTL التوقيت | البرامج | المدة |
+  // الملاحظات aux largeurs ~1391/4868/1391/1391 twips, bordures fines, titre de
+  // période arabe centré en gras, logo de la chaîne active en tête.
   async function exporterGrilleConventionnelleDocx(donnees, nomFichier) {
-    const P = (texte, opts = {}) =>
+    const POLICE = 'Arial'
+    // Ordre visuel RTL (1re cellule = à droite avec visuallyRightToLeft).
+    const LARGEURS = [1391, 4868, 1391, 1391] // heure | titre | durée | obs
+    const LARGEUR_TOTALE = LARGEURS.reduce((a, b) => a + b, 0)
+    const trait = { style: BorderStyle.SINGLE, size: 2, color: '999999' }
+    const BORDURES = {
+      top: trait,
+      bottom: trait,
+      left: trait,
+      right: trait,
+      insideHorizontal: trait,
+      insideVertical: trait,
+    }
+
+    // Logo de la chaîne active (best-effort : sans logo si le fetch échoue).
+    let logoParagraphe = null
+    try {
+      const donneesLogo = await (await fetch(chaineActive.logo)).arrayBuffer()
+      logoParagraphe = new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [new ImageRun({ type: 'png', data: donneesLogo, transformation: { width: 90, height: 90 } })],
+      })
+    } catch {
+      logoParagraphe = null
+    }
+
+    const par = (texte, { bold = false, align = AlignmentType.RIGHT, size = 20 } = {}) =>
       new Paragraph({
         bidirectional: true,
-        alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: String(texte ?? ''), ...opts })],
+        alignment: align,
+        children: [new TextRun({ text: String(texte ?? ''), bold, font: POLICE, size })],
       })
-    const cellule = (texte, gras) => new TableCell({ children: [P(texte, gras ? { bold: true } : {})] })
-    const enTete = new TableRow({
-      children: ['التوقيت', 'البرامج', 'المدة', 'الملاحظات'].map((l) => cellule(l, true)),
+
+    const cellule = (texte, { bold = false, span, largeur, align = AlignmentType.CENTER } = {}) =>
+      new TableCell({
+        columnSpan: span,
+        width: largeur ? { size: largeur, type: WidthType.DXA } : undefined,
+        children: [par(texte, { bold, align })],
+      })
+
+    const ligneEnteteColonnes = new TableRow({
+      tableHeader: true,
+      children: [
+        cellule('التوقيت', { bold: true, largeur: LARGEURS[0] }),
+        cellule('البرامج', { bold: true, largeur: LARGEURS[1] }),
+        cellule('المدة', { bold: true, largeur: LARGEURS[2] }),
+        cellule('الملاحظات', { bold: true, largeur: LARGEURS[3] }),
+      ],
     })
 
-    const children = [
-      new Paragraph({
-        text: `شبكة البرامج — ${donnees.chaineNomAr}`,
-        heading: HeadingLevel.HEADING_1,
-        bidirectional: true,
-        alignment: AlignmentType.RIGHT,
-      }),
-      P(donnees.periodeLabelAr),
-    ]
-    for (const bloc of donnees.joursBlocs) {
-      children.push(
-        new Paragraph({
-          text: bloc.libelleJourAr,
-          heading: HeadingLevel.HEADING_2,
-          bidirectional: true,
-          alignment: AlignmentType.RIGHT,
-        })
-      )
+    const children = []
+    if (logoParagraphe) children.push(logoParagraphe)
+    children.push(par(donnees.periodeLabelAr, { bold: true, align: AlignmentType.CENTER, size: 26 }))
+    children.push(new Paragraph({ text: '' }))
+
+    donnees.joursBlocs.forEach((bloc, i) => {
+      const lignes = [
+        new TableRow({ children: [cellule(bloc.libelleJourAr, { bold: true, span: 4 })] }),
+        ligneEnteteColonnes,
+      ]
       if (bloc.lignes.length === 0) {
-        children.push(P('—'))
-        continue
+        lignes.push(new TableRow({ children: [cellule('—', { span: 4 })] }))
+      } else {
+        for (const l of bloc.lignes) {
+          lignes.push(
+            new TableRow({
+              children: [
+                cellule(l.heure, { largeur: LARGEURS[0] }),
+                cellule(l.titreAr, { largeur: LARGEURS[1], align: AlignmentType.RIGHT }),
+                cellule(l.duree, { largeur: LARGEURS[2] }),
+                cellule(l.obs, { largeur: LARGEURS[3] }),
+              ],
+            })
+          )
+        }
       }
       children.push(
         new Table({
           visuallyRightToLeft: true,
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            enTete,
-            ...bloc.lignes.map(
-              (l) => new TableRow({ children: [cellule(l.heure), cellule(l.titreAr), cellule(l.duree), cellule(l.obs)] })
-            ),
-          ],
+          width: { size: LARGEUR_TOTALE, type: WidthType.DXA },
+          columnWidths: LARGEURS,
+          borders: BORDURES,
+          rows: lignes,
         })
       )
-    }
+      if (i < donnees.joursBlocs.length - 1) children.push(new Paragraph({ text: '', spacing: { after: 200 } }))
+    })
 
-    const doc = new Document({ sections: [{ children }] })
+    const doc = new Document({
+      styles: { default: { document: { run: { font: POLICE, size: 20 } } } },
+      sections: [
+        {
+          properties: {
+            page: {
+              size: { width: 11906, height: 16838 }, // A4 portrait (twips)
+              margin: { top: 720, right: 720, bottom: 720, left: 720 },
+            },
+          },
+          children,
+        },
+      ],
+    })
     const blob = await Packer.toBlob(doc)
     const url = URL.createObjectURL(blob)
     const lien = document.createElement('a')
