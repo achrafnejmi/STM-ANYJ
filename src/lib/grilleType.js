@@ -1,7 +1,7 @@
 // Helpers purs pour la grille type (M3, P13) — partagés par l'écran CRUD
 // (GrilleType.jsx), les bandes de fond du plan (GrilleLineaire.jsx) et le
 // calcul des trous d'antenne (anomalies.js).
-import { minutesDepuisDebutAntenne } from './semaine.js'
+import { minutesDepuisDebutAntenne, jourAntenneLundi0 } from './semaine.js'
 
 // `jourLundi0` : 0=lundi..6=dimanche (même convention que joursSelonJoursSemaine, P11).
 export function blocsActifsCeJour(blocs, jourLundi0) {
@@ -48,4 +48,25 @@ export function trouverBlocPourMinute(blocsActifs, minuteAntenne) {
       return minuteAntenne >= debut && minuteAntenne < fin
     }) ?? null
   )
+}
+
+// --- Écart de genre au moment du geste (P43 partie A) -----------------------
+
+// Bloc de grille type actif pour un dépôt (date ISO + heure d'horloge "HH:MM").
+export function blocGrilleTypePour(blocsGrilleType, dateISO, heureHHMM) {
+  const actifs = blocsActifsCeJour(blocsGrilleType, jourAntenneLundi0(dateISO))
+  return trouverBlocPourMinute(actifs, minutesDepuisDebutAntenne(heureHHMM))
+}
+
+// Le bloc en écart, ou null : genre absent, aucun bloc actif à cet instant, ou
+// genre conforme. Même comparaison stricte que l'anomalie « Grille type »
+// (anomalies.js) : égalité de chaîne exacte sur le libellé FR du genre.
+export function blocEnEcartDeGenre(genre, blocsGrilleType, dateISO, heureHHMM) {
+  if (!genre) return null
+  const bloc = blocGrilleTypePour(blocsGrilleType, dateISO, heureHHMM)
+  return bloc && bloc.genre_attendu !== genre ? bloc : null
+}
+
+export function messageEcartGenre(titre, genre, bloc) {
+  return `« ${titre} » est un ${genre} ; le bloc « ${bloc.nom} » de la grille type attend un ${bloc.genre_attendu}. Programmer quand même ?`
 }

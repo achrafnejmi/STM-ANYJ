@@ -46,7 +46,7 @@ import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fus
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
-import { blocsActifsCeJour } from '../lib/grilleType.js'
+import { blocsActifsCeJour, blocEnEcartDeGenre, messageEcartGenre } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
 import { chaineAutoriseeProgramme } from '../lib/exclusivite.js'
 import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
@@ -809,7 +809,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   // profondeur ici, même logique que les gardes anti-réponse-périmée déjà en
   // place ailleurs) ; les droits du titre, eux, ne peuvent être vérifiés
   // qu'ici puisqu'ils dépendent du jour visé, connu seulement au dépôt.
-  function deposerEpisode(jourAntenne, minuteDebut) {
+  async function deposerEpisode(jourAntenne, minuteDebut) {
     if (!grilleActive) return
     const payload = dragRef.current
     dragRef.current = null
@@ -833,6 +833,17 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
     }
     const heureDebut = minutesEnHeure(minuteDebut)
     const heureFin = minutesEnHeure(minuteDebut + (payload.duree ?? DUREE_PAR_DEFAUT_MIN))
+    // P43 : genre non conforme à la grille type LIVE → confirmation non bloquante.
+    const blocEcart = blocEnEcartDeGenre(programme?.genre, blocsGrilleType, jourAntenne, heureDebut)
+    if (blocEcart) {
+      const ok = await confirmer({
+        titre: 'Genre non conforme à la grille type',
+        message: messageEcartGenre(programme?.titre ?? '—', programme.genre, blocEcart),
+        labelConfirmer: 'Programmer quand même',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
     const champs = {
       programme_id: payload.programmeId,
       episode_id: payload.episodeId,
@@ -845,18 +856,21 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
       heure_fin: heureFin,
       genre: programme?.genre || null,
       titre_cache: programme?.titre ?? null,
+      ecart_grille_type_accepte: Boolean(blocEcart),
     }
-    creerDiffusionLineaire(champs)
-      .then((cree) =>
-        enregistrerAction({
-          chaineId: chaineActive.id,
-          ecran: 'GRILLE_LINEAIRE',
-          documentId: grilleActive.id,
-          libelle: `Dépôt : ${cree.titre_cache}`,
-          operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
-        }).then(() => appliquerCreation(cree))
-      )
-      .catch((err) => setErreur(err.message))
+    try {
+      const cree = await creerDiffusionLineaire(champs)
+      await enregistrerAction({
+        chaineId: chaineActive.id,
+        ecran: 'GRILLE_LINEAIRE',
+        documentId: grilleActive.id,
+        libelle: `Dépôt : ${cree.titre_cache}`,
+        operations: [{ table: 'diffusion_lineaire', type: 'INSERT', id: cree.id, apres: cree }],
+      })
+      appliquerCreation(cree)
+    } catch (err) {
+      setErreur(err.message)
+    }
   }
 
   // --- Gestion des grilles (P23) ---
@@ -966,6 +980,22 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   // dépôt manuel actuel).
   async function coller() {
     if (!grilleActive || presseGaPapier.length === 0) return
+    // P43 : lignes dont le genre ne respecte pas la grille type LIVE à leur
+    // créneau cible → une seule confirmation agrégée ; refus = abandon du lot.
+    const idsEcart = new Set(
+      presseGaPapier
+        .filter((item) => blocEnEcartDeGenre(item.genre, blocsGrilleType, item.date, item.heure_debut?.slice(0, 5)))
+        .map((item) => `${item.programme_id}|${item.date}|${item.heure_debut}`)
+    )
+    if (idsEcart.size > 0) {
+      const ok = await confirmer({
+        titre: 'Genre non conforme à la grille type',
+        message: `${idsEcart.size} programme(s) du presse-papier ne respectent pas le genre prévu par la grille type à leur créneau. Coller quand même ?`,
+        labelConfirmer: 'Coller quand même',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
     const creees = []
     for (const item of presseGaPapier) {
       const episode = episodesParId.get(item.episode_id)
@@ -976,6 +1006,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
         chaine: chaineActive.nom,
         chaine_id: chaineActive.id,
         grille_id: grilleActive.id,
+        ecart_grille_type_accepte: idsEcart.has(`${item.programme_id}|${item.date}|${item.heure_debut}`),
       })
       creees.push(cree)
     }
@@ -1536,6 +1567,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
             programmesDisponibles={programmesDeLaChaine}
             programmesParId={programmesParId}
             fenetresDroits={fenetresDroits}
+            blocsGrilleType={blocsGrilleType}
             onCree={appliquerCreation}
           />
         </Modal>
@@ -1558,6 +1590,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
           chaineActive={chaineActive}
           grilleId={grilleActive.id}
           diffusionsGrilleActive={diffusionsGrilleActive}
+          blocsGrilleType={blocsGrilleType}
           onFermer={() => changerBlocSelectionne(null)}
           onModifie={appliquerEdition}
           onSupprime={appliquerSuppression}
@@ -1921,7 +1954,8 @@ function ModaleNomGrille({ titre, valeurInitiale, labelBouton, onValider, onFerm
   )
 }
 
-function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibles, programmesParId, fenetresDroits, onCree }) {
+function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibles, programmesParId, fenetresDroits, blocsGrilleType, onCree }) {
+  const { confirmer } = useNotification()
   const [date, setDate] = useState(modale.date)
   // RG-03 : « non proposé » — les programmes hors droits À LA DATE COURANTE
   // DU FORMULAIRE (pas la date d'ouverture) sont exclus du select, recalculé
@@ -2039,10 +2073,21 @@ function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibl
       setErreur(`Dépôt refusé — ${droits.motif}`)
       return
     }
-    setEnregistrement(true)
-    setErreur(null)
     const programme = programmesParId.get(programmeId)
     const episode = episodes.find((ep) => ep.id === episodeId)
+    // P43 : genre non conforme à la grille type LIVE → confirmation non bloquante.
+    const blocEcart = blocEnEcartDeGenre(programme?.genre, blocsGrilleType, date, heureDebut)
+    if (blocEcart) {
+      const ok = await confirmer({
+        titre: 'Genre non conforme à la grille type',
+        message: messageEcartGenre(programme?.titre ?? '—', programme.genre, blocEcart),
+        labelConfirmer: 'Programmer quand même',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
+    setEnregistrement(true)
+    setErreur(null)
     const champs = {
       programme_id: programmeId,
       episode_id: episodeId,
@@ -2055,6 +2100,7 @@ function FormulaireCreneau({ modale, chaineActive, grilleId, programmesDisponibl
       heure_fin: heureFin,
       genre: programme?.genre || null,
       titre_cache: programme?.titre ?? null,
+      ecart_grille_type_accepte: Boolean(blocEcart),
     }
     try {
       const cree = await creerDiffusionLineaire(champs)

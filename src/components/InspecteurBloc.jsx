@@ -10,6 +10,7 @@ import {
 import { enregistrerAction, etatPile, annulerDerniereAction } from '../lib/undoManager.js'
 import { deprogrammerDiffusion } from '../lib/deprogrammation.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
+import { blocEnEcartDeGenre, messageEcartGenre } from '../lib/grilleType.js'
 import {
   ajouterJours,
   formaterJourCourt,
@@ -31,6 +32,7 @@ export default function InspecteurBloc({
   chaineActive,
   grilleId,
   diffusionsGrilleActive,
+  blocsGrilleType,
   onFermer,
   onModifie,
   onSupprime,
@@ -77,6 +79,7 @@ export default function InspecteurBloc({
           programme={programme}
           chaineActive={chaineActive}
           grilleId={grilleId}
+          blocsGrilleType={blocsGrilleType}
           onModifie={onModifie}
           onSupprime={onSupprime}
           onModifieChange={onModifieChange}
@@ -88,6 +91,7 @@ export default function InspecteurBloc({
           programme={programme}
           chaineActive={chaineActive}
           grilleId={grilleId}
+          blocsGrilleType={blocsGrilleType}
           onCreerPlusieurs={onCreerPlusieurs}
           onChangementsPile={onChangementsPile}
         />
@@ -107,7 +111,7 @@ export default function InspecteurBloc({
   )
 }
 
-function OngletBloc({ diffusion, programme, chaineActive, grilleId, onModifie, onSupprime, onModifieChange }) {
+function OngletBloc({ diffusion, programme, chaineActive, grilleId, blocsGrilleType, onModifie, onSupprime, onModifieChange }) {
   const [heureDebut, setHeureDebut] = useState(diffusion.heure_debut)
   const [heureFin, setHeureFin] = useState(diffusion.heure_fin)
   const [enregistrement, setEnregistrement] = useState(false)
@@ -135,10 +139,25 @@ function OngletBloc({ diffusion, programme, chaineActive, grilleId, onModifie, o
 
   async function enregistrerHoraire(e) {
     e.preventDefault()
+    // P43 : déplacer le bloc dans un créneau d'un autre genre → confirmation.
+    const blocEcart = blocEnEcartDeGenre(diffusion.genre, blocsGrilleType, diffusion.date, heureDebut?.slice(0, 5))
+    if (blocEcart) {
+      const ok = await confirmer({
+        titre: 'Genre non conforme à la grille type',
+        message: messageEcartGenre(diffusion.titre_cache ?? '—', diffusion.genre, blocEcart),
+        labelConfirmer: 'Programmer quand même',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
     setEnregistrement(true)
     setErreur(null)
     try {
-      const maj = await mettreAJourDiffusionLineaire(diffusion.id, { heure_debut: heureDebut, heure_fin: heureFin })
+      const maj = await mettreAJourDiffusionLineaire(diffusion.id, {
+        heure_debut: heureDebut,
+        heure_fin: heureFin,
+        ecart_grille_type_accepte: Boolean(blocEcart),
+      })
       await enregistrerAction({
         chaineId: chaineActive.id,
         ecran: 'GRILLE_LINEAIRE',
@@ -237,7 +256,8 @@ function OngletBloc({ diffusion, programme, chaineActive, grilleId, onModifie, o
   )
 }
 
-function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPlusieurs, onChangementsPile }) {
+function OngletRepeter({ diffusion, programme, chaineActive, grilleId, blocsGrilleType, onCreerPlusieurs, onChangementsPile }) {
+  const { confirmer } = useNotification()
   const [episodes, setEpisodes] = useState([])
   const [chargementEpisodes, setChargementEpisodes] = useState(true)
   const requeteId = useRef(0)
@@ -330,6 +350,23 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
   const dureeOriginaleMinutes = heureEnMinutes(diffusion.heure_fin) - heureEnMinutes(diffusion.heure_debut)
 
   async function appliquer() {
+    // P43 : occurrences dont le genre ne respecte pas la grille type LIVE à
+    // leur créneau (le jour de semaine varie → genre_attendu varie) → une
+    // seule confirmation agrégée ; refus = abandon du lot.
+    const datesEcart = new Set(
+      retenues
+        .filter((a) => blocEnEcartDeGenre(diffusion.genre, blocsGrilleType, a.date, heureDebut?.slice(0, 5)))
+        .map((a) => a.date)
+    )
+    if (datesEcart.size > 0) {
+      const ok = await confirmer({
+        titre: 'Genre non conforme à la grille type',
+        message: `${datesEcart.size} occurrence(s) ne respectent pas le genre prévu par la grille type à leur créneau. Répéter quand même ?`,
+        labelConfirmer: 'Répéter quand même',
+        labelAnnuler: 'Annuler',
+      })
+      if (!ok) return
+    }
     setEnregistrement(true)
     setErreur(null)
     try {
@@ -346,6 +383,7 @@ function OngletRepeter({ diffusion, programme, chaineActive, grilleId, onCreerPl
         heure_fin: heureFinCalculee,
         genre: diffusion.genre,
         titre_cache: diffusion.titre_cache,
+        ecart_grille_type_accepte: datesEcart.has(a.date),
         // P27 : préserve l'exception vecteur du bloc d'origine sur chaque
         // occurrence répétée — auparavant omis du payload, une répétition
         // d'un bloc déjà scindé TNT/Satellite perdait silencieusement
