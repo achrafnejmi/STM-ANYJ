@@ -8,11 +8,11 @@ import { peutMettreEnPad } from '../lib/roles.js'
 import Modal from './Modal.jsx'
 
 const TYPES = [
-  { valeur: 'BANDE_ANNONCE', libelle: 'Bande-annonce' },
-  { valeur: 'ECRAN_PUBLICITAIRE', libelle: 'Écran publicitaire' },
-  { valeur: 'HABILLAGE', libelle: 'Habillage' },
-  { valeur: 'AUTOPROMOTION', libelle: 'Autopromotion' },
-  { valeur: 'SPOT', libelle: 'Spot (Forja, sensibilisation, institutionnel…)' },
+  { valeur: 'BANDE_ANNONCE', libelle: 'Bande-annonce', court: 'BA' },
+  { valeur: 'ECRAN_PUBLICITAIRE', libelle: 'Écran publicitaire', court: 'Écran pub.' },
+  { valeur: 'HABILLAGE', libelle: 'Habillage', court: 'Habillage' },
+  { valeur: 'AUTOPROMOTION', libelle: 'Autopromotion', court: 'Autopromo' },
+  { valeur: 'SPOT', libelle: 'Spot (Forja, sensibilisation, institutionnel…)', court: 'Spot' },
 ]
 
 const SPOT_VIDE = { libelle: '', type: 'SPOT', duree_secondes: 30, chaine_id: '', genre: '', validite_debut: '', validite_fin: '', pad: false }
@@ -82,10 +82,10 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
   }
 
   return (
-    <Modal titre="Bibliothèque de spots" onFermer={onFermer}>
+    <Modal titre="Bibliothèque de spots" onFermer={onFermer} large>
       <div className="space-y-4">
-        <form onSubmit={creer} className="grid grid-cols-2 gap-3 rounded-md border border-slate-200 p-3">
-          <div className="col-span-2">
+        <form onSubmit={creer} className="grid grid-cols-2 gap-3 rounded-md border border-slate-200 p-4 sm:grid-cols-3">
+          <div className="col-span-full">
             <label htmlFor={idLibelle} className="mb-1 block text-xs font-medium text-slate-700">
               Libellé *
             </label>
@@ -171,7 +171,7 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-full">
             <label className="mb-1 block text-xs font-medium text-slate-700">Portée</label>
             <select
               value={form.chaine_id}
@@ -186,11 +186,11 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
               ))}
             </select>
           </div>
-          {erreur && <p className="col-span-2 text-xs text-red-600">{erreur}</p>}
+          {erreur && <p className="col-span-full text-xs text-red-600">{erreur}</p>}
           <button
             type="submit"
             disabled={enregistrement}
-            className="col-span-2 flex items-center justify-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+            className="col-span-full flex items-center justify-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
           >
             <Plus size={14} />
             {enregistrement ? 'Enregistrement…' : 'Ajouter à la bibliothèque'}
@@ -213,8 +213,8 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
           </select>
         </div>
 
-        <div className="max-h-72 overflow-y-auto">
-          <table className="w-full text-left text-sm">
+        <div className="max-h-80 overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 pr-3 font-medium">Libellé</th>
@@ -234,7 +234,7 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
                 return (
                   <tr key={s.id} className="border-b border-slate-100">
                     <td className="py-1.5 pr-3 text-slate-700">{s.libelle}</td>
-                    <td className="py-1.5 pr-3 text-slate-500">{TYPES.find((t) => t.valeur === s.type)?.libelle ?? s.type}</td>
+                    <td className="py-1.5 pr-3 text-slate-500">{TYPES.find((t) => t.valeur === s.type)?.court ?? s.type}</td>
                     <td className="py-1.5 pr-3">
                       {s.genre ? (
                         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${fond} ${texte}`}>{s.genre}</span>
