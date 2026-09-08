@@ -26,7 +26,7 @@ import BoutonExporter from '../components/BoutonExporter.jsx'
 const VECTEURS = [
   { code: 'UNIFIE', label: 'Unifié' },
   { code: 'TNT', label: 'TNT' },
-  { code: 'SATELLITE', label: 'Satellite' },
+  { code: 'SATELLITE', label: 'SAT' },
 ]
 
 const LIBELLES_TYPE = {
