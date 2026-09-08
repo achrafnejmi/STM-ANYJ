@@ -3,19 +3,36 @@ import { Clock, List as ListIcon, Search, Upload, Settings } from 'lucide-react'
 import { VerticalTimeline } from '../helpers/VerticalTimeline';
 import PlanMediaAdministration from '../helpers/PlanMediaAdministration.jsx';
 import './PlanMedia.css';
+import { useEffect } from 'react';
+
+import {
+  listerPlanMediaParChaine,
+  creerPlanMedia,
+  listerPlanMediaStockParPlanMedia,
+  listerGrillesParChaine,
+  listerGrillesTypeParChaine,
+  listerProgrammesParChaine,
+  listerTousLesEpisodes
+} from '../lib/db.js';
+
+
 
 export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = false }) {
+
+
   // Navigation principale entre Gestion Plan Média, Validation Pige et Administration Plan Média
   const [vuePrincipale, setVuePrincipale] = useState('PLAN_MEDIA');
 
   // Stock d'annonces centralisé partagé entre la liste de droite et l'administration
-  const [stockAnnonces, setStockAnnonces] = useState([
-    { id: 101, type: 'Spot', title: 'Campagne SNRT', duration: '30s', categorie: 'enfant' },
-    { id: 102, type: 'Bande-annonce', title: 'BA Soirée Cinéma', duration: '45s', categorie: 'jeune' },
-    { id: 103, type: 'Habillage', title: 'Jingle Pub', duration: '05s', categorie: 'grand' },
-    { id: 104, type: 'Autopromotion', title: 'Promo Rentrée', duration: '20s', categorie: 'budget' },
-  ]);
+  const [chargement, setChargement] = useState(false);
+  const [planMediaActif, setPlanMediaActif] = useState(null);
+  const [grilles, setGrilles] = useState([]);
+  const [grilleTypes, setGrilleTypes] = useState([]);
+  const [programmes, setProgrammes] = useState([]);
+  const [episodes, setEpisodes] = useState([]);
 
+  // Le stock d'annonces démarre vide, il sera peuplé par Supabase via plan_media_stock
+  const [stockAnnonces, setStockAnnonces] = useState([]);
   // États pour les filtres et la recherche de la timeline (colonne gauche)
   const [filtresTimeline, setFiltresTimeline] = useState(['annonce', 'programme']);
   const [rechercheTimeline, setRechercheTimeline] = useState('');
@@ -44,14 +61,157 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
   // Filtrage dynamique du stock d'annonces pour la colonne de droite
   const listeFiltree = stockAnnonces.filter((item) => {
-    const matchRecherche = rechercheListe.trim() === '' || item.title.toLowerCase().includes(rechercheListe.toLowerCase());
+    const titreItem = item.nom || item.title || '';
+    const matchRecherche = rechercheListe.trim() === '' || titreItem.toLowerCase().includes(rechercheListe.toLowerCase());
     return matchRecherche;
   }).sort((a, b) => {
-    const scoreA = a.pourcentages?.[filtreOrdre] || 0;
-    const scoreB = b.pourcentages?.[filtreOrdre] || 0;
-    return scoreB - scoreA; // Tri décroissant (du plus grand pourcentage au plus petit)
+    const scoreA = a.pourcentages?.[filtreOrdre] || a[`${filtreOrdre}percentage`] || a.grand_percentage || 0;
+    const scoreB = b.pourcentages?.[filtreOrdre] || b[`${filtreOrdre}percentage`] || b.grand_percentage || 0;
+    return scoreB - scoreA;
   });
 
+  useEffect(() => {
+    if (!chaineActive?.id) return;
+
+    let actif = true;
+    setChargement(true);
+
+    async function chargerDonnees() {
+      try {
+        // 1. Récupérer ou créer le plan_media associé à la chaîne active
+        let plans = await listerPlanMediaParChaine(chaineActive.id);
+        let planCourant = plans && plans.length > 0 ? plans[0] : null;
+
+        if (!planCourant) {
+          planCourant = await creerPlanMedia({
+            chaine_id: chaineActive.id,
+            nom: `Plan Média - ${chaineActive.nom || 'Chaîne'}`,
+            est_live: true
+          });
+        }
+
+        if (actif) {
+          setPlanMediaActif(planCourant);
+        }
+
+        // 2. Charger en parallèle le stock lié au plan média et les autres tables de référence
+        const [
+          stockDb,
+          grillesDb,
+          grillesTypesDb,
+          programmesDb,
+          episodesDb
+        ] = await Promise.all([
+          planCourant?.id ? listerPlanMediaStockParPlanMedia(planCourant.id) : Promise.resolve([]),
+          listerGrillesParChaine(chaineActive.id),
+          listerGrillesTypeParChaine(chaineActive.id),
+          listerProgrammesParChaine(chaineActive.id),
+          listerTousLesEpisodes()
+        ]);
+
+        if (actif) {
+          setStockAnnonces(stockDb || []);
+          setGrilles(grillesDb || []);
+          setGrilleTypes(grillesTypesDb || []);
+          setProgrammes(programmesDb || []);
+          setEpisodes(episodesDb || []);
+        }
+      } catch (erreur) {
+        console.error("Erreur lors du chargement des données Plan Média :", erreur);
+      } finally {
+        if (actif) setChargement(false);
+      }
+    }
+
+    chargerDonnees();
+
+    return () => {
+      actif = false;
+    };
+  }, [chaineActive?.id]);
+  // Construction dynamique des événements pour la Timeline
+  const genererEvenementsTimeline = () => {
+    let eventsGenerees = [];
+
+    // 1. Intégrer les programmes si le filtre 'programme' est actif
+    /*
+    if (programmes && programmes.length > 0 && filtresTimeline.includes('programme')) {
+      programmes.forEach((prog, index) => {
+        // Filtrer par chaine_id si la table programme possède cette colonne et que chaineActive.id est défini
+        if (chaineActive?.id && prog.chaine_id && prog.chaine_id !== chaineActive.id) {
+          return;
+        }
+
+        const titreProg = prog.titre || prog.nom || '';
+        if (rechercheTimeline.trim() === '' || titreProg.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
+          eventsGenerees.push({
+            id: prog.id || `prog-${index}`,
+            time: prog.heure_debut || '00:00',
+            name: titreProg,
+            details: {
+              type: 'Programme',
+              duree: prog.duree ? `${prog.duree} min` : '00:00:00',
+              description: prog.description || 'Programme principal'
+            }
+          });
+        }
+      });
+    }
+*/
+    // 2. Intégrer les épisodes si le filtre 'episode' est actif (avec association au programme parent)
+    if (episodes && episodes.length > 0 && filtresTimeline.includes('episode')) {
+      episodes.forEach((ep, index) => {
+        // Retrouver le programme parent de cet épisode
+        const programmeParent = programmes.find(p => p.id === ep.programme_id);
+
+        // Filtrer par chaine_id via le programme parent ou l'épisode si disponible
+        const episodeChaineId =(programmeParent ? programmeParent.chaine_id : null);
+        if (chaineActive?.id && episodeChaineId && episodeChaineId !== chaineActive.id) {
+          return;
+        }
+
+        const titreEp = ep.titre || ep.nom || `Épisode ${ep.numero || ''}`;
+        const descParent = programmeParent ? `Programme : ${programmeParent.titre || programmeParent.nom}` : '';
+
+        if (rechercheTimeline.trim() === '' || titreEp.toLowerCase().includes(rechercheTimeline.toLowerCase()) || descParent.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
+          eventsGenerees.push({
+            id: ep.id || `ep-${index}`,
+            time: ep.heure_debut || '00:00',
+            name: titreEp,
+            details: {
+              type: 'Épisode',
+              duree: ep.duree ? `${ep.duree} min` : '00:00:00',
+              description: descParent || ep.description || ''
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Intégrer le stock d'annonces si le filtre 'annonce' est actif (déjà filtré par plan_media_id lié à la chaîne)
+    if (stockAnnonces && stockAnnonces.length > 0 && filtresTimeline.includes('annonce')) {
+      stockAnnonces.forEach((annonce, index) => {
+        const titreAnnonce = annonce.nom || annonce.title || '';
+        if (rechercheTimeline.trim() === '' || titreAnnonce.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
+          eventsGenerees.push({
+            id: annonce.id || `annonce-${index}`,
+            time: annonce.date_debut ? new Date(annonce.date_debut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00',
+            name: titreAnnonce,
+            details: {
+              type: annonce.type || 'Publicité',
+              duree: `${annonce.duration || 30}s`,
+              description: annonce.client ? `Client : ${annonce.client}` : (annonce.metadonne || '')
+            }
+          });
+        }
+      });
+    }
+
+    // Tri chronologique des événements par heure
+    eventsGenerees.sort((a, b) => a.time.localeCompare(b.time));
+
+    return eventsGenerees.length > 0 ? eventsGenerees : mockEvents;
+  };
   return (
     <div className="space-y-6">
 
@@ -67,8 +227,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
               type="button"
               onClick={() => setVuePrincipale('PLAN_MEDIA')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA'
-                  ? 'bg-snrt-navy text-white'
-                  : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
             >
               Gestion Plan Média
@@ -77,8 +237,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
               type="button"
               onClick={() => setVuePrincipale('PIGE_VALIDATION')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PIGE_VALIDATION'
-                  ? 'bg-snrt-navy text-white'
-                  : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
             >
               Validation Pige
@@ -87,8 +247,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
               type="button"
               onClick={() => setVuePrincipale('PLAN_MEDIA_ADMIN')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA_ADMIN'
-                  ? 'bg-snrt-navy text-white'
-                  : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
             >
               Administration Plan Média
@@ -120,8 +280,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   type="button"
                   onClick={() => toggleFiltreTimeline(f)}
                   className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtresTimeline.includes(f)
-                      ? 'bg-snrt-navy text-white'
-                      : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    ? 'bg-snrt-navy text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   {f}
@@ -142,7 +302,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             </div>
 
             {/* Composant Timeline */}
-            <VerticalTimeline events={mockEvents} />
+            <VerticalTimeline events={genererEvenementsTimeline()} />
           </aside>
 
           {/* 2. Colonne Milieu : Formulaire */}
@@ -216,8 +376,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   type="button"
                   onClick={() => setFiltreOrdre(btn)}
                   className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
-                      ? 'bg-snrt-navy text-white'
-                      : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    ? 'bg-snrt-navy text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                 >
                   {btn}
@@ -250,10 +410,10 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-xs font-semibold text-snrt-navy">{item.type}</span>
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 group-hover:bg-white">
-                        {item.duration}
+                        {item.duration ? `${item.duration}s` : '30s'}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-slate-800">{item.title}</p>
+                    <p className="text-sm font-medium text-slate-800">{item.nom || item.title}</p>
                   </div>
                 ))
               )}
@@ -286,9 +446,12 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
       ) : (
         /* Vue Administration Plan Média connectée au stock global */
         <PlanMediaAdministration
+          planMediaId={planMediaActif?.id}
           chaineId={chaineActive?.id}
           stockAnnonces={stockAnnonces}
           setStockAnnonces={setStockAnnonces}
+          programmes={programmes}
+          episodes={episodes}
         />
       )}
 

@@ -881,3 +881,35 @@ export async function listerChaines() {
 export async function mettreAJourChaine(id, champs) {
   return verifiePremiere(await supabase.from('chaine').update(champs).eq('id', id).select())
 }
+
+
+
+// --- plan_media_stock ---
+
+export async function listerPlanMediaStockParPlanMedia(planMediaId) {
+  return verifie(
+    await supabase
+      .from('plan_media_stock')
+      .select('*')
+      .eq('plan_media_id', planMediaId)
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function creerPlanMediaStock(champs) {
+  return verifiePremiere(
+    await supabase.from('plan_media_stock').insert(champs).select()
+  )
+}
+
+export async function mettreAJourPlanMediaStock(id, champs) {
+  return verifiePremiere(
+    await supabase.from('plan_media_stock').update(champs).eq('id', id).select()
+  )
+}
+
+export async function supprimerPlanMediaStock(id) {
+  verifie(
+    await supabase.from('plan_media_stock').delete().eq('id', id).select()
+  )
+}
