@@ -5,7 +5,7 @@
 import { JOURS_LONGS, MOIS_LONGS } from './semaine.js'
 import { formaterDureeHMS } from './exportConducteur.js'
 
-export const ENTETE_CONDUCTEUR_PUB = ['Écran', 'Heure prév.', 'Contexte', 'Nb de spots', 'Durée tranche']
+export const ENTETE_CONDUCTEUR_PUB = ['Écran', 'Heure prév.', 'Contexte', 'Nb de spots', 'Durée tranche', 'Durée']
 
 // mm:ss suivi du guillemet, comme dans la référence (« 00:47" »).
 function mmss(sec) {
@@ -22,13 +22,19 @@ export function libelleDateConducteurPub(dateISO) {
 
 export function construireDonneesConducteurPub({ chaineNom, dateISO, ecrans }) {
   const lignes = [...ecrans]
-    .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
+    // Tri par heure prévisionnelle (écrans sans heure en dernier), `ordre` en départage.
+    .sort(
+      (a, b) =>
+        (a.heure_previsionnelle ?? '99:99:99').localeCompare(b.heure_previsionnelle ?? '99:99:99') ||
+        (a.ordre ?? 0) - (b.ordre ?? 0)
+    )
     .map((e) => ({
       nom: e.nom ?? '',
       heure: e.heure_previsionnelle ? e.heure_previsionnelle.slice(0, 8) : '',
       contexte: e.contexte ?? '',
       nbSpots: e.nb_spots ?? 0,
       dureeTranche: mmss(e.duree_tranche_secondes),
+      duree: mmss(e.duree_tranche_secondes),
     }))
   const totalNbSpots = ecrans.reduce((acc, e) => acc + (e.nb_spots ?? 0), 0)
   const totalDureeSec = ecrans.reduce((acc, e) => acc + (e.duree_tranche_secondes ?? 0), 0)

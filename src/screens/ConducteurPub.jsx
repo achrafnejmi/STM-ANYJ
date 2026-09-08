@@ -67,7 +67,19 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
   function recharger() {
     setChargement(true)
     listerCadrePubParChaine(chaineActive.id)
-      .then((lignes) => setEcrans(lignes.filter((l) => l.date === date).sort((a, b) => a.ordre - b.ordre)))
+      .then((lignes) =>
+        setEcrans(
+          lignes
+            .filter((l) => l.date === date)
+            // Tri par heure prévisionnelle (les écrans sans heure en dernier),
+            // `ordre` en départage.
+            .sort(
+              (a, b) =>
+                (a.heure_previsionnelle ?? '99:99:99').localeCompare(b.heure_previsionnelle ?? '99:99:99') ||
+                (a.ordre ?? 0) - (b.ordre ?? 0)
+            )
+        )
+      )
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
   }
@@ -161,10 +173,11 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
         startY: 82,
         head: [ENTETE_CONDUCTEUR_PUB],
         body: [
-          ...donnees.lignes.map((l) => [l.nom, l.heure, l.contexte, String(l.nbSpots), l.dureeTranche]),
+          ...donnees.lignes.map((l) => [l.nom, l.heure, l.contexte, String(l.nbSpots), l.dureeTranche, l.duree]),
           [
             { content: 'Total journée', colSpan: 3, styles: { fontStyle: 'bold' } },
             { content: String(donnees.totalNbSpots), styles: { fontStyle: 'bold' } },
+            { content: donnees.totalDureeLabel, styles: { fontStyle: 'bold' } },
             { content: donnees.totalDureeLabel, styles: { fontStyle: 'bold' } },
           ],
         ],
@@ -321,6 +334,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                     <th className="py-2 pr-3 font-medium">Contexte</th>
                     <th className="py-2 pr-3 font-medium">Nb spots</th>
                     <th className="py-2 pr-3 font-medium">Durée tranche</th>
+                    <th className="py-2 pr-3 font-medium">Durée</th>
                     {!lectureSeule && <th className="py-2 pr-3"></th>}
                   </tr>
                 </thead>
@@ -389,6 +403,9 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                           className="w-20 rounded-md border border-slate-300 px-1.5 py-1 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                         />
                       </td>
+                      <td className="py-1.5 pr-3 text-slate-500">
+                        {e.duree_tranche_secondes != null ? `${formatMMSS(e.duree_tranche_secondes)}"` : '—'}
+                      </td>
                       {!lectureSeule && (
                         <td className="py-1.5 pr-3">
                           <button
@@ -405,7 +422,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                   ))}
                   {ecrans.length === 0 && (
                     <tr>
-                      <td colSpan={lectureSeule ? 5 : 6} className="py-3 pl-3 text-sm text-slate-500">
+                      <td colSpan={lectureSeule ? 6 : 7} className="py-3 pl-3 text-sm text-slate-500">
                         Aucun écran pour cette date.
                       </td>
                     </tr>
@@ -419,6 +436,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                       </td>
                       <td className="py-2 pr-3 text-sm font-semibold">{totaux.nbSpots}</td>
                       <td className="py-2 pr-3 text-sm font-semibold">{formaterDureeHMS(totaux.duree)}</td>
+                      <td className="py-2 pr-3 text-sm font-semibold">{formaterDureeHMS(totaux.duree)}"</td>
                       {!lectureSeule && <td className="py-2 pr-3"></td>}
                     </tr>
                   </tfoot>
@@ -429,7 +447,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
             {!lectureSeule && (
               <button
                 type="button"
-                onClick={ajouter}
+                onClick={() => ajouter()}
                 className="mt-3 flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
               >
                 <Plus size={14} />
