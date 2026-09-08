@@ -1132,7 +1132,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
               variante="filtre"
               title="Bascule d'affichage par vecteur (RG-13) — filtre visuel uniquement"
               options={[
-                ['SATELLITE', 'Satellite'],
+                ['SATELLITE', 'SAT'],
                 ['TNT', 'TNT'],
               ]}
               value={vueVecteur}
