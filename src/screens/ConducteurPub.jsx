@@ -6,15 +6,24 @@
 // Saisie seule : aucun rapprochement automatique avec les spots réellement
 // placés (→ P39b).
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, CornerDownRight } from 'lucide-react'
 import {
   listerCadrePubParChaine,
   creerCadrePubEcran,
   mettreAJourCadrePubEcran,
   supprimerCadrePubEcran,
+  obtenirGrilleLiveParChaine,
+  listerDiffusionsLineairesParGrille,
 } from '../lib/db.js'
 import { aujourdHuiISO, ajouterJours, formaterDateLongue } from '../lib/semaine.js'
 import { formaterDureeHMS } from '../lib/exportConducteur.js'
+import {
+  construireDonneesConducteurPub,
+  ENTETE_CONDUCTEUR_PUB,
+  nomFichierConducteurPub,
+} from '../lib/exportConducteurPub.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { peutEditerCadrePub } from '../lib/roles.js'
 import { useNotification } from '../components/NotificationProvider.jsx'
@@ -41,6 +50,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
   const lectureSeule = !peutEditerCadrePub(roleUtilisateur)
   const [date, setDate] = useState(aujourdHuiISO())
   const [ecrans, setEcrans] = useState([])
+  const [diffusionsJour, setDiffusionsJour] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const { confirmer } = useNotification()
@@ -55,6 +65,16 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
 
   useEffect(() => {
     recharger()
+    // Grille LIVE du jour : contexte de saisie (Abir place les écrans « avant »
+    // les programmes de la grille). Lecture seule.
+    obtenirGrilleLiveParChaine(chaineActive.id)
+      .then((g) => (g ? listerDiffusionsLineairesParGrille(g.id) : []))
+      .then((rows) =>
+        setDiffusionsJour(
+          rows.filter((d) => d.date === date).sort((a, b) => (a.heure_debut ?? '').localeCompare(b.heure_debut ?? ''))
+        )
+      )
+      .catch(() => setDiffusionsJour([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne/date
   }, [chaineActive, date])
 
@@ -75,7 +95,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
     }
   }
 
-  async function ajouter() {
+  async function ajouter(champs = {}) {
     setErreur(null)
     try {
       await creerCadrePubEcran({
@@ -84,10 +104,55 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
         ordre: ecrans.length,
         nb_spots: 0,
         cree_par: lireUtilisateur(),
+        ...champs,
       })
       recharger()
     } catch (err) {
       setErreur(err.message)
+    }
+  }
+
+  // Depuis un programme de la grille : pré-remplit un écran « AVANT <titre> » à
+  // son heure de début.
+  function ajouterDepuisProgramme(d) {
+    ajouter({
+      nom: `Ecran ${(d.heure_debut ?? '').slice(0, 5)}`,
+      heure_previsionnelle: d.heure_debut ?? null,
+      contexte: `AVANT ${(d.titre_cache ?? '').toUpperCase()}`.trim(),
+    })
+  }
+
+  function exporterPdf() {
+    try {
+      const donnees = construireDonneesConducteurPub({ chaineNom: chaineActive.nom, dateISO: date, ecrans })
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      const W = doc.internal.pageSize.getWidth()
+      doc.setFontSize(11)
+      doc.text(`Emetteur : ${donnees.emetteur}`, W / 2, 42, { align: 'center' })
+      doc.setFontSize(13)
+      doc.text(donnees.dateLabel, W / 2, 62, { align: 'center' })
+      autoTable(doc, {
+        startY: 82,
+        head: [ENTETE_CONDUCTEUR_PUB],
+        body: [
+          ...donnees.lignes.map((l) => [l.nom, l.heure, l.contexte, String(l.nbSpots), l.dureeTranche]),
+          [
+            { content: 'Total journée', colSpan: 3, styles: { fontStyle: 'bold' } },
+            { content: String(donnees.totalNbSpots), styles: { fontStyle: 'bold' } },
+            { content: donnees.totalDureeLabel, styles: { fontStyle: 'bold' } },
+          ],
+        ],
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [30, 41, 59] },
+      })
+      const y = (doc.lastAutoTable?.finalY ?? 82) + 22
+      doc.setFontSize(8)
+      doc.setTextColor(120)
+      doc.text(`Edité le ${new Date().toLocaleString('fr-FR')} par ${lireUtilisateur()}`, 40, y)
+      doc.text('Page 1/1', W - 40, y, { align: 'right' })
+      doc.save(nomFichierConducteurPub(chaineActive.nom, date))
+    } catch (err) {
+      setErreur(`Échec de l'export : ${err.message}`)
     }
   }
 
@@ -118,7 +183,17 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                 : 'Écrans publicitaires prévus pour la journée : nb de spots et durée de tranche.'}
             </p>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={exporterPdf}
+              disabled={ecrans.length === 0}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent disabled:opacity-50"
+            >
+              <FileText size={15} />
+              Exporter (PDF)
+            </button>
+            <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setDate((d) => ajouterJours(d, -1))}
@@ -141,10 +216,43 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
             >
               Aujourd'hui
             </button>
+            </div>
           </div>
         </div>
         {erreur && <p className="mt-2 text-xs text-red-600">{erreur}</p>}
       </div>
+
+      {diffusionsJour.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="mb-2 text-sm font-semibold text-slate-900">
+            Grille du jour — {chaineActive.nom} <span className="font-normal text-slate-400">(contexte, lecture seule)</span>
+          </h2>
+          <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200">
+            <table className="w-full text-left text-sm">
+              <tbody>
+                {diffusionsJour.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-100 last:border-0">
+                    <td className="w-20 py-1.5 pl-3 pr-2 text-slate-500">{(d.heure_debut ?? '').slice(0, 5)}</td>
+                    <td className="py-1.5 pr-2 text-slate-700">{d.titre_cache ?? '—'}</td>
+                    {!lectureSeule && (
+                      <td className="w-10 py-1.5 pr-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => ajouterDepuisProgramme(d)}
+                          title={`Ajouter un écran « AVANT ${d.titre_cache ?? ''} »`}
+                          className="text-snrt-navy hover:text-snrt-navy-hover"
+                        >
+                          <CornerDownRight size={14} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         {chargement ? (
