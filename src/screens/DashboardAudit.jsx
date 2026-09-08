@@ -91,7 +91,10 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
     return { titreTableau: null, colonnes: [], lignes: [], mode: null }
   }, [kpiActif, analyse])
 
-  const tonTaux = analyse.tauxConformite >= 90 ? 'favorable' : analyse.tauxConformite >= 70 ? 'vigilance' : 'alerte'
+  // Rien à évaluer (aucune diffusion dans un bloc avec un genre) → pas un écart,
+  // la carte reste verte.
+  const rienAEvaluer = analyse.nbEvaluees === 0
+  const tonTaux = rienAEvaluer || analyse.tauxConformite >= 90 ? 'favorable' : analyse.tauxConformite >= 70 ? 'vigilance' : 'alerte'
 
   return (
     <div className="space-y-6">
@@ -115,8 +118,10 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <CarteIndicateur
               libelle="Taux de conformité"
-              valeur={`${analyse.tauxConformite} %`}
-              sousTexte={`${analyse.nbConformes} conformes / ${analyse.nbEvaluees} évaluées`}
+              valeur={rienAEvaluer ? '—' : `${analyse.tauxConformite} %`}
+              sousTexte={
+                rienAEvaluer ? 'aucune diffusion à évaluer' : `${analyse.nbConformes} conformes / ${analyse.nbEvaluees} évaluées`
+              }
               ton={tonTaux}
               onClick={() => basculer('tout')}
               actif={kpiActif === 'tout'}
