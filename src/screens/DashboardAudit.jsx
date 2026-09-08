@@ -131,7 +131,7 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Écarts de genre"
               valeur={analyse.nbEcartsGenre}
               sousTexte="genre ≠ genre attendu du bloc"
-              ton="alerte"
+              ton={analyse.nbEcartsGenre > 0 ? 'alerte' : 'favorable'}
               onClick={() => basculer('ecarts')}
               actif={kpiActif === 'ecarts'}
               description="Programmé dans un bloc de grille type, mais d'un autre genre que celui attendu."
@@ -140,7 +140,7 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Hors grille type"
               valeur={analyse.nbHorsBloc}
               sousTexte="aucun bloc à ce créneau"
-              ton="vigilance"
+              ton={analyse.nbHorsBloc > 0 ? 'vigilance' : 'favorable'}
               onClick={() => basculer('horsBloc')}
               actif={kpiActif === 'horsBloc'}
               description="Diffusion avec un genre mais programmée hors de tout bloc de grille type."
@@ -149,7 +149,7 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               libelle="Overrides assumés"
               valeur={analyse.nbOverridesAssumes}
               sousTexte="« programmer quand même » confirmé"
-              ton="info"
+              ton={analyse.nbOverridesAssumes > 0 ? 'info' : 'neutre'}
               onClick={() => basculer('overrides')}
               actif={kpiActif === 'overrides'}
               description="Écarts que l'utilisateur a explicitement confirmés au moment du geste."
