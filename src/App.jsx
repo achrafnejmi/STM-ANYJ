@@ -34,6 +34,7 @@ import GrilleType from './screens/GrilleType.jsx'
 import GrilleLineaire from './screens/GrilleLineaire.jsx'
 import AutoProgrammation from './screens/AutoProgrammation.jsx'
 import PlanMedia from './screens/PlanMedia.jsx'
+import ConducteurPub from './screens/ConducteurPub.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
 import DemandesProgrammation from './screens/DemandesProgrammation.jsx'
@@ -56,6 +57,7 @@ const ECRANS = {
   GRILLE_LINEAIRE: GrilleLineaire,
   AUTO_PROGRAMMATION: AutoProgrammation,
   PLAN_MEDIA: PlanMedia,
+  CONDUCTEUR_PUB: ConducteurPub,
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
   DEMANDES_PROGRAMMATION: DemandesProgrammation,

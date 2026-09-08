@@ -16,6 +16,7 @@ export const ROLES = [
   { code: 'CONTROLE_PAD', label: 'Contrôle PAD' },
   { code: 'MARKETING', label: 'Marketing / Digital' },
   { code: 'AUDIT', label: 'Audit' },
+  { code: 'REGIE_PUB', label: 'Régie publicitaire' },
 ]
 
 // Toutes les sections connues (les 3 dernières n'existent qu'à partir de P35b/c
@@ -42,6 +43,7 @@ const TOUTES = [
   'BIBLES_SYNOPSIS',
   'TABLEAU_BORD_REDACTION',
   'DASHBOARD',
+  'CONDUCTEUR_PUB',
 ]
 
 export const SECTIONS_PAR_ROLE = {
@@ -71,6 +73,9 @@ export const SECTIONS_PAR_ROLE = {
     'AUTO_PROGRAMMATION',
     'PLAN_MEDIA',
     'CONDUCTEUR',
+    // Suit en lecture seule le cadre publicitaire préparé par la Régie pub
+    // (Abir) pour élaborer le plan média (P39a).
+    'CONDUCTEUR_PUB',
   ],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
@@ -90,6 +95,9 @@ export const SECTIONS_PAR_ROLE = {
   // Audit (P43) : rôle en lecture seule, une seule section — le tableau de bord
   // « Respect de la grille type ».
   AUDIT: ['DASHBOARD'],
+  // Régie publicitaire (P39a — Abir) : prépare le cadre pub (Conducteur de
+  // publicité), rien d'autre.
+  REGIE_PUB: ['CONDUCTEUR_PUB'],
 }
 
 // `role` peut être null pendant le chargement async → fallback « tout » pour
@@ -208,6 +216,13 @@ export function peutGererBible(role) {
 // le Super Administrateur, qui supervise tout — la voit.
 export function notificationVisible(notif, role) {
   return notif.destinataire_role == null || notif.destinataire_role === role || role === 'SUPER_ADMIN'
+}
+
+// Édition du cadre publicitaire / conducteur de pub (P39a) : la Régie
+// publicitaire (Abir) le saisit, le Super Admin aussi. Les autres rôles qui
+// atteignent la section (Programmateur) le consultent en lecture seule.
+export function peutEditerCadrePub(role) {
+  return role === 'SUPER_ADMIN' || role === 'REGIE_PUB'
 }
 
 export function libelleRole(code) {

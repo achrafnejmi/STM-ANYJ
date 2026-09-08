@@ -19,7 +19,6 @@ import {
   Redo2,
   X,
   MoreHorizontal,
-  Megaphone,
 } from 'lucide-react'
 import {
   listerProgrammesParChaine,
@@ -68,7 +67,6 @@ import {
 import Modal from '../components/Modal.jsx'
 import PanneauReglesGeneration from '../components/PanneauReglesGeneration.jsx'
 import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
-import PanneauCadrePub from '../components/PanneauCadrePub.jsx'
 import BoutonExporter from '../components/BoutonExporter.jsx'
 import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
 import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
@@ -179,7 +177,6 @@ export default function PlanMedia({ chaineActive, roleUtilisateur }) {
   const [proposition, setProposition] = useState(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
-  const [cadrePubOuvert, setCadrePubOuvert] = useState(false)
   const [insertionOuverte, setInsertionOuverte] = useState(false)
   const [importOuvert, setImportOuvert] = useState(false)
   const [spotPreselectionne, setSpotPreselectionne] = useState(null) // P26bis : raccourci "+" bibliothèque
@@ -935,14 +932,6 @@ export default function PlanMedia({ chaineActive, roleUtilisateur }) {
                   Importer
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setCadrePubOuvert(true)}
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                <Megaphone size={15} />
-                Cadre pub
-              </button>
             </div>
           </div>
         )}
@@ -1153,14 +1142,6 @@ export default function PlanMedia({ chaineActive, roleUtilisateur }) {
           onFermer={() => setBibliothequeOuverte(false)}
           onRafraichir={chargerTout}
           onAjouterAuPlan={ouvrirInsertionDepuisBibliotheque}
-        />
-      )}
-
-      {cadrePubOuvert && (
-        <PanneauCadrePub
-          chaineActive={chaineActive}
-          date={dateReference}
-          onFermer={() => setCadrePubOuvert(false)}
         />
       )}
 
