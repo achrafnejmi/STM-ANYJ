@@ -1,7 +1,10 @@
-import { useId, useState } from 'react'
-import { Plus, CirclePlus, Trash2 } from 'lucide-react'
+import { useId, useMemo, useState } from 'react'
+import { Plus, CirclePlus, Trash2, CheckCircle2 } from 'lucide-react'
 import { creerSpotBibliotheque, mettreAJourSpotBibliotheque, supprimerSpotBibliotheque } from '../lib/db.js'
 import { CHAINES } from '../lib/chaines.js'
+import { GENRES } from '../lib/genres.js'
+import { couleurGenre } from '../lib/couleursGenre.js'
+import { peutMettreEnPad } from '../lib/roles.js'
 import Modal from './Modal.jsx'
 
 const TYPES = [
@@ -12,24 +15,29 @@ const TYPES = [
   { valeur: 'SPOT', libelle: 'Spot (Forja, sensibilisation, institutionnel…)' },
 ]
 
-const SPOT_VIDE = { libelle: '', type: 'SPOT', duree_secondes: 30, chaine_id: '' }
+const SPOT_VIDE = { libelle: '', type: 'SPOT', duree_secondes: 30, chaine_id: '', genre: '', validite_debut: '', validite_fin: '', pad: false }
 
 // Bibliothèque de spots réutilisables (P16b) — distincte des éléments déjà
-// placés (element_secondaire) : ici, des DÉFINITIONS (libellé, type, durée)
-// réutilisables à volonté depuis l'insertion manuelle. chaine_id vide dans le
-// formulaire = spot global (dispo sur toutes les chaînes).
+// placés (element_secondaire) : ici, des DÉFINITIONS (libellé, type, durée,
+// + P38 : genre, fenêtre de validité, statut PAD) réutilisables à volonté
+// depuis l'insertion manuelle. chaine_id vide = spot global (toutes chaînes).
 //
 // `onAjouterAuPlan` (P26bis, optionnel) : raccourci « + » par ligne — ne fait
-// AUCUNE écriture ici (pas de chemin parallèle à l'insertion manuelle) ; se
-// contente de signaler au parent (PlanMedia.jsx) « ouvre l'insertion manuelle
-// avec ce spot présélectionné », qui reste seule responsable de la date/
-// coupure/validation/écriture.
-export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjouterAuPlan }) {
+// AUCUNE écriture ici ; signale juste au parent d'ouvrir l'insertion manuelle
+// avec ce spot présélectionné.
+export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, onRafraichir, onAjouterAuPlan }) {
   const [form, setForm] = useState(SPOT_VIDE)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
+  const [filtreGenre, setFiltreGenre] = useState('')
   const idLibelle = useId()
   const idDuree = useId()
+  const modifiablePad = peutMettreEnPad(roleUtilisateur)
+
+  const spotsAffiches = useMemo(
+    () => (filtreGenre ? spots.filter((s) => s.genre === filtreGenre) : spots),
+    [spots, filtreGenre]
+  )
 
   async function creer(e) {
     e.preventDefault()
@@ -41,6 +49,10 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjo
         type: form.type,
         duree_secondes: Number(form.duree_secondes),
         chaine_id: form.chaine_id || null,
+        genre: form.genre || null,
+        validite_debut: form.validite_debut || null,
+        validite_fin: form.validite_fin || null,
+        pad: form.pad,
       })
       setForm(SPOT_VIDE)
       onRafraichir()
@@ -114,6 +126,51 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjo
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Genre</label>
+            <select
+              value={form.genre}
+              onChange={(e) => setForm({ ...form, genre: e.target.value })}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">— Aucun genre —</option>
+              {GENRES.map((g) => (
+                <option key={g.fr} value={g.fr}>
+                  {g.fr}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={form.pad}
+                disabled={!modifiablePad}
+                onChange={(e) => setForm({ ...form, pad: e.target.checked })}
+                className="h-4 w-4"
+              />
+              Prêt à diffuser (PAD)
+            </label>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Validité — début</label>
+            <input
+              type="date"
+              value={form.validite_debut}
+              onChange={(e) => setForm({ ...form, validite_debut: e.target.value })}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Validité — fin</label>
+            <input
+              type="date"
+              value={form.validite_fin}
+              onChange={(e) => setForm({ ...form, validite_fin: e.target.value })}
+              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
           <div className="col-span-2">
             <label className="mb-1 block text-xs font-medium text-slate-700">Portée</label>
             <select
@@ -140,24 +197,51 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjo
           </button>
         </form>
 
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-slate-500">Filtrer par genre</label>
+          <select
+            value={filtreGenre}
+            onChange={(e) => setFiltreGenre(e.target.value)}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+          >
+            <option value="">Tous les genres</option>
+            {GENRES.map((g) => (
+              <option key={g.fr} value={g.fr}>
+                {g.fr}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="max-h-72 overflow-y-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 pr-3 font-medium">Libellé</th>
                 <th className="py-2 pr-3 font-medium">Type</th>
+                <th className="py-2 pr-3 font-medium">Genre</th>
                 <th className="py-2 pr-3 font-medium">Durée</th>
+                <th className="py-2 pr-3 font-medium">Validité</th>
+                <th className="py-2 pr-3 font-medium">PAD</th>
                 <th className="py-2 pr-3 font-medium">Portée</th>
                 <th className="py-2 pr-3"></th>
               </tr>
             </thead>
             <tbody>
-              {spots.map((s) => {
+              {spotsAffiches.map((s) => {
                 const chaine = CHAINES.find((c) => c.id === s.chaine_id)
+                const { fond, texte } = s.genre ? couleurGenre(s.genre) : {}
                 return (
                   <tr key={s.id} className="border-b border-slate-100">
                     <td className="py-1.5 pr-3 text-slate-700">{s.libelle}</td>
                     <td className="py-1.5 pr-3 text-slate-500">{TYPES.find((t) => t.valeur === s.type)?.libelle ?? s.type}</td>
+                    <td className="py-1.5 pr-3">
+                      {s.genre ? (
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${fond} ${texte}`}>{s.genre}</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="py-1.5 pr-3">
                       <input
                         type="number"
@@ -169,6 +253,24 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjo
                         }}
                         className="w-16 rounded-md border border-slate-300 px-1.5 py-1 text-sm"
                       />
+                    </td>
+                    <td className="py-1.5 pr-3 text-xs text-slate-500">
+                      {s.validite_debut || s.validite_fin ? `${s.validite_debut ?? '…'} → ${s.validite_fin ?? '…'}` : '—'}
+                    </td>
+                    <td className="py-1.5 pr-3">
+                      {modifiablePad ? (
+                        <input
+                          type="checkbox"
+                          checked={s.pad ?? false}
+                          onChange={(e) => modifier(s.id, { pad: e.target.checked })}
+                          className="h-4 w-4"
+                          title="Marquer prêt à diffuser (PAD)"
+                        />
+                      ) : s.pad ? (
+                        <CheckCircle2 size={16} className="text-snrt-success" />
+                      ) : (
+                        <span className="text-xs text-slate-400">Non PAD</span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-3 text-slate-500">{chaine ? chaine.nom : 'Global'}</td>
                     <td className="py-1.5 pr-3">
@@ -191,10 +293,10 @@ export default function BibliothequeSpots({ spots, onFermer, onRafraichir, onAjo
                   </tr>
                 )
               })}
-              {spots.length === 0 && (
+              {spotsAffiches.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-3 text-sm text-slate-500">
-                    Aucun spot dans la bibliothèque.
+                  <td colSpan={8} className="py-3 text-sm text-slate-500">
+                    Aucun spot {filtreGenre ? `de genre « ${filtreGenre} »` : 'dans la bibliothèque'}.
                   </td>
                 </tr>
               )}

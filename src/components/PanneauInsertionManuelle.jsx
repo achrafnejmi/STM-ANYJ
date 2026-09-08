@@ -9,6 +9,8 @@ import {
   DUREE_BANDE_ANNONCE_SECONDES,
 } from '../lib/planMedia.js'
 import { formaterDateLongue, minutesEnHeure } from '../lib/semaine.js'
+import { spotDisponible, campagneActiveA } from '../lib/spots.js'
+import { GENRES } from '../lib/genres.js'
 import Modal from './Modal.jsx'
 
 // Valeur sentinelle du sélecteur « Coupure » pour une insertion NON ancrée à
@@ -59,6 +61,7 @@ export default function PanneauInsertionManuelle({
   const [coupureId, setCoupureId] = useState(coupureIdInitiale ?? '')
   const [sourceType, setSourceType] = useState('SPOT')
   const [spotId, setSpotId] = useState(spotIdInitial ?? '')
+  const [filtreGenreSpot, setFiltreGenreSpot] = useState('')
   const [campagneId, setCampagneId] = useState('')
   const [heureDebutSaisie, setHeureDebutSaisie] = useState('')
   const [enregistrement, setEnregistrement] = useState(false)
@@ -115,7 +118,22 @@ export default function PanneauInsertionManuelle({
 
   const heureDebutSecondes = heureDebutSaisie ? heureHMSEnSecondes(heureDebutSaisie) : null
   const pretAValider = Boolean(intervalleSelectionne && duree && heureDebutSecondes != null)
-  const valide = pretAValider && estPlacementValide(heureDebutSecondes, duree, intervalleSelectionne, elementsDansCoupure)
+  // P38a — garde-fou dur : un spot hors fenêtre de validité ou non PAD (resp. une
+  // bande-annonce hors période de campagne) ne peut pas être inséré.
+  const dispo =
+    sourceType === 'SPOT'
+      ? spot
+        ? spotDisponible(spot, dateChoisie)
+        : { ok: true, motif: null }
+      : campagne
+        ? campagneActiveA(campagne, dateChoisie)
+        : { ok: true, motif: null }
+  const valide =
+    pretAValider &&
+    dispo.ok &&
+    estPlacementValide(heureDebutSecondes, duree, intervalleSelectionne, elementsDansCoupure)
+
+  const spotsFiltres = filtreGenreSpot ? spots.filter((s) => s.genre === filtreGenreSpot) : spots
 
   function libelleCoupure(iv) {
     const diffusion = diffusionsParId.get(iv.apresTransmissionId)
@@ -257,18 +275,32 @@ export default function PanneauInsertionManuelle({
             </div>
 
             {sourceType === 'SPOT' ? (
-              <select
-                value={spotId}
-                onChange={(e) => setSpotId(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">— Choisir un spot —</option>
-                {spots.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.libelle} ({s.duree_secondes}s)
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5">
+                <select
+                  value={filtreGenreSpot}
+                  onChange={(e) => setFiltreGenreSpot(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+                >
+                  <option value="">Tous les genres</option>
+                  {GENRES.map((g) => (
+                    <option key={g.fr} value={g.fr}>
+                      {g.fr}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={spotId}
+                  onChange={(e) => setSpotId(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">— Choisir un spot —</option>
+                  {spotsFiltres.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.libelle} ({s.duree_secondes}s){s.pad ? '' : ' — non PAD'}
+                    </option>
+                  ))}
+                </select>
+              </div>
             ) : (
               <select
                 value={campagneId}
@@ -284,6 +316,10 @@ export default function PanneauInsertionManuelle({
               </select>
             )}
 
+            {!dispo.ok && dispo.motif && (
+              <p className="text-xs text-amber-600">Insertion refusée — {dispo.motif}</p>
+            )}
+
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-700">Heure de début (précision seconde)</label>
               <input
@@ -293,7 +329,9 @@ export default function PanneauInsertionManuelle({
                 onChange={(e) => setHeureDebutSaisie(e.target.value)}
                 className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
               />
-              {pretAValider && !valide && <p className="mt-1 text-xs text-red-600">Chevauchement ou hors des bornes de la coupure.</p>}
+              {pretAValider && dispo.ok && !valide && (
+                <p className="mt-1 text-xs text-red-600">Chevauchement ou hors des bornes de la coupure.</p>
+              )}
             </div>
 
             {erreur && <p className="text-xs text-red-600">{erreur}</p>}

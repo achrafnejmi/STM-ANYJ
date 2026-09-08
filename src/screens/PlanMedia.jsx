@@ -56,6 +56,7 @@ import {
   estPlacementValide,
   heureHMSEnSecondes,
 } from '../lib/planMedia.js'
+import { spotDisponible } from '../lib/spots.js'
 import {
   construireLignesPlanMedia,
   construireLignesTextePlanMedia,
@@ -143,7 +144,7 @@ function grouperSectionsPlanMedia(dates, diffusions, elements, programmesParId) 
   return dates.map((date) => [date, parJour.get(date)]).filter(([, sections]) => sections.length > 0)
 }
 
-export default function PlanMedia({ chaineActive }) {
+export default function PlanMedia({ chaineActive, roleUtilisateur }) {
   // Le Plan média se compose JOUR par JOUR (socle : une grille linéaire d'une
   // journée ⇒ un plan média de cette journée). Pas de vue semaine.
   const vue = 'JOUR'
@@ -614,6 +615,13 @@ export default function PlanMedia({ chaineActive }) {
       )
       const heureDebutSecondes = heureHMSEnSecondes(item.heure_debut)
       if (!estPlacementValide(heureDebutSecondes, item.duree_secondes, intervalle, elementsCoupureCible)) continue
+      // P38a — spot de bibliothèque hors validité / non PAD à la date cible : sauté.
+      if (item.campagne_id == null) {
+        const spot = spots.find(
+          (s) => s.libelle === item.libelle && s.type === item.type && s.duree_secondes === item.duree_secondes
+        )
+        if (spot && !spotDisponible(spot, item.date).ok) continue
+      }
       const cree = await creerElementSecondaire({ ...item, chaine_id: chaineActive.id, plan_media_id: planMediaActif.id })
       creees.push(cree)
     }
@@ -631,7 +639,8 @@ export default function PlanMedia({ chaineActive }) {
     setElementsSecondaires((prev) => [...prev, ...creees])
     const refuses = presseGaPapier.length - creees.length
     setPresseGaPapier([])
-    if (refuses > 0) setErreur(`${refuses} élément(s) refusé(s) (conflit d'horaire) sur ${creees.length + refuses}.`)
+    if (refuses > 0)
+      setErreur(`${refuses} élément(s) refusé(s) (conflit d'horaire ou spot hors validité/PAD) sur ${creees.length + refuses}.`)
   }
 
   // Export Plan média (P16b) — remplace le fichier PM réel : feuille "PM",
@@ -1128,6 +1137,7 @@ export default function PlanMedia({ chaineActive }) {
       {bibliothequeOuverte && (
         <BibliothequeSpots
           spots={spots}
+          roleUtilisateur={roleUtilisateur}
           onFermer={() => setBibliothequeOuverte(false)}
           onRafraichir={chargerTout}
           onAjouterAuPlan={ouvrirInsertionDepuisBibliotheque}
