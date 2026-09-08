@@ -3,7 +3,7 @@ import { Home, Tv2, FileSignature, BookText, FileText, Layers3, CalendarDays, Li
 
 export const SECTIONS = [
   { id: 'ACCUEIL', label: 'Accueil', icone: Home },
-  { id: 'DASHBOARD', label: 'Dashboard', icone: ShieldCheck },
+  { id: 'DASHBOARD', label: 'Respect de la grille type', icone: ShieldCheck },
   { id: 'PROGRAMMES', label: 'Programmes', icone: Tv2 },
   { id: 'CONTRATS', label: 'Contrats & droits', icone: FileSignature },
   { id: 'BIBLE', label: 'Bible', icone: BookText },
