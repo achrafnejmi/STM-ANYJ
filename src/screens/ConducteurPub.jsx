@@ -17,7 +17,14 @@ import {
   obtenirGrilleLiveParChaine,
   listerDiffusionsLineairesParGrille,
 } from '../lib/db.js'
-import { aujourdHuiISO, ajouterJours, formaterDateLongue } from '../lib/semaine.js'
+import {
+  aujourdHuiISO,
+  ajouterJours,
+  formaterDateLongue,
+  lundiDeLaSemaine,
+  joursDeLaSemaine,
+  formaterJourCourt,
+} from '../lib/semaine.js'
 import { formaterDureeHMS } from '../lib/exportConducteur.js'
 import {
   construireDonneesConducteurPub,
@@ -50,7 +57,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
   const lectureSeule = !peutEditerCadrePub(roleUtilisateur)
   const [date, setDate] = useState(aujourdHuiISO())
   const [ecrans, setEcrans] = useState([])
-  const [diffusionsJour, setDiffusionsJour] = useState([])
+  const [diffusionsSemaine, setDiffusionsSemaine] = useState([])
   const [grilleLiveExiste, setGrilleLiveExiste] = useState(true)
   const [chargementGrille, setChargementGrille] = useState(true)
   const [chargement, setChargement] = useState(true)
@@ -67,23 +74,32 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
 
   useEffect(() => {
     recharger()
-    // Grille LIVE du jour : contexte de saisie (Abir place les écrans « avant »
-    // les programmes de la grille). Lecture seule.
+    // Grille LIVE de la SEMAINE (lundi→dimanche de la date courante) : contexte
+    // de saisie — Abir place les écrans « avant » les programmes de la grille
+    // hebdo. Lecture seule.
     setChargementGrille(true)
+    const jours = joursDeLaSemaine(lundiDeLaSemaine(date))
     obtenirGrilleLiveParChaine(chaineActive.id)
       .then((g) => {
         setGrilleLiveExiste(Boolean(g))
         return g ? listerDiffusionsLineairesParGrille(g.id) : []
       })
       .then((rows) =>
-        setDiffusionsJour(
-          rows.filter((d) => d.date === date).sort((a, b) => (a.heure_debut ?? '').localeCompare(b.heure_debut ?? ''))
+        setDiffusionsSemaine(
+          rows
+            .filter((d) => jours.includes(d.date))
+            .sort((a, b) => a.date.localeCompare(b.date) || (a.heure_debut ?? '').localeCompare(b.heure_debut ?? ''))
         )
       )
-      .catch(() => setDiffusionsJour([]))
+      .catch(() => setDiffusionsSemaine([]))
       .finally(() => setChargementGrille(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne/date
   }, [chaineActive, date])
+
+  const semaineParJour = useMemo(() => {
+    const jours = joursDeLaSemaine(lundiDeLaSemaine(date))
+    return jours.map((j) => ({ jour: j, diffusions: diffusionsSemaine.filter((d) => d.date === j) }))
+  }, [diffusionsSemaine, date])
 
   const totaux = useMemo(
     () => ({
@@ -119,10 +135,13 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
     }
   }
 
-  // Depuis un programme de la grille : pré-remplit un écran « AVANT <titre> » à
-  // son heure de début.
+  // Depuis un programme de la grille hebdo : pré-remplit un écran « AVANT
+  // <titre> » à son heure de début, pour le JOUR de ce programme (la date du
+  // cadre suit).
   function ajouterDepuisProgramme(d) {
+    if (d.date !== date) setDate(d.date)
     ajouter({
+      date: d.date,
       nom: `Ecran ${(d.heure_debut ?? '').slice(0, 5)}`,
       heure_previsionnelle: d.heure_debut ?? null,
       contexte: `AVANT ${(d.titre_cache ?? '').toUpperCase()}`.trim(),
@@ -231,7 +250,7 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-900">
-          Grille du jour — {chaineActive.nom}{' '}
+          Grille de la semaine — {chaineActive.nom}{' '}
           <span className="font-normal text-slate-400">
             (grille linéaire LIVE — contexte de saisie, lecture seule)
           </span>
@@ -240,33 +259,50 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
           <p className="text-sm text-slate-500">Chargement de la grille…</p>
         ) : !grilleLiveExiste ? (
           <p className="text-sm text-slate-500">Aucune grille linéaire LIVE définie pour cette chaîne.</p>
-        ) : diffusionsJour.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucune diffusion programmée le {formaterDateLongue(date)} sur la grille LIVE.</p>
+        ) : diffusionsSemaine.length === 0 ? (
+          <p className="text-sm text-slate-500">Aucune diffusion sur la grille LIVE cette semaine.</p>
         ) : (
-          <div className="max-h-72 overflow-y-auto rounded-md border border-slate-200">
-            <table className="w-full text-left text-sm">
-              <tbody>
-                {diffusionsJour.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-100 last:border-0">
-                    <td className="w-20 py-1.5 pl-3 pr-2 text-slate-500">{(d.heure_debut ?? '').slice(0, 5)}</td>
-                    <td className="py-1.5 pr-2 text-slate-700">{d.titre_cache ?? '—'}</td>
-                    {!lectureSeule && (
-                      <td className="w-24 py-1.5 pr-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => ajouterDepuisProgramme(d)}
-                          title={`Ajouter un écran « AVANT ${d.titre_cache ?? ''} »`}
-                          className="inline-flex items-center gap-1 text-xs text-snrt-navy hover:text-snrt-navy-hover"
-                        >
-                          <CornerDownRight size={13} />
-                          Écran
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {semaineParJour.map(({ jour, diffusions }) => (
+              <div
+                key={jour}
+                className={`rounded-md border p-2 ${jour === date ? 'border-snrt-navy/40 bg-snrt-navy/5' : 'border-slate-200'}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setDate(jour)}
+                  className="mb-1 block text-xs font-semibold text-slate-700 hover:text-snrt-navy"
+                  title="Ouvrir cette date dans le cadre"
+                >
+                  {formaterJourCourt(jour)}
+                  {jour === date && ' •'}
+                </button>
+                {diffusions.length === 0 ? (
+                  <p className="text-[11px] text-slate-400">—</p>
+                ) : (
+                  <ul className="max-h-40 space-y-0.5 overflow-y-auto text-[11px]">
+                    {diffusions.map((d) => (
+                      <li key={d.id} className="flex items-start gap-1.5">
+                        <span className="w-9 shrink-0 text-slate-400">{(d.heure_debut ?? '').slice(0, 5)}</span>
+                        <span className="min-w-0 flex-1 truncate text-slate-700" title={d.titre_cache ?? ''}>
+                          {d.titre_cache ?? '—'}
+                        </span>
+                        {!lectureSeule && (
+                          <button
+                            type="button"
+                            onClick={() => ajouterDepuisProgramme(d)}
+                            title={`Ajouter un écran « AVANT ${d.titre_cache ?? ''} » le ${formaterJourCourt(d.date)}`}
+                            className="shrink-0 text-snrt-navy hover:text-snrt-navy-hover"
+                          >
+                            <CornerDownRight size={12} />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
