@@ -51,6 +51,8 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
   const [date, setDate] = useState(aujourdHuiISO())
   const [ecrans, setEcrans] = useState([])
   const [diffusionsJour, setDiffusionsJour] = useState([])
+  const [grilleLiveExiste, setGrilleLiveExiste] = useState(true)
+  const [chargementGrille, setChargementGrille] = useState(true)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const { confirmer } = useNotification()
@@ -67,14 +69,19 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
     recharger()
     // Grille LIVE du jour : contexte de saisie (Abir place les écrans « avant »
     // les programmes de la grille). Lecture seule.
+    setChargementGrille(true)
     obtenirGrilleLiveParChaine(chaineActive.id)
-      .then((g) => (g ? listerDiffusionsLineairesParGrille(g.id) : []))
+      .then((g) => {
+        setGrilleLiveExiste(Boolean(g))
+        return g ? listerDiffusionsLineairesParGrille(g.id) : []
+      })
       .then((rows) =>
         setDiffusionsJour(
           rows.filter((d) => d.date === date).sort((a, b) => (a.heure_debut ?? '').localeCompare(b.heure_debut ?? ''))
         )
       )
       .catch(() => setDiffusionsJour([]))
+      .finally(() => setChargementGrille(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne/date
   }, [chaineActive, date])
 
@@ -222,12 +229,21 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
         {erreur && <p className="mt-2 text-xs text-red-600">{erreur}</p>}
       </div>
 
-      {diffusionsJour.length > 0 && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-slate-900">
-            Grille du jour — {chaineActive.nom} <span className="font-normal text-slate-400">(contexte, lecture seule)</span>
-          </h2>
-          <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200">
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-900">
+          Grille du jour — {chaineActive.nom}{' '}
+          <span className="font-normal text-slate-400">
+            (grille linéaire LIVE — contexte de saisie, lecture seule)
+          </span>
+        </h2>
+        {chargementGrille ? (
+          <p className="text-sm text-slate-500">Chargement de la grille…</p>
+        ) : !grilleLiveExiste ? (
+          <p className="text-sm text-slate-500">Aucune grille linéaire LIVE définie pour cette chaîne.</p>
+        ) : diffusionsJour.length === 0 ? (
+          <p className="text-sm text-slate-500">Aucune diffusion programmée le {formaterDateLongue(date)} sur la grille LIVE.</p>
+        ) : (
+          <div className="max-h-72 overflow-y-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-sm">
               <tbody>
                 {diffusionsJour.map((d) => (
@@ -235,14 +251,15 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
                     <td className="w-20 py-1.5 pl-3 pr-2 text-slate-500">{(d.heure_debut ?? '').slice(0, 5)}</td>
                     <td className="py-1.5 pr-2 text-slate-700">{d.titre_cache ?? '—'}</td>
                     {!lectureSeule && (
-                      <td className="w-10 py-1.5 pr-3 text-right">
+                      <td className="w-24 py-1.5 pr-3 text-right">
                         <button
                           type="button"
                           onClick={() => ajouterDepuisProgramme(d)}
                           title={`Ajouter un écran « AVANT ${d.titre_cache ?? ''} »`}
-                          className="text-snrt-navy hover:text-snrt-navy-hover"
+                          className="inline-flex items-center gap-1 text-xs text-snrt-navy hover:text-snrt-navy-hover"
                         >
-                          <CornerDownRight size={14} />
+                          <CornerDownRight size={13} />
+                          Écran
                         </button>
                       </td>
                     )}
@@ -251,8 +268,8 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         {chargement ? (
