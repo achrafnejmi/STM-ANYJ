@@ -1138,6 +1138,7 @@ export default function PlanMedia({ chaineActive, roleUtilisateur }) {
         <BibliothequeSpots
           spots={spots}
           roleUtilisateur={roleUtilisateur}
+          chaineActive={chaineActive}
           onFermer={() => setBibliothequeOuverte(false)}
           onRafraichir={chargerTout}
           onAjouterAuPlan={ouvrirInsertionDepuisBibliotheque}

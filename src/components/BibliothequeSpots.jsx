@@ -1,10 +1,19 @@
-import { useId, useMemo, useState } from 'react'
-import { Plus, CirclePlus, Trash2, CheckCircle2 } from 'lucide-react'
-import { creerSpotBibliotheque, mettreAJourSpotBibliotheque, supprimerSpotBibliotheque } from '../lib/db.js'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { Plus, CirclePlus, Trash2, CheckCircle2, BadgeCheck } from 'lucide-react'
+import {
+  creerSpotBibliotheque,
+  mettreAJourSpotBibliotheque,
+  supprimerSpotBibliotheque,
+  listerDemandesPadParChaine,
+  creerDemandePad,
+  creerNotifications,
+} from '../lib/db.js'
 import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
-import { peutMettreEnPad } from '../lib/roles.js'
+import { peutMettreEnPad, peutDemanderPad } from '../lib/roles.js'
+import { lireUtilisateur } from '../lib/session.js'
+import { messageDemandePadSpot } from '../lib/notifications.js'
 import Modal from './Modal.jsx'
 
 const TYPES = [
@@ -25,19 +34,71 @@ const SPOT_VIDE = { libelle: '', type: 'SPOT', duree_secondes: 30, chaine_id: ''
 // `onAjouterAuPlan` (P26bis, optionnel) : raccourci « + » par ligne — ne fait
 // AUCUNE écriture ici ; signale juste au parent d'ouvrir l'insertion manuelle
 // avec ce spot présélectionné.
-export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, onRafraichir, onAjouterAuPlan }) {
+export default function BibliothequeSpots({ spots, roleUtilisateur, chaineActive, onFermer, onRafraichir, onAjouterAuPlan }) {
   const [form, setForm] = useState(SPOT_VIDE)
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
   const [filtreGenre, setFiltreGenre] = useState('')
+  const [demandesPad, setDemandesPad] = useState([])
+  const [envoiPad, setEnvoiPad] = useState(null)
   const idLibelle = useId()
   const idDuree = useId()
   const modifiablePad = peutMettreEnPad(roleUtilisateur)
+  const demandeurPad = peutDemanderPad(roleUtilisateur)
+
+  useEffect(() => {
+    if (!chaineActive) return
+    listerDemandesPadParChaine(chaineActive.id).then(setDemandesPad).catch(() => {})
+  }, [chaineActive])
+
+  const demandeEnAttenteParSpot = useMemo(
+    () =>
+      new Map(
+        demandesPad
+          .filter((d) => d.spot_bibliotheque_id && d.statut === 'EN_ATTENTE')
+          .map((d) => [d.spot_bibliotheque_id, d])
+      ),
+    [demandesPad]
+  )
 
   const spotsAffiches = useMemo(
     () => (filtreGenre ? spots.filter((s) => s.genre === filtreGenre) : spots),
     [spots, filtreGenre]
   )
+
+  async function demanderPadSpot(spot) {
+    if (!chaineActive) return
+    const motif = window.prompt('Motif de la demande de validation PAD (optionnel) :', '')
+    if (motif === null) return
+    setEnvoiPad(spot.id)
+    setErreur(null)
+    try {
+      await creerDemandePad({
+        chaine_id: chaineActive.id,
+        spot_bibliotheque_id: spot.id,
+        programme_id: null,
+        episode_id: null,
+        demandeur: lireUtilisateur(),
+        motif: motif.trim() || null,
+      })
+      await creerNotifications(
+        ['CONTROLE_PAD', 'GESTION_DROITS_STOCK'].map((destinataire_role) => ({
+          chaine_id: chaineActive.id,
+          type: 'DEMANDE_PAD',
+          destinataire_role,
+          programme_id: null,
+          message: messageDemandePadSpot(spot.libelle),
+          lu: false,
+        }))
+      )
+      const lignes = await listerDemandesPadParChaine(chaineActive.id)
+      setDemandesPad(lignes)
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnvoiPad(null)
+    }
+  }
 
   async function creer(e) {
     e.preventDefault()
@@ -258,16 +319,38 @@ export default function BibliothequeSpots({ spots, roleUtilisateur, onFermer, on
                       {s.validite_debut || s.validite_fin ? `${s.validite_debut ?? '…'} → ${s.validite_fin ?? '…'}` : '—'}
                     </td>
                     <td className="py-1.5 pr-3">
-                      {modifiablePad ? (
+                      {s.pad ? (
+                        modifiablePad ? (
+                          <input
+                            type="checkbox"
+                            checked
+                            onChange={(e) => modifier(s.id, { pad: e.target.checked })}
+                            className="h-4 w-4"
+                            title="Marquer prêt à diffuser (PAD)"
+                          />
+                        ) : (
+                          <CheckCircle2 size={16} className="text-snrt-success" />
+                        )
+                      ) : modifiablePad ? (
                         <input
                           type="checkbox"
-                          checked={s.pad ?? false}
+                          checked={false}
                           onChange={(e) => modifier(s.id, { pad: e.target.checked })}
                           className="h-4 w-4"
                           title="Marquer prêt à diffuser (PAD)"
                         />
-                      ) : s.pad ? (
-                        <CheckCircle2 size={16} className="text-snrt-success" />
+                      ) : demandeEnAttenteParSpot.has(s.id) ? (
+                        <span className="text-xs text-amber-600">Demande PAD en attente</span>
+                      ) : demandeurPad && chaineActive ? (
+                        <button
+                          type="button"
+                          onClick={() => demanderPadSpot(s)}
+                          disabled={envoiPad === s.id}
+                          className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          <BadgeCheck size={13} />
+                          {envoiPad === s.id ? 'Envoi…' : 'Demander PAD'}
+                        </button>
                       ) : (
                         <span className="text-xs text-slate-400">Non PAD</span>
                       )}

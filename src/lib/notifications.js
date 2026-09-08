@@ -46,6 +46,19 @@ export function messageDecisionPad(titreProgramme, numeroEp, statut) {
   return `${etiquetteEpisode(titreProgramme, numeroEp)} : validation PAD ${statut === 'ACCEPTEE' ? 'acceptée' : 'refusée'}`
 }
 
+// Variantes pour un spot de bibliothèque (P38b) — même circuit Contrôle PAD.
+export function messageDemandePadSpot(libelleSpot) {
+  return `Spot « ${libelleSpot} » : demande de validation PAD`
+}
+
+export function messageRelancePadSpot(libelleSpot, nbRelances) {
+  return `Spot « ${libelleSpot} » : relance n°${nbRelances} pour la validation PAD`
+}
+
+export function messageDecisionPadSpot(libelleSpot, statut) {
+  return `Spot « ${libelleSpot} » : validation PAD ${statut === 'ACCEPTEE' ? 'acceptée' : 'refusée'}`
+}
+
 // Circuit « demande de programmation » d'un titre exclusif (P37), routé par rôle :
 // A_TRANSMETTRE → Admin de la chaîne demandeuse ; SOUMISE → Admin de la chaîne
 // détentrice ; DECISION → Admin demandeur (ou Programmateur si rejet interne).

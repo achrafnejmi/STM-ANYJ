@@ -4,13 +4,14 @@ import {
   listerDemandesPadParChaine,
   listerProgrammesParChaine,
   listerTousLesEpisodes,
+  listerSpotsBibliotheque,
   creerDemandePad,
   mettreAJourDemandePad,
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
 import { useNotification } from '../components/NotificationProvider.jsx'
-import { messageDemandePad, messageRelancePad } from '../lib/notifications.js'
+import { messageDemandePad, messageRelancePad, messageRelancePadSpot } from '../lib/notifications.js'
 
 // `cree_le` / `derniere_relance_le` sont des timestamptz — formatage court local.
 function formaterHorodatage(iso) {
@@ -32,6 +33,7 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
   const [demandes, setDemandes] = useState([])
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
+  const [spots, setSpots] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [enCours, setEnCours] = useState(null)
@@ -44,11 +46,13 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
       listerDemandesPadParChaine(chaineActive.id),
       listerProgrammesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
+      listerSpotsBibliotheque(chaineActive.id),
     ])
-      .then(([d, p, e]) => {
+      .then(([d, p, e, sp]) => {
         setDemandes(d)
         setProgrammes(p)
         setEpisodes(e)
+        setSpots(sp)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -60,6 +64,7 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
 
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
   const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
+  const spotsParId = useMemo(() => new Map(spots.map((s) => [s.id, s])), [spots])
 
   const enCoursListe = useMemo(() => demandes.filter((d) => d.statut === 'EN_ATTENTE'), [demandes])
   const historique = useMemo(() => demandes.filter((d) => d.statut !== 'EN_ATTENTE'), [demandes])
@@ -75,6 +80,12 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
     const ep = episodesParId.get(episodeId)
     return `${titre}${ep?.numero != null ? ` — ÉP. ${ep.numero}` : ''}${ep?.titre ? ` : ${ep.titre}` : ''}`
   }
+
+  // P38b — libellé d'une demande, épisode ou spot de bibliothèque.
+  const libelleCible = (d) =>
+    d.spot_bibliotheque_id
+      ? `Spot « ${spotsParId.get(d.spot_bibliotheque_id)?.libelle ?? 'inconnu'} »`
+      : libelle(d.programme_id, d.episode_id)
 
   function anciennete(iso) {
     const j = joursDepuis(iso)
@@ -129,14 +140,16 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
     try {
       const nb = (d.relances ?? 0) + 1
       await mettreAJourDemandePad(d.id, { relances: nb, derniere_relance_le: new Date().toISOString() })
-      const ep = episodesParId.get(d.episode_id)
+      const message = d.spot_bibliotheque_id
+        ? messageRelancePadSpot(spotsParId.get(d.spot_bibliotheque_id)?.libelle ?? 'Spot', nb)
+        : messageRelancePad(programmesParId.get(d.programme_id)?.titre ?? 'Programme', episodesParId.get(d.episode_id)?.numero, nb)
       await creerNotifications([
         {
           chaine_id: chaineActive.id,
           type: 'RELANCE_PAD',
           destinataire_role: 'CONTROLE_PAD',
-          programme_id: d.programme_id,
-          message: messageRelancePad(programmesParId.get(d.programme_id)?.titre ?? 'Programme', ep?.numero, nb),
+          programme_id: d.programme_id ?? null,
+          message,
           lu: false,
         },
       ])
@@ -234,13 +247,17 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
               return (
                 <li key={d.id} className="flex items-start justify-between gap-4 py-3">
                   <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => ouvrirEpisode(d)}
-                      className="text-left text-sm font-medium text-snrt-navy hover:underline"
-                    >
-                      {libelle(d.programme_id, d.episode_id)}
-                    </button>
+                    {d.spot_bibliotheque_id ? (
+                      <p className="text-sm font-medium text-slate-800">{libelleCible(d)}</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => ouvrirEpisode(d)}
+                        className="text-left text-sm font-medium text-snrt-navy hover:underline"
+                      >
+                        {libelleCible(d)}
+                      </button>
+                    )}
                     <p className="mt-0.5 text-xs text-slate-500">
                       Demandé par {d.demandeur} · {anciennete(d.cree_le)}
                       {d.relances > 0 && ` · ${d.relances} relance${d.relances > 1 ? 's' : ''}`}
@@ -276,13 +293,17 @@ export default function SuiviPad({ chaineActive, onOuvrirProgramme, onNotificati
             {historique.map((d) => (
               <li key={d.id} className="flex items-start justify-between gap-4 py-2.5">
                 <div className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => ouvrirEpisode(d)}
-                    className="block max-w-full truncate text-left text-sm text-snrt-navy hover:underline"
-                  >
-                    {libelle(d.programme_id, d.episode_id)}
-                  </button>
+                  {d.spot_bibliotheque_id ? (
+                    <p className="max-w-full truncate text-sm text-slate-700">{libelleCible(d)}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => ouvrirEpisode(d)}
+                      className="block max-w-full truncate text-left text-sm text-snrt-navy hover:underline"
+                    >
+                      {libelleCible(d)}
+                    </button>
+                  )}
                   <p className="mt-0.5 text-xs text-slate-500">
                     Demandé le {formaterHorodatage(d.cree_le)} · {d.demandeur} → {d.traite_par || '—'}
                     {d.traite_le ? ` · traité le ${formaterHorodatage(d.traite_le)}` : ''}

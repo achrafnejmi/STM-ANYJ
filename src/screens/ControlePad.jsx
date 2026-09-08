@@ -5,13 +5,15 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes,
   listerBibles,
+  listerSpotsBibliotheque,
   urlBible,
   mettreAJourEpisode,
+  mettreAJourSpotBibliotheque,
   mettreAJourDemandePad,
   creerNotifications,
 } from '../lib/db.js'
 import { lireUtilisateur } from '../lib/session.js'
-import { messageDecisionPad } from '../lib/notifications.js'
+import { messageDecisionPad, messageDecisionPadSpot } from '../lib/notifications.js'
 
 const FILTRES_CATALOGUE = [
   { code: 'TOUS', label: 'Tous' },
@@ -40,6 +42,7 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
   const [programmes, setProgrammes] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [bibles, setBibles] = useState([])
+  const [spots, setSpots] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [enCours, setEnCours] = useState(null)
@@ -53,12 +56,14 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
       listerProgrammesParChaine(chaineActive.id),
       listerTousLesEpisodes(),
       listerBibles(),
+      listerSpotsBibliotheque(chaineActive.id),
     ])
-      .then(([d, p, e, b]) => {
+      .then(([d, p, e, b, sp]) => {
         setDemandes(d)
         setProgrammes(p)
         setEpisodes(e)
         setBibles(b)
+        setSpots(sp)
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
@@ -71,12 +76,23 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
   const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
   const episodesParId = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
   const bibleParProgrammeId = useMemo(() => new Map(bibles.map((b) => [b.programme_id, b])), [bibles])
+  const spotsParId = useMemo(() => new Map(spots.map((s) => [s.id, s])), [spots])
+
+  // P38b — libellé d'une demande, qu'elle cible un épisode ou un spot de bibliothèque.
+  const libelleCible = (d) =>
+    d.spot_bibliotheque_id
+      ? `Spot « ${spotsParId.get(d.spot_bibliotheque_id)?.libelle ?? 'inconnu'} »`
+      : libelleEpisode(d.programme_id, d.episode_id)
 
   const enAttente = useMemo(() => demandes.filter((d) => d.statut === 'EN_ATTENTE'), [demandes])
   const traitees = useMemo(() => demandes.filter((d) => d.statut !== 'EN_ATTENTE'), [demandes])
   // Épisode -> demande PAD en attente (badge « demande en cours » du catalogue).
   const demandeEnAttenteParEpisodeId = useMemo(
-    () => new Map(enAttente.map((d) => [d.episode_id, d])),
+    () => new Map(enAttente.filter((d) => d.episode_id).map((d) => [d.episode_id, d])),
+    [enAttente]
+  )
+  const demandeEnAttenteParSpotId = useMemo(
+    () => new Map(enAttente.filter((d) => d.spot_bibliotheque_id).map((d) => [d.spot_bibliotheque_id, d])),
     [enAttente]
   )
 
@@ -125,7 +141,8 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
     setErreur(null)
     try {
       if (statut === 'ACCEPTEE') {
-        await mettreAJourEpisode(demande.episode_id, { pad: true })
+        if (demande.spot_bibliotheque_id) await mettreAJourSpotBibliotheque(demande.spot_bibliotheque_id, { pad: true })
+        else await mettreAJourEpisode(demande.episode_id, { pad: true })
       }
       await mettreAJourDemandePad(demande.id, {
         statut,
@@ -133,14 +150,20 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
         traite_le: new Date().toISOString(),
       })
       // Notifie l'émetteur (rôle Gestion des droits et du stock) de la décision.
-      const ep = episodesParId.get(demande.episode_id)
+      const message = demande.spot_bibliotheque_id
+        ? messageDecisionPadSpot(spotsParId.get(demande.spot_bibliotheque_id)?.libelle ?? 'Spot', statut)
+        : messageDecisionPad(
+            programmesParId.get(demande.programme_id)?.titre ?? 'Programme',
+            episodesParId.get(demande.episode_id)?.numero,
+            statut
+          )
       await creerNotifications([
         {
           chaine_id: chaineActive.id,
           type: 'DECISION_PAD',
           destinataire_role: 'GESTION_DROITS_STOCK',
-          programme_id: demande.programme_id,
-          message: messageDecisionPad(programmesParId.get(demande.programme_id)?.titre ?? 'Programme', ep?.numero, statut),
+          programme_id: demande.programme_id ?? null,
+          message,
           lu: false,
         },
       ])
@@ -158,6 +181,19 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
     setErreur(null)
     try {
       await mettreAJourEpisode(episode.id, { pad: true })
+      rafraichir()
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setEnCours(null)
+    }
+  }
+
+  async function validerPadSpot(spot) {
+    setEnCours(spot.id)
+    setErreur(null)
+    try {
+      await mettreAJourSpotBibliotheque(spot.id, { pad: true })
       rafraichir()
     } catch (err) {
       setErreur(err.message)
@@ -191,16 +227,16 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
                 {enAttente.map((d) => (
                   <li key={d.id} className="flex items-start justify-between gap-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800">
-                        {libelleEpisode(d.programme_id, d.episode_id)}
-                      </p>
+                      <p className="text-sm font-medium text-slate-800">{libelleCible(d)}</p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        {contexteRevue(d.programme_id, d.episode_id) && `${contexteRevue(d.programme_id, d.episode_id)} · `}
+                        {!d.spot_bibliotheque_id &&
+                          contexteRevue(d.programme_id, d.episode_id) &&
+                          `${contexteRevue(d.programme_id, d.episode_id)} · `}
                         Demandé par {d.demandeur} · {formaterHorodatage(d.cree_le)}
                         {d.relances > 0 && ` · ${d.relances} relance${d.relances > 1 ? 's' : ''}`}
                       </p>
                       {d.motif && <p className="mt-1 text-xs italic text-slate-600">« {d.motif} »</p>}
-                      {lienBible(d.programme_id) && (
+                      {!d.spot_bibliotheque_id && lienBible(d.programme_id) && (
                         <a
                           href={lienBible(d.programme_id)}
                           target="_blank"
@@ -311,6 +347,40 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
             )}
           </section>
 
+          {spots.some((s) => !s.pad) && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">
+                Spots non PAD <span className="text-slate-400">({spots.filter((s) => !s.pad).length})</span>
+              </h2>
+              <ul className="divide-y divide-slate-100">
+                {spots
+                  .filter((s) => !s.pad)
+                  .map((s) => {
+                    const enDemande = demandeEnAttenteParSpotId.get(s.id)
+                    return (
+                      <li key={s.id} className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-slate-700">Spot « {s.libelle} »</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {s.duree_secondes}s{s.genre ? ` · ${s.genre}` : ''}
+                            {enDemande && <span className="text-amber-600"> · demande en attente</span>}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => validerPadSpot(s)}
+                          disabled={enCours === s.id}
+                          className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Valider PAD
+                        </button>
+                      </li>
+                    )
+                  })}
+              </ul>
+            </section>
+          )}
+
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <button
               type="button"
@@ -328,9 +398,7 @@ export default function ControlePad({ chaineActive, onNotificationCreee }) {
                   traitees.map((d) => (
                     <li key={d.id} className="flex items-start justify-between gap-4 py-2.5">
                       <div className="min-w-0">
-                        <p className="truncate text-sm text-slate-700">
-                          {libelleEpisode(d.programme_id, d.episode_id)}
-                        </p>
+                        <p className="truncate text-sm text-slate-700">{libelleCible(d)}</p>
                         <p className="mt-0.5 text-xs text-slate-500">
                           {d.demandeur} → {d.traite_par || '—'}
                           {d.traite_le ? ` · ${formaterHorodatage(d.traite_le)}` : ''}
