@@ -520,6 +520,28 @@ export async function supprimerReglePlanMedia(id) {
   verifie(await supabase.from('regle_plan_media').delete().eq('id', id).select())
 }
 
+// --- cadre_pub_ecran (P39a) : saisie du conducteur de pub — écrans publicitaires
+// prévus (nb de spots + durée de tranche) par chaîne et par date. Filtrage par
+// date côté client (convention du projet). ---
+
+export async function listerCadrePubParChaine(chaineId) {
+  return verifie(
+    await supabase.from('cadre_pub_ecran').select('*').eq('chaine_id', chaineId).order('date').order('ordre')
+  )
+}
+
+export async function creerCadrePubEcran(champs) {
+  return verifiePremiere(await supabase.from('cadre_pub_ecran').insert(champs).select())
+}
+
+export async function mettreAJourCadrePubEcran(id, champs) {
+  return verifiePremiere(await supabase.from('cadre_pub_ecran').update(champs).eq('id', id).select())
+}
+
+export async function supprimerCadrePubEcran(id) {
+  verifie(await supabase.from('cadre_pub_ecran').delete().eq('id', id).select())
+}
+
 // --- plan_media (P24) : plusieurs plans média nommés par chaîne, un seul live ---
 
 export async function listerPlanMediaParChaine(chaineId) {
