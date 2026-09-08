@@ -35,6 +35,23 @@ import { lireUtilisateur } from '../lib/session.js'
 import { peutEditerCadrePub } from '../lib/roles.js'
 import { useNotification } from '../components/NotificationProvider.jsx'
 
+// Logo de la chaîne (public/brand/*.png) → data URL base64, pour jsPDF.addImage.
+// Best-effort : renvoie null si le fetch/décodage échoue (export sans logo).
+async function chargerLogoDataURL(url) {
+  if (!url) return null
+  try {
+    const blob = await (await fetch(url)).blob()
+    return await new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
 // "mm:ss" ou entier seul (secondes) → secondes ; vide → null.
 function parseMMSS(v) {
   const t = (v ?? '').trim()
@@ -160,11 +177,14 @@ export default function ConducteurPub({ chaineActive, roleUtilisateur }) {
     })
   }
 
-  function exporterPdf() {
+  async function exporterPdf() {
     try {
       const donnees = construireDonneesConducteurPub({ chaineNom: chaineActive.nom, dateISO: date, ecrans })
       const doc = new jsPDF({ unit: 'pt', format: 'a4' })
       const W = doc.internal.pageSize.getWidth()
+      // Logo de la chaîne active (best-effort : sans logo si le fetch échoue).
+      const logo = await chargerLogoDataURL(chaineActive.logo)
+      if (logo) doc.addImage(logo, 'PNG', 40, 26, 40, 40)
       doc.setFontSize(11)
       doc.text(`Emetteur : ${donnees.emetteur}`, W / 2, 42, { align: 'center' })
       doc.setFontSize(13)
