@@ -33,6 +33,14 @@ import {
   creerPublicationVod,
   mettreAJourPublicationVod,
   supprimerPublicationVod,
+  obtenirImportPige,
+  creerImportPige,
+  mettreAJourImportPige,
+  supprimerImportPige,
+  obtenirDiffusionReelle,
+  creerDiffusionReelle,
+  mettreAJourDiffusionReelle,
+  supprimerDiffusionReelle,
 } from './db.js'
 import { lireUtilisateur } from './session.js'
 
@@ -70,6 +78,22 @@ const TABLES = {
     mettreAJour: mettreAJourPublicationVod,
     supprimer: supprimerPublicationVod,
   },
+  // P36a — import de la pige : l'import (import_pige) + ses lignes
+  // (diffusion_reelle) sont créés en un seul enregistrerAction, annulé en bloc
+  // (suppression des lignes puis de l'import, ré-activation de l'import
+  // précédent).
+  import_pige: {
+    obtenir: obtenirImportPige,
+    creer: creerImportPige,
+    mettreAJour: mettreAJourImportPige,
+    supprimer: supprimerImportPige,
+  },
+  diffusion_reelle: {
+    obtenir: obtenirDiffusionReelle,
+    creer: creerDiffusionReelle,
+    mettreAJour: mettreAJourDiffusionReelle,
+    supprimer: supprimerDiffusionReelle,
+  },
 }
 
 // P24/P28 : quelle colonne de historique_action porte l'id de document pour
@@ -83,6 +107,7 @@ const COLONNE_DOCUMENT_PAR_ECRAN = {
   GRILLE_LINEAIRE: 'grille_id',
   PLAN_MEDIA: 'plan_media_id',
   GRILLE_TYPE: 'grille_type_id',
+  PIGE: 'import_pige_id',
 }
 
 // Enregistre une action déjà exécutée par l'appelant comme une seule entrée

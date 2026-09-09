@@ -747,6 +747,7 @@ export async function compterCampagnesParTranche(code) {
 const COLONNE_DOCUMENT_PAR_ECRAN = {
   GRILLE_LINEAIRE: 'grille_id',
   PLAN_MEDIA: 'plan_media_id',
+  PIGE: 'import_pige_id',
 }
 
 // Table de taille PoC — une seule lecture par écran+chaîne, tri/filtrage
@@ -902,4 +903,108 @@ export async function listerChaines() {
 
 export async function mettreAJourChaine(id, champs) {
   return verifiePremiere(await supabase.from('chaine').update(champs).eq('id', id).select())
+}
+
+// --- pige : import_pige + diffusion_reelle (P36a) ---
+// La pige = ce qui a réellement été diffusé (retour d'antenne réel). Import
+// seul à ce stade : aucune consommation par les autres écrans. Les fonctions
+// {obtenir, creer, mettreAJour, supprimer} des deux tables complètent le
+// TABLES map d'undoManager.js (l'import est annulable/rétablissable comme un
+// bloc, écran 'PIGE').
+
+export async function listerImportsPigeParChaine(chaineId) {
+  return verifie(
+    await supabase
+      .from('import_pige')
+      .select('*')
+      .eq('chaine_id', chaineId)
+      .order('date', { ascending: false })
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function obtenirImportPige(id) {
+  return verifie(await supabase.from('import_pige').select('*').eq('id', id).maybeSingle())
+}
+
+// L'import faisant foi pour une chaîne + une date (un ré-import désactive le
+// précédent) — point d'entrée des futurs consommateurs (historique, volume
+// horaire, comparaison plan média, droits).
+export async function obtenirImportPigeActif(chaineId, date) {
+  return verifie(
+    await supabase
+      .from('import_pige')
+      .select('*')
+      .eq('chaine_id', chaineId)
+      .eq('date', date)
+      .eq('actif', true)
+      .maybeSingle()
+  )
+}
+
+export async function creerImportPige(champs) {
+  return verifiePremiere(await supabase.from('import_pige').insert(champs).select())
+}
+
+export async function mettreAJourImportPige(id, champs) {
+  return verifiePremiere(await supabase.from('import_pige').update(champs).eq('id', id).select())
+}
+
+// La cascade FK supprime aussi les diffusion_reelle liées.
+export async function supprimerImportPige(id) {
+  verifie(await supabase.from('import_pige').delete().eq('id', id).select())
+}
+
+export async function listerDiffusionsReellesParImport(importId) {
+  return verifie(
+    await supabase.from('diffusion_reelle').select('*').eq('import_pige_id', importId).order('ordre')
+  )
+}
+
+export async function listerDiffusionsReellesParChaineEtDate(chaineId, date) {
+  return verifie(
+    await supabase
+      .from('diffusion_reelle')
+      .select('*')
+      .eq('chaine_id', chaineId)
+      .eq('date', date)
+      .order('ordre')
+  )
+}
+
+// Rapprochement par nom (pas de FK catalogue) — pour l'onglet Historique de la
+// fiche programme, plus tard.
+export async function listerDiffusionsReellesParProgrammeNom(nom) {
+  return verifie(
+    await supabase
+      .from('diffusion_reelle')
+      .select('*')
+      .ilike('programme', nom)
+      .order('date', { ascending: false })
+      .order('debut_secondes', { ascending: false })
+  )
+}
+
+export async function obtenirDiffusionReelle(id) {
+  return verifie(await supabase.from('diffusion_reelle').select('*').eq('id', id).maybeSingle())
+}
+
+// Insert en lot (import) — miroir de creerElementsSecondaires.
+export async function creerDiffusionsReelles(lignes) {
+  return verifie(await supabase.from('diffusion_reelle').insert(lignes).select())
+}
+
+// Singuliers : exigés par le TABLES map d'undoManager.js (rejeu INSERT/DELETE
+// d'une annulation d'import). Aucune opération de P36a ne produit d'UPDATE sur
+// cette table, mais la forme complète est nécessaire.
+export async function creerDiffusionReelle(champs) {
+  return verifiePremiere(await supabase.from('diffusion_reelle').insert(champs).select())
+}
+
+export async function mettreAJourDiffusionReelle(id, champs) {
+  return verifiePremiere(await supabase.from('diffusion_reelle').update(champs).eq('id', id).select())
+}
+
+export async function supprimerDiffusionReelle(id) {
+  verifie(await supabase.from('diffusion_reelle').delete().eq('id', id).select())
 }

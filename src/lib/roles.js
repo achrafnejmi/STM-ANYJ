@@ -32,6 +32,7 @@ const TOUTES = [
   'PLAN_MEDIA',
   'GRILLE_NON_LINEAIRE',
   'CONDUCTEUR',
+  'PIGE',
   'ADMINISTRATION',
   'BIBLE',
   'SYNOPSIS_FR',
@@ -58,6 +59,7 @@ export const SECTIONS_PAR_ROLE = {
     'PLAN_MEDIA',
     'GRILLE_NON_LINEAIRE',
     'CONDUCTEUR',
+    'PIGE',
     'DEMANDES_PROGRAMMATION',
     'ADMINISTRATION',
   ],
@@ -76,6 +78,9 @@ export const SECTIONS_PAR_ROLE = {
     // Suit en lecture seule le cadre publicitaire préparé par la Régie pub
     // (Abir) pour élaborer le plan média (P39a).
     'CONDUCTEUR_PUB',
+    // Consulte la pige (retour d'antenne réel) en lecture seule — l'import est
+    // réservé à l'Admin de chaîne / au Super Admin (cf. peutImporterPige).
+    'PIGE',
   ],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
@@ -223,6 +228,13 @@ export function notificationVisible(notif, role) {
 // atteignent la section (Programmateur) le consultent en lecture seule.
 export function peutEditerCadrePub(role) {
   return role === 'SUPER_ADMIN' || role === 'REGIE_PUB'
+}
+
+// Import de la pige (P36a) : réservé à l'Administrateur de chaîne et au Super
+// Admin. Les autres rôles qui atteignent la section (Programmateur) la
+// consultent en lecture seule.
+export function peutImporterPige(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE'
 }
 
 export function libelleRole(code) {
