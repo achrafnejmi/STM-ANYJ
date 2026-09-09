@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, TriangleAlert, CornerDownRight } from 'lucide-react'
+import { Upload, TriangleAlert, CornerDownRight, Check } from 'lucide-react'
 import { CHAINES } from '../lib/chaines.js'
 import { estFichierPige, parserFichierPige } from '../lib/importPige.js'
 import {
@@ -34,8 +34,8 @@ function cleGroupe(g) {
 // retenu devient un import pige nommé (non destructif : un ré-import de la même
 // chaîne/date archive le précédent). Toute l'écriture passe par un seul
 // enregistrerAction par import (annulable en bloc, écran 'PIGE').
-export default function PanneauImportPige({ chaineActive, onFermer, onImporte }) {
-  const [etape, setEtape] = useState('FICHIER')
+export default function PanneauImportPige({ chaineActive, onFermer, onImporte, onRafraichir }) {
+  const [etape, setEtape] = useState('FICHIER') // FICHIER | APERCU | TERMINE
   const [nomFichier, setNomFichier] = useState(null)
   const [meta, setMeta] = useState({})
   const [groupes, setGroupes] = useState([])
@@ -43,6 +43,24 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte })
   const [apercu, setApercu] = useState([]) // groupes retenus, lignes éditables
   const [enregistrement, setEnregistrement] = useState(false)
   const [erreur, setErreur] = useState(null)
+  const [resultat, setResultat] = useState(null) // { imports: [...] } après enregistrement
+  const [reinitCle, setReinitCle] = useState(0) // force le reset de l'<input type=file>
+
+  // Vide tout l'état de saisie pour enchaîner un autre fichier sans fermer la
+  // modale (les imports déjà faits sont conservés en base et rafraîchis côté
+  // écran via onRafraichir).
+  function reinitialiser() {
+    setEtape('FICHIER')
+    setNomFichier(null)
+    setMeta({})
+    setGroupes([])
+    setConfig({})
+    setApercu([])
+    setErreur(null)
+    setResultat(null)
+    setEnregistrement(false)
+    setReinitCle((n) => n + 1)
+  }
 
   async function choisirFichier(e) {
     const fichier = e.target.files?.[0]
@@ -194,7 +212,11 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte })
         })
         importsCrees.push(nouvelImport)
       }
-      onImporte(importsCrees)
+      // Les imports sont en base : on rafraîchit l'écran derrière la modale et
+      // on affiche l'étape TERMINE (fermer, ou enchaîner un autre fichier).
+      onRafraichir?.(importsCrees)
+      setResultat({ imports: importsCrees })
+      setEtape('TERMINE')
     } catch (err) {
       setErreur(err.message)
     } finally {
@@ -209,6 +231,7 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte })
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700">Fichier Excel de pige (feuille « Data »)</label>
             <input
+              key={reinitCle}
               type="file"
               accept=".xlsx,.xls"
               onChange={choisirFichier}
@@ -393,6 +416,41 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte })
             >
               <Upload size={14} />
               {enregistrement ? 'Import…' : `Confirmer l'import (${totalRetenues})`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {etape === 'TERMINE' && (
+        <div className="space-y-4 text-sm">
+          <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+            <Check size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">
+                {resultat.imports.length} pige{resultat.imports.length > 1 ? 's' : ''} importée{resultat.imports.length > 1 ? 's' : ''}.
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                {resultat.imports.map((imp) => (
+                  <li key={imp.id}>{imp.nom} · {imp.nb_lignes} ligne{imp.nb_lignes > 1 ? 's' : ''}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              onClick={reinitialiser}
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <Upload size={14} />
+              Importer une autre pige
+            </button>
+            <button
+              type="button"
+              onClick={() => onImporte(resultat.imports)}
+              className="rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+            >
+              Terminé
             </button>
           </div>
         </div>

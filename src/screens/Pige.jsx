@@ -374,7 +374,12 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
       </div>
 
       {importOuvert && (
-        <PanneauImportPige chaineActive={chaineActive} onFermer={() => setImportOuvert(false)} onImporte={importe} />
+        <PanneauImportPige
+          chaineActive={chaineActive}
+          onFermer={() => setImportOuvert(false)}
+          onImporte={importe}
+          onRafraichir={(nouveaux) => rechargerImports(nouveaux?.[0]?.id ?? undefined)}
+        />
       )}
     </div>
   )
