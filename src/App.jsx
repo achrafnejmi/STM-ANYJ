@@ -26,6 +26,7 @@ import Accueil from './screens/Accueil.jsx'
 import DashboardAudit from './screens/DashboardAudit.jsx'
 import Programmes from './screens/Programmes.jsx'
 import Contrats from './screens/Contrats.jsx'
+import DroitsAuteur from './screens/DroitsAuteur.jsx'
 import Bible from './screens/Bible.jsx'
 import Synopsis from './screens/Synopsis.jsx'
 import BiblesSynopsis from './screens/BiblesSynopsis.jsx'
@@ -49,6 +50,7 @@ const ECRANS = {
   DASHBOARD: DashboardAudit,
   PROGRAMMES: Programmes,
   CONTRATS: Contrats,
+  DROITS_AUTEUR: DroitsAuteur,
   BIBLE: Bible,
   SYNOPSIS_FR: Synopsis,
   SYNOPSIS_AR: Synopsis,

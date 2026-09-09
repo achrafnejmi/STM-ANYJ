@@ -1,11 +1,12 @@
 // Liste unique des sections de la coquille (sidebar + routage App.jsx + hash URL).
-import { Home, Tv2, FileSignature, BookText, FileText, Layers3, CalendarDays, ListChecks, Megaphone, Share2, ListOrdered, Gauge, ClipboardCheck, ClipboardList, BadgeCheck, GitPullRequestArrow, Table2, LayoutDashboard, ShieldCheck, Radio, Settings } from 'lucide-react'
+import { Home, Tv2, FileSignature, BookText, FileText, Layers3, CalendarDays, ListChecks, Megaphone, Share2, ListOrdered, Gauge, ClipboardCheck, ClipboardList, BadgeCheck, GitPullRequestArrow, Table2, LayoutDashboard, ShieldCheck, Radio, Coins, Settings } from 'lucide-react'
 
 export const SECTIONS = [
   { id: 'ACCUEIL', label: 'Accueil', icone: Home },
   { id: 'DASHBOARD', label: 'Respect de la grille type', icone: ShieldCheck },
   { id: 'PROGRAMMES', label: 'Programmes', icone: Tv2 },
   { id: 'CONTRATS', label: 'Contrats & droits', icone: FileSignature },
+  { id: 'DROITS_AUTEUR', label: "Droits d'auteur", icone: Coins },
   { id: 'BIBLE', label: 'Bible', icone: BookText },
   { id: 'TABLEAU_BORD_REDACTION', label: 'Tableau de bord rédaction', icone: LayoutDashboard },
   { id: 'BIBLES_SYNOPSIS', label: 'Bibles & synopsis', icone: Table2 },

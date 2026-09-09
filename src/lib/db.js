@@ -1013,3 +1013,42 @@ export async function mettreAJourDiffusionReelle(id, champs) {
 export async function supprimerDiffusionReelle(id) {
   verifie(await supabase.from('diffusion_reelle').delete().eq('id', id).select())
 }
+
+// P37b : toutes les diffusions réelles de type PROGRAMME (hors sous-lignes) des
+// imports pige ACTIFS, toutes chaînes confondues — rapprochées ensuite par le
+// nom aux programmes externes (droits d'auteur). `!inner` + filtre embarqué sur
+// import_pige.actif.
+export async function listerDiffusionsReellesProgrammesActives() {
+  return verifie(
+    await supabase
+      .from('diffusion_reelle')
+      .select('*, import_pige!inner(actif)')
+      .eq('type_element', 'PROGRAMME')
+      .eq('est_sous_ligne', false)
+      .eq('import_pige.actif', true)
+      .order('date')
+      .order('debut_secondes')
+  )
+}
+
+// --- droit_auteur (P37b : comptage des diffusions payantes pour la finance) ---
+// Une ligne par programme externe que le Chargé d'acquisitions a vérifié.
+// Aucun montant : seuil + exclusions (faux positifs) + override + validation.
+
+export async function listerDroitsAuteur() {
+  return verifie(await supabase.from('droit_auteur').select('*'))
+}
+
+export async function obtenirDroitAuteur(programmeId) {
+  return verifie(await supabase.from('droit_auteur').select('*').eq('programme_id', programmeId).maybeSingle())
+}
+
+// Upsert sur programme_id (précédent enregistrerBible). `maj_le` systématique.
+export async function enregistrerDroitAuteur(programmeId, champs) {
+  return verifiePremiere(
+    await supabase
+      .from('droit_auteur')
+      .upsert({ programme_id: programmeId, ...champs, maj_le: new Date().toISOString() }, { onConflict: 'programme_id' })
+      .select()
+  )
+}

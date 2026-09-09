@@ -26,6 +26,7 @@ const TOUTES = [
   'ACCUEIL',
   'PROGRAMMES',
   'CONTRATS',
+  'DROITS_AUTEUR',
   'GRILLE_TYPE',
   'GRILLE_LINEAIRE',
   'AUTO_PROGRAMMATION',
@@ -82,7 +83,9 @@ export const SECTIONS_PAR_ROLE = {
     // réservé à l'Admin de chaîne / au Super Admin (cf. peutImporterPige).
     'PIGE',
   ],
-  ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
+  // + P37b : outil « Droits d'auteur » (comptage des diffusions payantes des
+  // programmes externes à partir de la pige, pour la finance).
+  ACQUISITIONS: ['PROGRAMMES', 'CONTRATS', 'DROITS_AUTEUR'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
   // tableau de bord dédié + suivi des demandes, en plus de Programmes et
   // Contrats & droits. Seul rôle (avec le Super Admin) habilité à émettre une
@@ -235,6 +238,14 @@ export function peutEditerCadrePub(role) {
 // consultent en lecture seule.
 export function peutImporterPige(role) {
   return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE'
+}
+
+// Outil « Droits d'auteur » (P37b) : comptage des diffusions payantes des
+// programmes externes pour la finance — réservé au Chargé d'acquisitions
+// (Oumnia) et au Super Admin. Assistant de comptage, pas autorité : la
+// validation humaine et le calcul des montants restent hors app.
+export function peutCalculerDroitsAuteur(role) {
+  return role === 'SUPER_ADMIN' || role === 'ACQUISITIONS'
 }
 
 export function libelleRole(code) {
