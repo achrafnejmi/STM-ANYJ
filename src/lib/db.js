@@ -913,3 +913,62 @@ export async function supprimerPlanMediaStock(id) {
     await supabase.from('plan_media_stock').delete().eq('id', id).select()
   )
 }
+
+export async function insererPlanificationsMedia(planificationsArray) {
+  // planificationsArray est un tableau d'objets contenant les champs requis
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .insert(planificationsArray)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de l'insertion des planifications :", error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listerPlanificationsMedia() {
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .select(`
+      *,
+      episodes (*),
+      stock_annonces (*)
+    `)
+    .order('date', { ascending: true })
+    .order('timestart', { ascending: true });
+
+  if (error) {
+    console.error("Erreur lors du chargement des planifications :", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function mettreAJourPlanificationMedia(id, champsModifies) {
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .update(champsModifies)
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la mise à jour de la planification :", error);
+    throw error;
+  }
+  return data;
+}
+export async function supprimerPlanificationMedia(id) {
+  const { error } = await supabase
+    .from('planmediaplanifications')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error("Erreur lors de la suppression de la planification :", error);
+    throw error;
+  }
+  return true;
+}

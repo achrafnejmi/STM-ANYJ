@@ -7,9 +7,9 @@
 }
 
 .pm-form-header {
-  margin-bottom: 1rem;
+  margin-bottom: 0.3rem;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 1rem;
+  padding-bottom: 0.3rem;
 }
 
 .pm-form-title {
@@ -112,4 +112,31 @@
 
 .pm-btn-primary:hover {
   background-color: #304854;
+}
+
+/* Custom Slim Scrollbar */
+.pm-slim-scroll {
+  overflow-y: auto;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+.pm-slim-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.pm-slim-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pm-slim-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.pm-slim-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }

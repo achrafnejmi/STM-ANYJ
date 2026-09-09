@@ -54,7 +54,7 @@
 }
 
 .pm-timeline-icon {
-  color: #243c54;
+  color: #fdfeff;
 }
 
 .pm-workspace-main {
@@ -80,26 +80,20 @@
   margin-bottom: 0;
 }
 
-.pm-timeline-node {
+.pm-timeline-icon-wrapper {
   position: absolute;
-  left: -9px;
-  top: 0.25rem;
-  display: flex;
-  height: 16px;
-  width: 16px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  background-color: #243c54;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  transition: transform 180ms ease, background-color 180ms ease;
+  left: -15px; /* Centers a 28px (w-7) icon over the 2px timeline border */
+  top: 0.125rem;
+  color:white ;
+  transition: transform 180ms ease, border-color 180ms ease;
 }
 
-.pm-timeline-event:hover .pm-timeline-node,
-.pm-timeline-event:focus-visible .pm-timeline-node {
-  transform: scale(1.25);
-  background-color: #d86000;
+.pm-timeline-event:hover .pm-timeline-icon-wrapper,
+.pm-timeline-event:focus-visible .pm-timeline-icon-wrapper {
+  transform: scale(1.15);
+
+  border: solid 1px hsla(226, 95%, 30%, 0.445);
+  
 }
 
 .pm-timeline-content {
@@ -199,6 +193,37 @@
   border-left: 1px solid #e2e8f0;
   background-color: #fff;
 }
-.pm-tooltip-arrow {
-  display: none; /* Plus besoin de flèche latérale */
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
