@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react'
-import { ArrowLeft, Paperclip, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Paperclip, Loader2, Trash2, TriangleAlert } from 'lucide-react'
 import {
   obtenirProgramme,
   creerProgramme,
@@ -158,6 +158,16 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   useSignalerModifications(estModifie, onModifieChange)
 
   async function gererRetour() {
+    // P37c — production externe : impossible de quitter la fiche tant que le
+    // contrat de droit (référence ou fichier) n'est pas enregistré.
+    const contratManquant = !programme?.reference_contrat && !programme?.attestation_chemin
+    if (id && programme?.production === 'EXTERNE' && contratManquant) {
+      setErreur(
+        "Production externe sans contrat : ajoutez la référence ou le fichier du contrat (onglet Droits) avant de quitter la fiche."
+      )
+      setOnglet('DROITS')
+      return
+    }
     if (!(await demanderConfirmation())) return
     onRetour()
   }
@@ -199,17 +209,26 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       notifier.info('Aucune modification à enregistrer.')
       return
     }
-    // P37a — production externe sans contrat : NON bloquant, mais on demande une
-    // confirmation explicite avant d'enregistrer (le contrat reste ajoutable
-    // ensuite dans l'onglet Droits).
-    const externeSansContrat =
+    // P37c — production externe : le contrat de droit (référence ou fichier joint)
+    // est OBLIGATOIRE. En édition, blocage dur avec bascule sur l'onglet Droits.
+    // À la création seule (champ Référence pas encore accessible), confirmation
+    // explicite — le blocage se referme au prochain enregistrement / à la sortie
+    // (cf. gererRetour).
+    const contratManquant =
       champs.production === 'EXTERNE' && !champs.reference_contrat && !programme?.attestation_chemin
-    if (externeSansContrat) {
+    if (contratManquant) {
+      if (id) {
+        setErreur(
+          "Production externe : renseignez la référence du contrat ou joignez le fichier du contrat (onglet Droits) avant d'enregistrer."
+        )
+        setOnglet('DROITS')
+        return
+      }
       const ok = await notifier.confirmer({
         titre: 'Contrat manquant',
         message:
-          "Production externe sans contrat : aucune référence ni fichier joint. Enregistrer quand même ? Le contrat pourra être ajouté plus tard dans l'onglet Droits.",
-        labelConfirmer: 'Enregistrer sans contrat',
+          "Production externe sans contrat : aucune référence ni fichier joint. Créer quand même ? Le contrat devra être ajouté dans l'onglet Droits avant de pouvoir quitter la fiche.",
+        labelConfirmer: 'Créer sans contrat',
         labelAnnuler: 'Annuler',
       })
       if (!ok) return
@@ -245,10 +264,11 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           .then(() => onNotificationCreee?.())
           .catch((err) => console.error('Notification « nouveau programme » impossible :', err))
       }
-      // P37a — enregistrement confirmé sans contrat : rappel visible (toast rouge).
-      if (externeSansContrat) {
+      // P37c — création confirmée sans contrat : rappel visible (le blocage à la
+      // sortie et au prochain enregistrement prend le relais).
+      if (contratManquant) {
         notifier.erreur(
-          "Programme enregistré sans contrat — production externe : contrat à fournir dans l'onglet Droits."
+          "Programme créé sans contrat — production externe : contrat à fournir dans l'onglet Droits avant de quitter la fiche."
         )
       }
     } catch (err) {
@@ -691,6 +711,14 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           {form.production === 'EXTERNE' ? (
           <div className="rounded-lg border border-slate-200 bg-white p-6">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Contrat</h2>
+            {!form.reference_contrat?.trim() && !programme?.attestation_chemin && (
+              <p className="mb-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  <strong>Contrat obligatoire</strong> pour une production externe — renseignez la référence ou joignez le fichier.
+                </span>
+              </p>
+            )}
             <form onSubmit={enregistrer} className="mb-4 flex items-end gap-3">
               <div className="max-w-xs flex-1">
                 <Champ
