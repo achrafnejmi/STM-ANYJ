@@ -280,10 +280,11 @@ function App() {
   }
 
   // Ouvre la section Pige présélectionnée sur un import (clic sur une ligne de
-  // la sous-vue « Antenne » de l'historique d'un titre, P36b).
-  function ouvrirPige(importId) {
+  // la sous-vue « Antenne » de l'historique d'un titre, P36b). `ligneId`
+  // optionnel : la ligne à faire clignoter brièvement dans le détail.
+  function ouvrirPige(importId, ligneId = null) {
     naviguer('PIGE')
-    setPigeCible({ id: importId, cle: crypto.randomUUID() })
+    setPigeCible({ id: importId, ligneId, cle: crypto.randomUUID() })
   }
 
   // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un

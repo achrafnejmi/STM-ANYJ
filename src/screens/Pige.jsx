@@ -4,7 +4,7 @@
 // est réservé à l'Admin de chaîne / au Super Admin ; il est annulable/
 // rétablissable en bloc (pile undo/redo, écran 'PIGE'), scopé sur l'import
 // actuellement ouvert.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Upload, Undo2, Redo2, Trash2, CornerDownRight, TriangleAlert } from 'lucide-react'
 import {
   listerImportsPigeParChaine,
@@ -49,6 +49,8 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
   const [pile, setPile] = useState(PILE_VIDE)
   const [filtreType, setFiltreType] = useState('')
   const [filtreGenre, setFiltreGenre] = useState('')
+  const [ligneFlashId, setLigneFlashId] = useState(null)
+  const flashFaitPourRef = useRef(null)
 
   const importActif = useMemo(
     () => imports.find((i) => i.id === importActifId) ?? null,
@@ -77,9 +79,25 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
   // Arrivée depuis l'historique d'un titre (P36b) : sélectionne l'import
   // d'origine. `cle` change à chaque clic, même import inclus.
   useEffect(() => {
-    if (pigeCible?.id) setImportActifId(pigeCible.id)
+    if (!pigeCible?.id) return
+    setImportActifId(pigeCible.id)
+    setFiltreType('')
+    setFiltreGenre('')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'à un nouveau clic
   }, [pigeCible?.cle])
+
+  // Une fois le détail chargé, fait clignoter la ligne d'origine ~2,5 s et la
+  // centre dans la vue (un seul déclenchement par clic, cf. flashFaitPourRef).
+  useEffect(() => {
+    if (!pigeCible?.cle || !pigeCible?.ligneId) return
+    if (flashFaitPourRef.current === pigeCible.cle) return
+    if (!lignes.some((l) => l.id === pigeCible.ligneId)) return
+    flashFaitPourRef.current = pigeCible.cle
+    setLigneFlashId(pigeCible.ligneId)
+    document.getElementById(`pige-ligne-${pigeCible.ligneId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const t = setTimeout(() => setLigneFlashId(null), 2500)
+    return () => clearTimeout(t)
+  }, [pigeCible?.cle, pigeCible?.ligneId, lignes])
 
   useEffect(() => {
     if (!importActifId) {
@@ -316,7 +334,13 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
                   </thead>
                   <tbody>
                     {lignesFiltrees.map((l) => (
-                      <tr key={l.id} className={`border-b border-slate-100 ${l.chevauchement ? 'bg-amber-50' : ''}`}>
+                      <tr
+                        key={l.id}
+                        id={`pige-ligne-${l.id}`}
+                        className={`border-b border-slate-100 transition-colors duration-700 ${
+                          l.id === ligneFlashId ? 'bg-snrt-navy/10' : l.chevauchement ? 'bg-amber-50' : ''
+                        }`}
+                      >
                         <td className="py-1 pl-3 pr-2 text-slate-400">{l.ordre}</td>
                         <td className="whitespace-nowrap py-1 pr-2 text-slate-600">
                           {(l.heure_debut ?? '').slice(0, 8)} – {(l.heure_fin ?? '').slice(0, 8)}

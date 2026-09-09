@@ -363,7 +363,7 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
                     return (
                       <tr
                         key={d.id}
-                        onClick={cliquable ? () => onOuvrirPige(d.import_pige_id) : undefined}
+                        onClick={cliquable ? () => onOuvrirPige(d.import_pige_id, d.id) : undefined}
                         className={`border-b border-slate-100 ${cliquable ? 'cursor-pointer hover:bg-snrt-navy/5' : ''}`}
                         title={cliquable ? 'Ouvrir la pige d’origine' : undefined}
                       >
