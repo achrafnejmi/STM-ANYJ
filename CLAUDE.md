@@ -33,6 +33,9 @@ Le plan phasé est dans **`PLAN.md`**. Suis-le **phase par phase**, **arrête-to
 - Scoping **par chaîne** (M1) : catalogue commun, éligibilité par chaîne active.
 
 ## Règles de travail
+- **Avant toute phase, lire `MEMORY.md`** (mémoire durable du projet). **Après chaque phase
+  committée, mettre à jour `MEMORY.md`** (voir sa section « Maintenance » : édition
+  incrémentale, 1 ligne par phase).
 - **Une phase à la fois** ; ne code jamais N+1 avant le test ✅ de N.
 - **Règle d'approbation** : avant de coder, présente le plan + **liste les ambiguïtés** et
   arrête-toi ; ne comble jamais par une hypothèse ; code seulement après « go ».
