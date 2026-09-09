@@ -37,14 +37,14 @@ const LIBELLE_FORMAT = { POST: 'Post', REEL: 'Reel', STORY: 'Story', VIDEO: 'Vid
 const LIBELLE_STATUT = { BROUILLON: 'Brouillon', PROGRAMME: 'Programmé', PUBLIE: 'Publié', ANNULE: 'Annulé' }
 
 // Historique de diffusion d'un titre (EXG-M6-01, M6-04, onglet Historique de
-// la fiche, P14b puis P31). Trois sous-vues : Linéaire (diffusion_lineaire
-// PLANIFIÉES passées, voir historique.js), Non-linéaire (publications réseaux
-// + VOD passées, P31) et Réel (pige) — le constat d'antenne réel importé
-// (P36a/P36b), à la seconde, rapproché du titre par le nom (pas de FK :
-// best-effort, voir rapprochementPige.js). Aucune pagination (EXG-M6-01
+// la fiche, P14b puis P31). Trois sous-vues : Antenne (défaut, P36b) — le
+// constat d'antenne réel importé (pige), à la seconde, rapproché du titre par
+// le nom (pas de FK : best-effort, voir rapprochementPige.js) ; Linéaire
+// (diffusion_lineaire PLANIFIÉES passées, voir historique.js) ; Non-linéaire
+// (publications réseaux + VOD passées, P31). Aucune pagination (EXG-M6-01
 // « sans limitation de nombre ») — conteneur scrollable uniquement.
-export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr = '', canalInitial = 'LINEAIRE', sansCadre = false }) {
-  const [ongletCanal, setOngletCanal] = useState(canalInitial) // LINEAIRE | NON_LINEAIRE | REEL
+export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr = '', canalInitial = 'ANTENNE', sansCadre = false }) {
+  const [ongletCanal, setOngletCanal] = useState(canalInitial) // ANTENNE | LINEAIRE | NON_LINEAIRE
   const [diffusions, setDiffusions] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [publicationsReseau, setPublicationsReseau] = useState([])
@@ -147,7 +147,7 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
     [publicationsReseau, publicationsVod, aujourdHui]
   )
 
-  // --- réel (pige) : constat d'antenne réel rapproché du titre par le nom ---
+  // --- antenne (pige) : constat d'antenne réel rapproché du titre par le nom ---
   // Déjà trié date/début décroissants par la requête. La pige est par nature
   // un passé (constat) : aucun filtre « passées » supplémentaire.
   const chainesReelles = useMemo(
@@ -166,17 +166,17 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
         <div className={`flex rounded-md border border-slate-300 text-sm ${sansCadre ? 'ml-auto' : ''}`}>
           <button
             type="button"
+            onClick={() => setOngletCanal('ANTENNE')}
+            className={`px-3 py-1.5 ${ongletCanal === 'ANTENNE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            Antenne{diffusionsReelles.length > 0 ? ` · ${diffusionsReelles.length}` : ''}
+          </button>
+          <button
+            type="button"
             onClick={() => setOngletCanal('LINEAIRE')}
             className={`px-3 py-1.5 ${ongletCanal === 'LINEAIRE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             Linéaire
-          </button>
-          <button
-            type="button"
-            onClick={() => setOngletCanal('REEL')}
-            className={`px-3 py-1.5 ${ongletCanal === 'REEL' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Réel (pige){diffusionsReelles.length > 0 ? ` · ${diffusionsReelles.length}` : ''}
           </button>
           <button
             type="button"
@@ -316,10 +316,10 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
         </>
       )}
 
-      {!chargement && !erreur && ongletCanal === 'REEL' && (
+      {!chargement && !erreur && ongletCanal === 'ANTENNE' && (
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-700">Diffusions réelles (pige)</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Diffusions à l'antenne (pige)</h3>
             {chainesReelles.length > 1 && (
               <select
                 value={filtreChaineReel}
