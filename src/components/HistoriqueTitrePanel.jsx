@@ -43,7 +43,7 @@ const LIBELLE_STATUT = { BROUILLON: 'Brouillon', PROGRAMME: 'Programmé', PUBLIE
 // (diffusion_lineaire PLANIFIÉES passées, voir historique.js) ; Non-linéaire
 // (publications réseaux + VOD passées, P31). Aucune pagination (EXG-M6-01
 // « sans limitation de nombre ») — conteneur scrollable uniquement.
-export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr = '', canalInitial = 'ANTENNE', sansCadre = false }) {
+export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr = '', canalInitial = 'ANTENNE', onOuvrirPige, sansCadre = false }) {
   const [ongletCanal, setOngletCanal] = useState(canalInitial) // ANTENNE | LINEAIRE | NON_LINEAIRE
   const [diffusions, setDiffusions] = useState([])
   const [episodes, setEpisodes] = useState([])
@@ -169,7 +169,7 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
             onClick={() => setOngletCanal('ANTENNE')}
             className={`px-3 py-1.5 ${ongletCanal === 'ANTENNE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            Antenne{diffusionsReelles.length > 0 ? ` · ${diffusionsReelles.length}` : ''}
+            Antenne
           </button>
           <button
             type="button"
@@ -338,6 +338,7 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
           <p className="mb-2 text-xs text-slate-500">
             Constat d'antenne réel importé (à la seconde), rapproché de ce titre par le nom — sans
             lien ferme avec le catalogue ni les épisodes.
+            {onOuvrirPige && ' Cliquez une ligne pour ouvrir la pige d’origine.'}
           </p>
           {diffusionsReellesFiltrees.length === 0 ? (
             <p className="text-sm text-slate-500">Aucune diffusion réelle rapprochée à ce titre dans les piges importées.</p>
@@ -358,8 +359,14 @@ export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr 
                 <tbody>
                   {diffusionsReellesFiltrees.map((d) => {
                     const nature = natureDepuisLibelle(d.libelle_complementaire)
+                    const cliquable = Boolean(onOuvrirPige && d.import_pige_id)
                     return (
-                      <tr key={d.id} className="border-b border-slate-100">
+                      <tr
+                        key={d.id}
+                        onClick={cliquable ? () => onOuvrirPige(d.import_pige_id) : undefined}
+                        className={`border-b border-slate-100 ${cliquable ? 'cursor-pointer hover:bg-snrt-navy/5' : ''}`}
+                        title={cliquable ? 'Ouvrir la pige d’origine' : undefined}
+                      >
                         <td className="py-2 pl-3 pr-4 text-slate-700">{formaterDateLongue(d.date)}</td>
                         <td className="whitespace-nowrap py-2 pr-4 text-slate-700">{(d.heure_debut ?? '').slice(0, 8)}</td>
                         <td className="whitespace-nowrap py-2 pr-4 text-slate-500">{(d.heure_fin ?? '').slice(0, 8)}</td>

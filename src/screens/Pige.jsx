@@ -36,7 +36,7 @@ function formaterHorodatage(iso) {
   return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Pige({ chaineActive, roleUtilisateur }) {
+export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
   const lectureSeule = !peutImporterPige(roleUtilisateur)
   const { confirmer } = useNotification()
 
@@ -72,7 +72,14 @@ export default function Pige({ chaineActive, roleUtilisateur }) {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne
-  useEffect(() => rechargerImports(), [chaineActive])
+  useEffect(() => rechargerImports(pigeCible?.id), [chaineActive])
+
+  // Arrivée depuis l'historique d'un titre (P36b) : sélectionne l'import
+  // d'origine. `cle` change à chaque clic, même import inclus.
+  useEffect(() => {
+    if (pigeCible?.id) setImportActifId(pigeCible.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'à un nouveau clic
+  }, [pigeCible?.cle])
 
   useEffect(() => {
     if (!importActifId) {

@@ -90,6 +90,7 @@ function App() {
   // Programmes.jsx se redéclenche à chaque fois.
   const [programmeCible, setProgrammeCible] = useState(null)
   const [synopsisCible, setSynopsisCible] = useState(null)
+  const [pigeCible, setPigeCible] = useState(null)
   // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
   // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
   // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
@@ -278,6 +279,13 @@ function App() {
     setProgrammeCible({ id, cle: crypto.randomUUID(), onglet })
   }
 
+  // Ouvre la section Pige présélectionnée sur un import (clic sur une ligne de
+  // la sous-vue « Antenne » de l'historique d'un titre, P36b).
+  function ouvrirPige(importId) {
+    naviguer('PIGE')
+    setPigeCible({ id: importId, cle: crypto.randomUUID() })
+  }
+
   // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un
   // programme — vers la section de la langue que le rôle courant peut voir.
   function ouvrirSynopsis(id) {
@@ -357,9 +365,11 @@ function App() {
             onAnomaliesBloquantes={setNbAnomaliesBloquantes}
             programmeCible={programmeCible}
             synopsisCible={synopsisCible}
+            pigeCible={pigeCible}
             langue={langueEcran}
             onOuvrirProgramme={ouvrirProgramme}
             onOuvrirSynopsis={ouvrirSynopsis}
+            onOuvrirPige={ouvrirPige}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
           />

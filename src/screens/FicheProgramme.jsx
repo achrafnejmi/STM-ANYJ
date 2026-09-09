@@ -102,7 +102,7 @@ function versFormulaire(programme, chaineActive) {
   }
 }
 
-export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange, onNotificationCreee, roleUtilisateur }) {
+export default function FicheProgramme({ programmeId: idInitial, chaineActive, onRetour, ongletInitial = 'GENERAL', onModifieChange, onNotificationCreee, onOuvrirPige, roleUtilisateur }) {
   const [id, setId] = useState(idInitial)
   const valeurVide = { ...FORM_VIDE, chaineExclusiveId: chaineActive.id }
   const [form, setForm] = useState(() => (idInitial ? FORM_VIDE : valeurVide))
@@ -762,6 +762,7 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           programmeId={id}
           titre={programme?.titre ?? form.titre ?? ''}
           titreAr={programme?.titre_ar ?? form.titre_ar ?? ''}
+          onOuvrirPige={onOuvrirPige}
         />
       )}
     </div>
