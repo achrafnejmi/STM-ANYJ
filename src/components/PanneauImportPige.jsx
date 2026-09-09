@@ -1,66 +1,53 @@
 import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, TriangleAlert, CornerDownRight, Check } from 'lucide-react'
+import { Upload, TriangleAlert, CornerDownRight } from 'lucide-react'
 import { CHAINES } from '../lib/chaines.js'
-import { estFichierPige, parserFichierPige } from '../lib/importPige.js'
-import {
-  obtenirImportPigeActif,
-  creerImportPige,
-  mettreAJourImportPige,
-  creerDiffusionsReelles,
-} from '../lib/db.js'
-import { enregistrerAction } from '../lib/undoManager.js'
-import { lireUtilisateur } from '../lib/session.js'
+import { estFichierPige, parserFichierPige, secondesEnHms, TYPES_ELEMENT, LIBELLES_TYPE_ELEMENT } from '../lib/importPige.js'
 import { formaterDateJJMMAAAA } from '../lib/semaine.js'
 import Modal from './Modal.jsx'
-
-const LIBELLES_TYPE = {
-  PROGRAMME: 'Programme',
-  BA: 'Bande-annonce',
-  SPOT: 'Spot',
-  AUTO_PROMO: 'Auto-promo',
-  COMMUNIQUE: 'Communiqué',
-  AUTRE: 'Autre',
-}
-const TYPES_CHOIX = ['PROGRAMME', 'BA', 'SPOT', 'AUTO_PROMO', 'COMMUNIQUE', 'AUTRE']
 
 function cleGroupe(g) {
   return `${g.chaineNom}__${g.date}`
 }
 
-// Import de la pige (P36a) — miroir de PanneauImportPlanMedia : étape FICHIER
-// (dépôt + choix des groupes chaîne/date + nom) puis étape APERCU
-// (propose → modifiable → confirme, jamais d'écriture directe). Chaque groupe
-// retenu devient un import pige nommé (non destructif : un ré-import de la même
-// chaîne/date archive le précédent). Toute l'écriture passe par un seul
-// enregistrerAction par import (annulable en bloc, écran 'PIGE').
-export default function PanneauImportPige({ chaineActive, onFermer, onImporte, onRafraichir }) {
-  const [etape, setEtape] = useState('FICHIER') // FICHIER | APERCU | TERMINE
+// Lignes du parseur (camelCase) → format colonnes DB (diffusion_reelle), + un
+// drapeau `retenue` transitoire pour la sélection dans l'aperçu.
+function versLigneDb(l) {
+  return {
+    ordre: l.ordre,
+    code_ecran: l.codeEcran ?? null,
+    code_program: l.codeProgram ?? null,
+    programme: l.programme,
+    heure_debut: l.heureDebutHorloge,
+    heure_fin: l.heureFinHorloge,
+    debut_secondes: l.debutSecondes,
+    fin_secondes: l.finSecondes,
+    duree_secondes: l.dureeSecondes,
+    libelle_complementaire: l.libelleComplementaire ?? null,
+    code_genre: l.codeGenre ?? null,
+    genre_niv1: l.genreNiv1 ?? null,
+    genre_niv2: l.genreNiv2 ?? null,
+    genre_niv3: l.genreNiv3 ?? null,
+    type_element: l.typeElement,
+    est_sous_ligne: l.estSousLigne,
+    parent_ordre: l.parentOrdre ?? null,
+    chevauchement: l.chevauchement,
+    retenue: true,
+  }
+}
+
+// Import de la pige (P36a, refondu P36c) — étape FICHIER (dépôt + choix des
+// groupes chaîne/date + nom) puis APERCU (cases à cocher + Type / Programme
+// modifiables). Le panneau NE PERSISTE RIEN : « Charger l'aperçu » renvoie des
+// BROUILLONS à l'écran Pige, qui les enregistre explicitement ensuite.
+export default function PanneauImportPige({ chaineActive, onFermer, onBrouillon }) {
+  const [etape, setEtape] = useState('FICHIER') // FICHIER | APERCU
   const [nomFichier, setNomFichier] = useState(null)
   const [meta, setMeta] = useState({})
   const [groupes, setGroupes] = useState([])
   const [config, setConfig] = useState({}) // cleGroupe → { retenue, nom, chaineIdChoisie }
-  const [apercu, setApercu] = useState([]) // groupes retenus, lignes éditables
-  const [enregistrement, setEnregistrement] = useState(false)
+  const [apercu, setApercu] = useState([]) // groupes retenus, lignes éditables (format DB)
   const [erreur, setErreur] = useState(null)
-  const [resultat, setResultat] = useState(null) // { imports: [...] } après enregistrement
-  const [reinitCle, setReinitCle] = useState(0) // force le reset de l'<input type=file>
-
-  // Vide tout l'état de saisie pour enchaîner un autre fichier sans fermer la
-  // modale (les imports déjà faits sont conservés en base et rafraîchis côté
-  // écran via onRafraichir).
-  function reinitialiser() {
-    setEtape('FICHIER')
-    setNomFichier(null)
-    setMeta({})
-    setGroupes([])
-    setConfig({})
-    setApercu([])
-    setErreur(null)
-    setResultat(null)
-    setEnregistrement(false)
-    setReinitCle((n) => n + 1)
-  }
 
   async function choisirFichier(e) {
     const fichier = e.target.files?.[0]
@@ -112,7 +99,7 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
           date: g.date,
           jour: g.jour,
           nom: c.nom.trim() || `Pige ${g.chaineNom}`,
-          lignes: g.lignes.map((l) => ({ ...l, retenue: true })),
+          lignes: g.lignes.map(versLigneDb),
         }
       })
       .filter((g) => g.chaineId)
@@ -138,90 +125,26 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
     [apercu]
   )
 
-  async function confirmer() {
-    if (totalRetenues === 0) return
-    setEnregistrement(true)
-    setErreur(null)
-    try {
-      const importsCrees = []
-      for (const g of apercu) {
-        const lignesRetenues = g.lignes.filter((l) => l.retenue)
-        if (lignesRetenues.length === 0) continue
-
-        const operations = []
-        const ancienActif = await obtenirImportPigeActif(g.chaineId, g.date)
-        if (ancienActif) {
-          const ancienDesactive = await mettreAJourImportPige(ancienActif.id, { actif: false })
-          operations.push({
-            table: 'import_pige',
-            type: 'UPDATE',
-            id: ancienActif.id,
-            avant: ancienActif,
-            apres: ancienDesactive,
-          })
-        }
-
-        const nouvelImport = await creerImportPige({
-          nom: g.nom,
-          chaine_id: g.chaineId,
-          chaine_nom: g.chaineNom,
-          date: g.date,
-          jour: g.jour ?? null,
-          source_fichier: nomFichier,
-          analyse_le: meta.analyseLe ?? null,
-          nb_lignes: lignesRetenues.length,
-          actif: true,
-          cree_par: lireUtilisateur(),
-        })
-        operations.push({ table: 'import_pige', type: 'INSERT', id: nouvelImport.id, apres: nouvelImport })
-
-        const champs = lignesRetenues.map((l) => ({
-          import_pige_id: nouvelImport.id,
-          chaine_id: g.chaineId,
-          chaine_nom: g.chaineNom,
-          date: g.date,
-          jour: g.jour ?? null,
-          ordre: l.ordre,
-          code_ecran: l.codeEcran ?? null,
-          code_program: l.codeProgram ?? null,
-          programme: (l.programme ?? '').trim() || '(sans titre)',
-          heure_debut: l.heureDebutHorloge,
-          heure_fin: l.heureFinHorloge,
-          debut_secondes: l.debutSecondes,
-          fin_secondes: l.finSecondes,
-          duree_secondes: l.dureeSecondes,
-          libelle_complementaire: l.libelleComplementaire ?? null,
-          code_genre: l.codeGenre ?? null,
-          genre_niv1: l.genreNiv1 ?? null,
-          genre_niv2: l.genreNiv2 ?? null,
-          genre_niv3: l.genreNiv3 ?? null,
-          type_element: l.typeElement,
-          est_sous_ligne: l.estSousLigne,
-          parent_ordre: l.parentOrdre ?? null,
-          chevauchement: l.chevauchement,
-        }))
-        const creees = await creerDiffusionsReelles(champs)
-        operations.push(...creees.map((d) => ({ table: 'diffusion_reelle', type: 'INSERT', id: d.id, apres: d })))
-
-        await enregistrerAction({
-          chaineId: g.chaineId,
-          ecran: 'PIGE',
-          documentId: nouvelImport.id,
-          libelle: `Import pige « ${nomFichier ?? 'pige'} » — ${g.chaineNom} ${formaterDateJJMMAAAA(g.date)} (${creees.length} ligne${creees.length > 1 ? 's' : ''})`,
-          operations,
-        })
-        importsCrees.push(nouvelImport)
-      }
-      // Les imports sont en base : on rafraîchit l'écran derrière la modale et
-      // on affiche l'étape TERMINE (fermer, ou enchaîner un autre fichier).
-      onRafraichir?.(importsCrees)
-      setResultat({ imports: importsCrees })
-      setEtape('TERMINE')
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setEnregistrement(false)
-    }
+  // Renvoie les brouillons (retenus uniquement) à l'écran Pige ; ne touche pas
+  // la base.
+  function chargerApercu() {
+    const brouillons = apercu
+      .map((g) => ({
+        chaineId: g.chaineId,
+        chaineNom: g.chaineNom,
+        date: g.date,
+        jour: g.jour,
+        nom: g.nom,
+        source_fichier: nomFichier,
+        analyse_le: meta.analyseLe ?? null,
+        // `retenue` reste sur les lignes (transitoire, ignoré à l'écriture) —
+        // l'écran Pige mappe les colonnes explicitement.
+        lignes: g.lignes.filter((l) => l.retenue),
+      }))
+      .filter((g) => g.lignes.length > 0)
+    if (brouillons.length === 0) return
+    onBrouillon(brouillons)
+    onFermer()
   }
 
   return (
@@ -231,7 +154,6 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700">Fichier Excel de pige (feuille « Data »)</label>
             <input
-              key={reinitCle}
               type="file"
               accept=".xlsx,.xls"
               onChange={choisirFichier}
@@ -317,12 +239,12 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
         <div className="space-y-5 text-sm">
           {apercu.map((g) => {
             const retenues = g.lignes.filter((l) => l.retenue)
-            const parType = TYPES_CHOIX.reduce((acc, t) => {
-              acc[t] = retenues.filter((l) => l.typeElement === t).length
+            const parType = TYPES_ELEMENT.reduce((acc, t) => {
+              acc[t] = retenues.filter((l) => l.type_element === t).length
               return acc
             }, {})
             const nbChev = g.lignes.filter((l) => l.chevauchement).length
-            const nbSous = g.lignes.filter((l) => l.estSousLigne).length
+            const nbSous = g.lignes.filter((l) => l.est_sous_ligne).length
             return (
               <div key={g.cle} className="space-y-2">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -358,12 +280,12 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
                             />
                           </td>
                           <td className="whitespace-nowrap py-1 pr-2 text-slate-600">
-                            {l.heureDebutHorloge} – {l.heureFinHorloge}
+                            {l.heure_debut} – {l.heure_fin}
                           </td>
-                          <td className="whitespace-nowrap py-1 pr-2 text-slate-600">{l.dureeTexte}</td>
+                          <td className="whitespace-nowrap py-1 pr-2 text-slate-600">{secondesEnHms(l.duree_secondes)}</td>
                           <td className="py-1 pr-2">
                             <div className="flex items-center gap-1">
-                              {l.estSousLigne && <CornerDownRight size={12} className="shrink-0 text-slate-400" />}
+                              {l.est_sous_ligne && <CornerDownRight size={12} className="shrink-0 text-slate-400" />}
                               <input
                                 type="text"
                                 value={l.programme}
@@ -374,17 +296,17 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
                           </td>
                           <td className="py-1 pr-2">
                             <select
-                              value={l.typeElement}
-                              onChange={(e) => majLigne(g.cle, l.ordre, { typeElement: e.target.value })}
+                              value={l.type_element}
+                              onChange={(e) => majLigne(g.cle, l.ordre, { type_element: e.target.value })}
                               className="rounded border border-slate-300 px-1 py-0.5 text-xs"
                             >
-                              {TYPES_CHOIX.map((t) => (
-                                <option key={t} value={t}>{LIBELLES_TYPE[t]}</option>
+                              {TYPES_ELEMENT.map((t) => (
+                                <option key={t} value={t}>{LIBELLES_TYPE_ELEMENT[t]}</option>
                               ))}
                             </select>
                           </td>
                           <td className="py-1 pr-2 text-slate-500">
-                            {[l.codeGenre, l.genreNiv1, l.genreNiv2].filter(Boolean).join(' · ') || '—'}
+                            {[l.code_genre, l.genre_niv1, l.genre_niv2].filter(Boolean).join(' · ') || '—'}
                           </td>
                           <td className="py-1">
                             {l.chevauchement && (
@@ -410,47 +332,12 @@ export default function PanneauImportPige({ chaineActive, onFermer, onImporte, o
             </button>
             <button
               type="button"
-              onClick={confirmer}
-              disabled={totalRetenues === 0 || enregistrement}
+              onClick={chargerApercu}
+              disabled={totalRetenues === 0}
               className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
             >
               <Upload size={14} />
-              {enregistrement ? 'Import…' : `Confirmer l'import (${totalRetenues})`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {etape === 'TERMINE' && (
-        <div className="space-y-4 text-sm">
-          <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
-            <Check size={16} className="mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium">
-                {resultat.imports.length} pige{resultat.imports.length > 1 ? 's' : ''} importée{resultat.imports.length > 1 ? 's' : ''}.
-              </p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
-                {resultat.imports.map((imp) => (
-                  <li key={imp.id}>{imp.nom} · {imp.nb_lignes} ligne{imp.nb_lignes > 1 ? 's' : ''}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-            <button
-              type="button"
-              onClick={reinitialiser}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              <Upload size={14} />
-              Importer une autre pige
-            </button>
-            <button
-              type="button"
-              onClick={() => onImporte(resultat.imports)}
-              className="rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
-            >
-              Terminé
+              Charger l'aperçu ({totalRetenues})
             </button>
           </div>
         </div>

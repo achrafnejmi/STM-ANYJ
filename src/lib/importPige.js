@@ -16,6 +16,18 @@ import * as XLSX from 'xlsx'
 
 const EN_TETES_ATTENDUES = ['Chaîne', 'Date', 'Programme', 'H.Début', 'H.Fin', 'Durée', 'Code Genre']
 
+// Types d'élément de la pige (colonne diffusion_reelle.type_element) + libellés
+// FR — partagés par le parseur, l'aperçu d'import et la table de détail.
+export const TYPES_ELEMENT = ['PROGRAMME', 'BA', 'SPOT', 'AUTO_PROMO', 'COMMUNIQUE', 'AUTRE']
+export const LIBELLES_TYPE_ELEMENT = {
+  PROGRAMME: 'Programme',
+  BA: 'Bande-annonce',
+  SPOT: 'Spot',
+  AUTO_PROMO: 'Auto-promo',
+  COMMUNIQUE: 'Communiqué',
+  AUTRE: 'Autre',
+}
+
 function normaliser(s) {
   return (s ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
