@@ -2,9 +2,10 @@
 // ASSISTANT, PAS AUTORITÉ : l'app ne calcule aucun montant. Elle rapproche la
 // pige (diffusion_reelle) des programmes EXTERNES par le NOM (approximatif,
 // rapprochementPige.js), compte les diffusions réelles et les diffusions
-// payantes (au-delà de `seuil_gratuit`, 3 par défaut). Le Chargé d'acquisitions
-// (Oumnia) vérifie chaque programme (décoche les faux positifs, corrige,
-// valide) avant l'export finance. Réservé à ACQUISITIONS + SUPER_ADMIN.
+// payantes (au-delà de `seuil_gratuit`, 3 par défaut). La Gestion des droits et
+// du stock (Oumnia) vérifie chaque programme (décoche les faux positifs,
+// corrige, valide) avant l'export finance. Réservé à GESTION_DROITS_STOCK +
+// SUPER_ADMIN.
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Coins, FileSpreadsheet, CheckCircle2, Circle, TriangleAlert } from 'lucide-react'
@@ -155,7 +156,7 @@ export default function DroitsAuteur({ chaineActive, roleUtilisateur }) {
   const nbValides = lignes.filter((l) => l.droit?.valide).length
 
   if (!autorise) {
-    return <p className="text-sm text-slate-500">Accès réservé au Chargé d'acquisitions.</p>
+    return <p className="text-sm text-slate-500">Accès réservé à la Gestion des droits et du stock.</p>
   }
 
   return (

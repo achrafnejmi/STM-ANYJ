@@ -83,14 +83,14 @@ export const SECTIONS_PAR_ROLE = {
     // réservé à l'Admin de chaîne / au Super Admin (cf. peutImporterPige).
     'PIGE',
   ],
-  // + P37b : outil « Droits d'auteur » (comptage des diffusions payantes des
-  // programmes externes à partir de la pige, pour la finance).
-  ACQUISITIONS: ['PROGRAMMES', 'CONTRATS', 'DROITS_AUTEUR'],
+  ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
   // tableau de bord dédié + suivi des demandes, en plus de Programmes et
   // Contrats & droits. Seul rôle (avec le Super Admin) habilité à émettre une
   // demande de validation PAD — cf. peutDemanderPad.
-  GESTION_DROITS_STOCK: ['PILOTAGE_DROITS_STOCK', 'SUIVI_PAD', 'PROGRAMMES', 'CONTRATS'],
+  // + P37b : outil « Droits d'auteur » (comptage des diffusions payantes des
+  // programmes externes à partir de la pige, pour la finance — Oumnia).
+  GESTION_DROITS_STOCK: ['PILOTAGE_DROITS_STOCK', 'SUIVI_PAD', 'PROGRAMMES', 'CONTRATS', 'DROITS_AUTEUR'],
   DOCUMENTALISTE: ['BIBLE'],
   REDACTEUR_FR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_FR'],
   REDACTEUR_AR: ['TABLEAU_BORD_REDACTION', 'BIBLES_SYNOPSIS', 'SYNOPSIS_AR'],
@@ -241,11 +241,11 @@ export function peutImporterPige(role) {
 }
 
 // Outil « Droits d'auteur » (P37b) : comptage des diffusions payantes des
-// programmes externes pour la finance — réservé au Chargé d'acquisitions
-// (Oumnia) et au Super Admin. Assistant de comptage, pas autorité : la
+// programmes externes pour la finance — réservé à la Gestion des droits et du
+// stock (Oumnia) et au Super Admin. Assistant de comptage, pas autorité : la
 // validation humaine et le calcul des montants restent hors app.
 export function peutCalculerDroitsAuteur(role) {
-  return role === 'SUPER_ADMIN' || role === 'ACQUISITIONS'
+  return role === 'SUPER_ADMIN' || role === 'GESTION_DROITS_STOCK'
 }
 
 export function libelleRole(code) {

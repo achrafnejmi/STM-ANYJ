@@ -4,8 +4,8 @@
 -- d'image à partir de la 4e diffusion réelle. L'app NE calcule AUCUN montant :
 -- elle fournit, par programme, le nombre de diffusions réelles (rapprochées de
 -- la pige par le nom, approximatif) et le nombre de diffusions payantes
--- (au-delà de `seuil_gratuit`). Le Chargé d'acquisitions vérifie / corrige /
--- valide ; la finance applique ensuite ses barèmes.
+-- (au-delà de `seuil_gratuit`). La Gestion des droits et du stock vérifie /
+-- corrige / valide ; la finance applique ensuite ses barèmes.
 -- Une ligne par programme (précédent : bible, fenetre_droits).
 
 create table if not exists droit_auteur (

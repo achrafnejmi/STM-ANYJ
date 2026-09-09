@@ -18,7 +18,7 @@ function entete(d) {
     ...(d.brouillon ? [['BROUILLON — non validé, ne pas transmettre en l’état']] : []),
     [`Édité le ${formaterDateLongue(d.dateISO)} par ${d.utilisateur}`],
     [
-      "Comptes assistés par rapprochement de nom (approximatif), vérifiés par le Chargé d'acquisitions. Les montants sont calculés par la finance.",
+      "Comptes assistés par rapprochement de nom (approximatif), vérifiés par la Gestion des droits et du stock. Les montants sont calculés par la finance.",
     ],
     [],
   ]
