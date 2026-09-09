@@ -5,7 +5,7 @@
 // rétablissable en bloc (pile undo/redo, écran 'PIGE'), scopé sur l'import
 // actuellement ouvert.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Upload, Undo2, Redo2, Trash2, CornerDownRight, TriangleAlert } from 'lucide-react'
+import { Upload, Undo2, Redo2, Trash2, CornerDownRight, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   listerImportsPigeParChaine,
   listerDiffusionsReellesParImport,
@@ -13,7 +13,14 @@ import {
 } from '../lib/db.js'
 import { etatPile, annulerDerniereAction, retablirAction } from '../lib/undoManager.js'
 import { secondesEnHms } from '../lib/importPige.js'
-import { formaterDateLongue } from '../lib/semaine.js'
+import {
+  aujourdHuiISO,
+  ajouterJours,
+  lundiDeLaSemaine,
+  formaterDateLongue,
+  formaterPlageSemaine,
+  formaterMoisAnnee,
+} from '../lib/semaine.js'
 import { peutImporterPige } from '../lib/roles.js'
 import { useNotification } from '../components/NotificationProvider.jsx'
 import PanneauImportPige from '../components/PanneauImportPige.jsx'
@@ -27,6 +34,37 @@ const LIBELLES_TYPE = {
   AUTRE: 'Autre',
 }
 const PILE_VIDE = { peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null }
+
+const GRANULARITES = [
+  { code: 'TOUT', label: 'Tout' },
+  { code: 'JOUR', label: 'Jour' },
+  { code: 'SEMAINE', label: 'Semaine' },
+  { code: 'MOIS', label: 'Mois' },
+]
+
+// Bornes ISO [début, fin] de la période affichée (null, null = pas de filtre).
+function bornesPeriode(granularite, refDate) {
+  if (granularite === 'JOUR') return [refDate, refDate]
+  if (granularite === 'SEMAINE') {
+    const lundi = lundiDeLaSemaine(refDate)
+    return [lundi, ajouterJours(lundi, 6)]
+  }
+  if (granularite === 'MOIS') {
+    const d = new Date(`${refDate}T00:00:00Z`)
+    const y = d.getUTCFullYear()
+    const m = d.getUTCMonth()
+    const fin = new Date(Date.UTC(y, m + 1, 0))
+    return [`${y}-${String(m + 1).padStart(2, '0')}-01`, fin.toISOString().slice(0, 10)]
+  }
+  return [null, null]
+}
+
+function labelPeriode(granularite, refDate) {
+  if (granularite === 'JOUR') return formaterDateLongue(refDate)
+  if (granularite === 'SEMAINE') return formaterPlageSemaine(lundiDeLaSemaine(refDate))
+  if (granularite === 'MOIS') return formaterMoisAnnee(refDate)
+  return 'Tous les imports'
+}
 
 // Horodatage court d'un import (timestamptz) → « 31/08/2026 14:23 ».
 function formaterHorodatage(iso) {
@@ -51,6 +89,30 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
   const [filtreGenre, setFiltreGenre] = useState('')
   const [ligneFlashId, setLigneFlashId] = useState(null)
   const flashFaitPourRef = useRef(null)
+  const [granularite, setGranularite] = useState('TOUT')
+  const [refDate, setRefDate] = useState(() => aujourdHuiISO())
+
+  const [debutPeriode, finPeriode] = bornesPeriode(granularite, refDate)
+  const importsFiltres = useMemo(
+    () =>
+      imports.filter(
+        (i) => granularite === 'TOUT' || (i.date >= debutPeriode && i.date <= finPeriode)
+      ),
+    [imports, granularite, debutPeriode, finPeriode]
+  )
+
+  function decalerPeriode(sens) {
+    setRefDate((d) => {
+      if (granularite === 'JOUR') return ajouterJours(d, sens)
+      if (granularite === 'SEMAINE') return ajouterJours(d, sens * 7)
+      if (granularite === 'MOIS') {
+        const dt = new Date(`${d}T00:00:00Z`)
+        dt.setUTCMonth(dt.getUTCMonth() + sens)
+        return dt.toISOString().slice(0, 10)
+      }
+      return d
+    })
+  }
 
   const importActif = useMemo(
     () => imports.find((i) => i.id === importActifId) ?? null,
@@ -237,16 +299,68 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
         {erreur && <p className="mt-2 text-xs text-red-600">{erreur}</p>}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-3">
-          <h2 className="mb-2 text-sm font-semibold text-slate-900">Imports</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Historique des piges</h2>
+            {importsFiltres.length > 0 && (
+              <span className="text-[11px] text-slate-400">{importsFiltres.length}</span>
+            )}
+          </div>
+
+          <div className="mb-2 flex rounded-md border border-slate-300 p-0.5">
+            {GRANULARITES.map((g) => (
+              <button
+                key={g.code}
+                type="button"
+                onClick={() => setGranularite(g.code)}
+                className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium transition-colors ${
+                  granularite === g.code ? 'bg-snrt-navy text-white' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+
+          {granularite !== 'TOUT' && (
+            <div className="mb-3 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => decalerPeriode(-1)}
+                className="rounded-md border border-slate-300 p-1 text-slate-500 hover:bg-slate-50"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="flex-1 text-center text-xs font-medium text-slate-700">
+                {labelPeriode(granularite, refDate)}
+              </span>
+              <button
+                type="button"
+                onClick={() => decalerPeriode(1)}
+                className="rounded-md border border-slate-300 p-1 text-slate-500 hover:bg-slate-50"
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setRefDate(aujourdHuiISO())}
+                className="ml-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] text-slate-500 hover:bg-slate-50"
+              >
+                Auj.
+              </button>
+            </div>
+          )}
+
           {chargement ? (
             <p className="text-sm text-slate-500">Chargement…</p>
           ) : imports.length === 0 ? (
             <p className="text-sm text-slate-500">Aucun import de pige pour cette chaîne.</p>
+          ) : importsFiltres.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucun import sur cette période.</p>
           ) : (
             <ul className="space-y-1">
-              {imports.map((imp) => (
+              {importsFiltres.map((imp) => (
                 <li key={imp.id}>
                   <button
                     type="button"
