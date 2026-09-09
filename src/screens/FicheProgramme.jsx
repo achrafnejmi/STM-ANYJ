@@ -757,7 +757,13 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
           </div>
         </fieldset>
       )}
-      {onglet === 'HISTORIQUE' && id && <HistoriqueTitrePanel programmeId={id} />}
+      {onglet === 'HISTORIQUE' && id && (
+        <HistoriqueTitrePanel
+          programmeId={id}
+          titre={programme?.titre ?? form.titre ?? ''}
+          titreAr={programme?.titre_ar ?? form.titre_ar ?? ''}
+        />
+      )}
     </div>
   )
 }

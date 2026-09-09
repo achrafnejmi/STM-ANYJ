@@ -542,7 +542,7 @@ export default function CalendrierPublications({ chaineActive, programmes, confi
 
       {historiqueOuvert && (
         <Modal titre={`Historique — ${historiqueOuvert.titre}`} large onFermer={() => setHistoriqueOuvert(null)}>
-          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} canalInitial="NON_LINEAIRE" sansCadre />
+          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} titre={historiqueOuvert.titre ?? ''} canalInitial="NON_LINEAIRE" sansCadre />
         </Modal>
       )}
 

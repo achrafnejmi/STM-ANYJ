@@ -972,14 +972,19 @@ export async function listerDiffusionsReellesParChaineEtDate(chaineId, date) {
   )
 }
 
-// Rapprochement par nom (pas de FK catalogue) — pour l'onglet Historique de la
-// fiche programme, plus tard.
-export async function listerDiffusionsReellesParProgrammeNom(nom) {
+// Rapprochement par nom (pas de FK catalogue, P36b) — pour l'onglet Historique
+// de la fiche programme. `motCle` = mot le plus long du titre : le serveur
+// pré-filtre en `ilike` (large), l'appelant affine ensuite par comparaison
+// normalisée (inclusion bidirectionnelle). Les sous-lignes (DEBUT)/(SUITE)
+// sont exclues : une diffusion réelle = une ligne parente.
+export async function listerDiffusionsReellesParMotCle(motCle) {
+  if (!motCle) return []
   return verifie(
     await supabase
       .from('diffusion_reelle')
       .select('*')
-      .ilike('programme', nom)
+      .eq('est_sous_ligne', false)
+      .ilike('programme', `%${motCle}%`)
       .order('date', { ascending: false })
       .order('debut_secondes', { ascending: false })
   )

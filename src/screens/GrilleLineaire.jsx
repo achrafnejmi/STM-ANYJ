@@ -1639,7 +1639,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
           large
           onFermer={() => setHistoriqueOuvert(null)}
         >
-          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} canalInitial="LINEAIRE" sansCadre />
+          <HistoriqueTitrePanel programmeId={historiqueOuvert.id} titre={historiqueOuvert.titre ?? ''} canalInitial="LINEAIRE" sansCadre />
         </Modal>
       )}
 

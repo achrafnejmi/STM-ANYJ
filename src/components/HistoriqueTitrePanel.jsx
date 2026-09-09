@@ -4,9 +4,20 @@ import {
   listerEpisodes,
   listerPublicationsReseauParProgramme,
   listerPublicationsVodParProgramme,
+  listerDiffusionsReellesParMotCle,
 } from '../lib/db.js'
 import { aujourdHuiISO, formaterDateLongue } from '../lib/semaine.js'
 import { calculerParEpisode, annoterNature } from '../lib/historique.js'
+import { motCleTitre, pigeCorrespondAuTitre, natureDepuisLibelle } from '../lib/rapprochementPige.js'
+
+const LIBELLE_TYPE_PIGE = {
+  PROGRAMME: 'Programme',
+  BA: 'Bande-annonce',
+  SPOT: 'Spot',
+  AUTO_PROMO: 'Auto-promo',
+  COMMUNIQUE: 'Communiqué',
+  AUTRE: 'Autre',
+}
 
 function libelleVecteur(vecteur) {
   if (vecteur === 'SATELLITE') return 'Satellite'
@@ -26,23 +37,25 @@ const LIBELLE_FORMAT = { POST: 'Post', REEL: 'Reel', STORY: 'Story', VIDEO: 'Vid
 const LIBELLE_STATUT = { BROUILLON: 'Brouillon', PROGRAMME: 'Programmé', PUBLIE: 'Publié', ANNULE: 'Annulé' }
 
 // Historique de diffusion d'un titre (EXG-M6-01, M6-04, onglet Historique de
-// la fiche, P14b puis P31). Snomark n'a aucun constat d'antenne réel :
-// "historique" = consolidation des diffusion_lineaire passées (voir
-// historique.js) et, depuis P31, des publications non-linéaires passées
-// (posts réseaux sociaux + mises en ligne VOD). Deux sous-vues : Linéaire
-// (défaut, existant) et Non-linéaire. Aucune pagination (EXG-M6-01 « sans
-// limitation de nombre ») — conteneur scrollable uniquement.
-export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINEAIRE', sansCadre = false }) {
-  const [ongletCanal, setOngletCanal] = useState(canalInitial) // LINEAIRE | NON_LINEAIRE
+// la fiche, P14b puis P31). Trois sous-vues : Linéaire (diffusion_lineaire
+// PLANIFIÉES passées, voir historique.js), Non-linéaire (publications réseaux
+// + VOD passées, P31) et Réel (pige) — le constat d'antenne réel importé
+// (P36a/P36b), à la seconde, rapproché du titre par le nom (pas de FK :
+// best-effort, voir rapprochementPige.js). Aucune pagination (EXG-M6-01
+// « sans limitation de nombre ») — conteneur scrollable uniquement.
+export default function HistoriqueTitrePanel({ programmeId, titre = '', titreAr = '', canalInitial = 'LINEAIRE', sansCadre = false }) {
+  const [ongletCanal, setOngletCanal] = useState(canalInitial) // LINEAIRE | NON_LINEAIRE | REEL
   const [diffusions, setDiffusions] = useState([])
   const [episodes, setEpisodes] = useState([])
   const [publicationsReseau, setPublicationsReseau] = useState([])
   const [publicationsVod, setPublicationsVod] = useState([])
+  const [diffusionsReelles, setDiffusionsReelles] = useState([])
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtreEpisode, setFiltreEpisode] = useState('')
   const [filtreChaine, setFiltreChaine] = useState('')
   const [filtrePlateforme, setFiltrePlateforme] = useState('')
+  const [filtreChaineReel, setFiltreChaineReel] = useState('')
 
   useEffect(() => {
     setChargement(true)
@@ -50,21 +63,28 @@ export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINE
     setFiltreEpisode('')
     setFiltreChaine('')
     setFiltrePlateforme('')
+    setFiltreChaineReel('')
     Promise.all([
       listerDiffusionsLineairesParProgramme(programmeId),
       listerEpisodes(programmeId),
       listerPublicationsReseauParProgramme(programmeId),
       listerPublicationsVodParProgramme(programmeId),
+      listerDiffusionsReellesParMotCle(motCleTitre(titre)),
     ])
-      .then(([lignesDiffusions, lignesEpisodes, lignesReseau, lignesVod]) => {
+      .then(([lignesDiffusions, lignesEpisodes, lignesReseau, lignesVod, lignesReelles]) => {
         setDiffusions(lignesDiffusions)
         setEpisodes(lignesEpisodes)
         setPublicationsReseau(lignesReseau)
         setPublicationsVod(lignesVod)
+        // Affine le pré-filtre serveur : on ne garde que les lignes dont le
+        // nom correspond vraiment au titre (FR ou AR).
+        setDiffusionsReelles(
+          lignesReelles.filter((d) => pigeCorrespondAuTitre(d.programme, [titre, titreAr]))
+        )
       })
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false))
-  }, [programmeId])
+  }, [programmeId, titre, titreAr])
 
   const aujourdHui = aujourdHuiISO()
 
@@ -127,6 +147,18 @@ export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINE
     [publicationsReseau, publicationsVod, aujourdHui]
   )
 
+  // --- réel (pige) : constat d'antenne réel rapproché du titre par le nom ---
+  // Déjà trié date/début décroissants par la requête. La pige est par nature
+  // un passé (constat) : aucun filtre « passées » supplémentaire.
+  const chainesReelles = useMemo(
+    () => [...new Set(diffusionsReelles.map((d) => d.chaine_nom).filter(Boolean))].sort(),
+    [diffusionsReelles]
+  )
+  const diffusionsReellesFiltrees = useMemo(
+    () => diffusionsReelles.filter((d) => !filtreChaineReel || d.chaine_nom === filtreChaineReel),
+    [diffusionsReelles, filtreChaineReel]
+  )
+
   return (
     <div className={sansCadre ? '' : 'rounded-lg border border-slate-200 bg-white p-6'}>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -138,6 +170,13 @@ export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINE
             className={`px-3 py-1.5 ${ongletCanal === 'LINEAIRE' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             Linéaire
+          </button>
+          <button
+            type="button"
+            onClick={() => setOngletCanal('REEL')}
+            className={`px-3 py-1.5 ${ongletCanal === 'REEL' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            Réel (pige){diffusionsReelles.length > 0 ? ` · ${diffusionsReelles.length}` : ''}
           </button>
           <button
             type="button"
@@ -275,6 +314,75 @@ export default function HistoriqueTitrePanel({ programmeId, canalInitial = 'LINE
             )}
           </div>
         </>
+      )}
+
+      {!chargement && !erreur && ongletCanal === 'REEL' && (
+        <div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">Diffusions réelles (pige)</h3>
+            {chainesReelles.length > 1 && (
+              <select
+                value={filtreChaineReel}
+                onChange={(e) => setFiltreChaineReel(e.target.value)}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+              >
+                <option value="">Toutes les chaînes</option>
+                {chainesReelles.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <p className="mb-2 text-xs text-slate-500">
+            Constat d'antenne réel importé (à la seconde), rapproché de ce titre par le nom — sans
+            lien ferme avec le catalogue ni les épisodes.
+          </p>
+          {diffusionsReellesFiltrees.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucune diffusion réelle rapprochée à ce titre dans les piges importées.</p>
+          ) : (
+            <div className="max-h-96 overflow-y-auto rounded-md border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    <th className="py-2 pl-3 pr-4 font-medium">Date</th>
+                    <th className="py-2 pr-4 font-medium">Début</th>
+                    <th className="py-2 pr-4 font-medium">Fin</th>
+                    <th className="py-2 pr-4 font-medium">Chaîne</th>
+                    <th className="py-2 pr-4 font-medium">Type</th>
+                    <th className="py-2 pr-4 font-medium">Libellé</th>
+                    <th className="py-2 pr-4 font-medium">Nature</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diffusionsReellesFiltrees.map((d) => {
+                    const nature = natureDepuisLibelle(d.libelle_complementaire)
+                    return (
+                      <tr key={d.id} className="border-b border-slate-100">
+                        <td className="py-2 pl-3 pr-4 text-slate-700">{formaterDateLongue(d.date)}</td>
+                        <td className="whitespace-nowrap py-2 pr-4 text-slate-700">{(d.heure_debut ?? '').slice(0, 8)}</td>
+                        <td className="whitespace-nowrap py-2 pr-4 text-slate-500">{(d.heure_fin ?? '').slice(0, 8)}</td>
+                        <td className="py-2 pr-4 text-slate-700">{d.chaine_nom}</td>
+                        <td className="py-2 pr-4 text-slate-600">{LIBELLE_TYPE_PIGE[d.type_element] ?? d.type_element}</td>
+                        <td className="py-2 pr-4 text-slate-500">{d.libelle_complementaire || '—'}</td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                              nature === 'Rediffusion' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            {nature}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {!chargement && !erreur && ongletCanal === 'NON_LINEAIRE' && (

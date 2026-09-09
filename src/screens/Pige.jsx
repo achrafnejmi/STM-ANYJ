@@ -28,6 +28,14 @@ const LIBELLES_TYPE = {
 }
 const PILE_VIDE = { peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null }
 
+// Horodatage court d'un import (timestamptz) → « 31/08/2026 14:23 ».
+function formaterHorodatage(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 export default function Pige({ chaineActive, roleUtilisateur }) {
   const lectureSeule = !peutImporterPige(roleUtilisateur)
   const { confirmer } = useNotification()
@@ -229,6 +237,10 @@ export default function Pige({ chaineActive, roleUtilisateur }) {
                         {imp.actif ? 'Actif' : 'Archivé'}
                       </span>
                       <span>· {imp.nb_lignes} lignes</span>
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-slate-400">
+                      Importé le {formaterHorodatage(imp.cree_le)}
+                      {imp.cree_par ? ` par ${imp.cree_par}` : ''}
                     </span>
                   </button>
                 </li>
