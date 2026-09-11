@@ -3,6 +3,8 @@ import { Clock, List as ListIcon, Search, Upload, Settings } from 'lucide-react'
 import { VerticalTimeline } from '../helpers/VerticalTimeline';
 import PlanMediaAdministration from '../helpers/PlanMediaAdministration.jsx';
 import './PlanMedia.css';
+import { MdCloudSync } from "react-icons/md";
+
 import { useEffect } from 'react';
 import {
   listerPlanMediaParChaine,
@@ -12,9 +14,17 @@ import {
   listerGrillesTypeParChaine,
   listerProgrammesParChaine,
   listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
-  insererPlanificationsMedia
+  insererPlanificationsMedia, listerPlanificationsMedia,
+  data_refrech, listerClassificationsProgrammes
 } from '../lib/db.js';
 import { Plus, Trash2, X } from 'lucide-react';
+// Remplacez import * as XLSX from 'xlsx'; par :
+import * as XLSX from 'xlsx-js-style';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable'; // <-- Modification ici
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, AlignmentType, WidthType } from 'docx';
+import { saveAs } from 'file-saver';
+import toast from 'react-hot-toast';
 
 export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = false }) {
 
@@ -60,77 +70,130 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
   };
 
 
-  
+
+  // 2. Fonction déclenchée quand l'utilisateur choisit un programme dans la liste
+  const getclassifications = () => {
+    const diffusionActuelle = diffusions.find(
+      d => d.episode_id === formEpisodeId
+    );
+
+    const classificationIA = diffusionActuelle
+      ? ProgrammeClassification.find(
+        c => c.programme_id === diffusionActuelle.programme_id
+      )
+      : null;
 
 
-// Utilitaire pour ajouter des secondes à une heure au format "HH:MM:SS"
-const ajouterSecondesHeure = (timeStr, secondsToAdd) => {
-  if (!timeStr) return '00:00:00';
-  const parts = timeStr.split(':');
-  let hours = parseInt(parts[0] || 0, 10);
-  let minutes = parseInt(parts[1] || 0, 10);
-  let seconds = parseInt(parts[2] || 0, 10);
-
-  let totalSeconds = hours * 3600 + minutes * 60 + seconds + parseInt(secondsToAdd, 10);
-  
-  let h = Math.floor(totalSeconds / 3600) % 24;
-  let m = Math.floor((totalSeconds % 3600) / 60);
-  let s = totalSeconds % 60;
-
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-};
-
-const gererSoumissionFormulaire = async (e) => {
-  e.preventDefault();
-  
-  try {
-    // 1. Trouver la diffusion correspondante à l'épisode sélectionné pour récupérer la date, grille et chaîne
-    const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
-    
-    if (!diffusionActuelle) {
-      console.error("Aucune diffusion trouvée pour cet épisode.");
-      return;
+    if (!classificationIA) {
+      return (
+        <div className="classification-unavailable">
+          <span className="classification-unavailable-icon">ℹ</span>
+          <span>La classification n'est pas encore disponible</span>
+        </div>
+      );
     }
 
-    // 2. Préparer le tableau des planifications à insérer
-    const planificationsPayload = formAnnonces.map(annonceItem => {
-      let timestart = '00:00:00';
-      
-      if (annonceItem.mode === 'exact') {
-        timestart = annonceItem.timeExact.length === 5 ? `${annonceItem.timeExact}:00` : annonceItem.timeExact;
-      } else {
-        // Mode décalage : ajoute les secondes par rapport à l'heure de début de l'épisode
-        const heureDebutEpisode = diffusionActuelle.heure_debut || '00:00:00';
-        timestart = ajouterSecondesHeure(heureDebutEpisode, annonceItem.offsetSeconds);
+    return (
+      <div className="classification-container">
+        <div className="classification-title">
+          Classification du programme
+        </div>
+
+        <div className="classification-items">
+
+          <div className="classification-card classification-enfant">
+            <span className="classification-label">Enfant</span>
+            <span className="classification-score">
+              {classificationIA.enfant_point ?? 0}
+            </span>
+          </div>
+
+          <div className="classification-card classification-adulte">
+            <span className="classification-label">Adulte</span>
+            <span className="classification-score">
+              {classificationIA.adult_point ?? 0}
+            </span>
+          </div>
+
+          <div className="classification-card classification-senior">
+            <span className="classification-label">Senior</span>
+            <span className="classification-score">
+              {classificationIA.senior_point ?? 0}
+            </span>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+  // Utilitaire pour ajouter des secondes à une heure au format "HH:MM:SS"
+  const ajouterSecondesHeure = (timeStr, secondsToAdd) => {
+    if (!timeStr) return '00:00:00';
+    const parts = timeStr.split(':');
+    let hours = parseInt(parts[0] || 0, 10);
+    let minutes = parseInt(parts[1] || 0, 10);
+    let seconds = parseInt(parts[2] || 0, 10);
+
+    let totalSeconds = hours * 3600 + minutes * 60 + seconds + parseInt(secondsToAdd, 10);
+
+    let h = Math.floor(totalSeconds / 3600) % 24;
+    let m = Math.floor((totalSeconds % 3600) / 60);
+    let s = totalSeconds % 60;
+
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const gererSoumissionFormulaire = async (e) => {
+    e.preventDefault();
+
+    try {
+      // 1. Trouver la diffusion correspondante à l'épisode sélectionné pour récupérer la date, grille et chaîne
+      const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
+
+      if (!diffusionActuelle) {
+        console.error("Aucune diffusion trouvée pour cet épisode.");
+        return;
       }
 
-      // Calculer l'heure de fin en fonction de la durée de l'annonce (par défaut 30s)
-      const stockAnnonce = stockAnnonces.find(s => s.id === annonceItem.annonceId);
-      const dureeSec = stockAnnonce?.duration || 30;
-      const timeend = ajouterSecondesHeure(timestart, dureeSec);
-      if(!filtreGrilleId){alert("ooops no grille id");}
-      return {
-        episode_id: formEpisodeId,
-        annonce_id: annonceItem.annonceId,
-        grille_id: filtreGrilleId,
-        chaine_id: diffusionActuelle.chaine_id || null,
-        date: diffusionActuelle.date_diffusion || diffusionActuelle.date,
-        timestart: timestart,
-        timeend: timeend
-      };
-    });
+      // 2. Préparer le tableau des planifications à insérer
+      const planificationsPayload = formAnnonces.map(annonceItem => {
+        let timestart = '00:00:00';
 
-    // 3. Appel de la fonction d'insertion en base de données
-    await insererPlanificationsMedia(planificationsPayload);
+        if (annonceItem.mode === 'exact') {
+          timestart = annonceItem.timeExact.length === 5 ? `${annonceItem.timeExact}:00` : annonceItem.timeExact;
+        } else {
+          // Mode décalage : ajoute les secondes par rapport à l'heure de début de l'épisode
+          const heureDebutEpisode = diffusionActuelle.heure_debut || '00:00:00';
+          timestart = ajouterSecondesHeure(heureDebutEpisode, annonceItem.offsetSeconds);
+        }
 
-    console.log("Planifications enregistrées avec succès !");
-    fermerModal();
-    
-    // Optionnel : Recharger vos données de planifications ici si nécessaire
-  } catch (error) {
-    console.error("Erreur lors de l'enregistrement des planifications :", error);
-  }
-};
+        // Calculer l'heure de fin en fonction de la durée de l'annonce (par défaut 30s)
+        const stockAnnonce = stockAnnonces.find(s => s.id === annonceItem.annonceId);
+        const dureeSec = stockAnnonce?.duration || 30;
+        const timeend = ajouterSecondesHeure(timestart, dureeSec);
+        if (!filtreGrilleId) { alert("ooops no grille id"); }
+        return {
+          episode_id: formEpisodeId,
+          annonce_id: annonceItem.annonceId,
+          grille_id: filtreGrilleId,
+          chaine_id: diffusionActuelle.chaine_id || null,
+          date: diffusionActuelle.date_diffusion || diffusionActuelle.date,
+          timestart: timestart,
+          timeend: timeend
+        };
+      });
+
+      // 3. Appel de la fonction d'insertion en base de données
+      await insererPlanificationsMedia(planificationsPayload);
+
+      console.log("Planifications enregistrées avec succès !");
+      fermerModal();
+
+      // Optionnel : Recharger vos données de planifications ici si nécessaire
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement des planifications :", error);
+    }
+  };
 
 
   // Navigation principale entre Gestion Plan Média, Validation Pige et Administration Plan Média
@@ -144,7 +207,7 @@ const gererSoumissionFormulaire = async (e) => {
   const [programmes, setProgrammes] = useState([]);
   const [episodes, setEpisodes] = useState([]);
   const [diffusions, setDiffusions] = useState([]);
-  // Le stock d'annonces démarre vide, il sera peuplé par Supabase via plan_media_stock
+  const [planificationsMedia, setPlanificationsMedia] = useState([]);  // Le stock d'annonces démarre vide, il sera peuplé par Supabase via plan_media_stock
   const [stockAnnonces, setStockAnnonces] = useState([]);
   // États pour les filtres et la recherche de la timeline (colonne gauche)
   const [filtresTimeline, setFiltresTimeline] = useState(['annonce', 'programme']);
@@ -153,7 +216,7 @@ const gererSoumissionFormulaire = async (e) => {
   // États pour la recherche et les 4 boutons de la liste (colonne droite)
   const [filtreOrdre, setFiltreOrdre] = useState('enfant');
   const [rechercheListe, setRechercheListe] = useState('');
-
+  const [ProgrammeClassification, setProgrammeClassification] = useState([]);
   // État pour la Pige Validation (upload fichier excel)
   const [fichierPige, setFichierPige] = useState(null);
 
@@ -168,9 +231,6 @@ const gererSoumissionFormulaire = async (e) => {
 
   // Fake data for the timeline
   const mockEvents = [
-    { id: 1, time: '06:00', name: 'Début Antenne', details: { type: 'Ouverture', duree: '00:00:00' } },
-    { id: 2, time: '06:15', name: 'Journal Télévisé', details: { type: 'Information', duree: '00:45:00', description: 'Édition matinale' } },
-    { id: 3, time: '07:00', name: 'Coupure Libre', details: { type: 'Publicité', duree: '00:05:00' } },
   ];
 
   // Filtrage dynamique du stock d'annonces pour la colonne de droite
@@ -183,6 +243,7 @@ const gererSoumissionFormulaire = async (e) => {
     const scoreB = b.pourcentages?.[filtreOrdre] || b[`${filtreOrdre}percentage`] || b.grand_percentage || 0;
     return scoreB - scoreA;
   });
+  const [isModalOuvert, setIsModalOuvert] = useState(false);
 
 
 
@@ -219,15 +280,19 @@ const gererSoumissionFormulaire = async (e) => {
           grillesTypesDb,
           programmesDb,
           episodesDb,
-          diffusionsDb // <-- Ajoutez ceci
+          diffusionsDb,
+          planificationsMediaDb,
+          programmeclassificationDb
+          // <-- Ajoutez ceci
         ] = await Promise.all([
           planCourant?.id ? listerPlanMediaStockParPlanMedia(planCourant.id) : Promise.resolve([]),
           listerGrillesParChaine(chaineActive.id),
           listerGrillesTypeParChaine(chaineActive.id),
           listerProgrammesParChaine(chaineActive.id),
           listerTousLesEpisodes(),
-          listerDiffusionsLineairesParChaine(chaineActive.id) // <-- Ajoutez l'appel API ici
-        ]);
+          listerDiffusionsLineairesParChaine(chaineActive.id), // <-- Ajoutez l'appel API ici
+          listerPlanificationsMedia(),
+          listerClassificationsProgrammes()]);
 
         if (actif) {
           setStockAnnonces(stockDb || []);
@@ -235,7 +300,9 @@ const gererSoumissionFormulaire = async (e) => {
           setGrilleTypes(grillesTypesDb || []);
           setProgrammes(programmesDb || []);
           setEpisodes(episodesDb || []);
-          setDiffusions(diffusionsDb || []); // <-- Stockez le résultat ici
+          setDiffusions(diffusionsDb || []);
+          setPlanificationsMedia(planificationsMediaDb || []);
+          setProgrammeClassification(programmeclassificationDb)// <-- Stockez le résultat ici
         }
       } catch (erreur) {
         console.error("Erreur lors du chargement des données Plan Média :", erreur);
@@ -249,7 +316,11 @@ const gererSoumissionFormulaire = async (e) => {
     return () => {
       actif = false;
     };
-  }, [chaineActive?.id]);
+  }, [chaineActive?.id, filtreGrilleId, isModalOuvert]);
+
+
+
+
   // Construction dynamique des événements pour la Timeline
 
   const genererEvenementsTimeline = () => {
@@ -295,25 +366,28 @@ const gererSoumissionFormulaire = async (e) => {
       });
     }
 
-    // 2. Intégrer le stock d'annonces
-    if (stockAnnonces && stockAnnonces.length > 0 && filtresTimeline.includes('annonce')) {
-      stockAnnonces.forEach((annonce) => {
-        const titreAnnonce = annonce.nom || annonce.title || '';
+    if (planificationsMedia && planificationsMedia.length > 0 && filtresTimeline.includes('annonce')) {
+      planificationsMedia.forEach((plan) => {
+        // Filtrer par grille si un filtre de grille est actif
+        if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+
+        // Récupérer l'annonce liée depuis le stock si nécessaire pour afficher son nom/durée
+        const stockAnnonce = stockAnnonces.find(s => s.id === plan.annonce_id);
+        const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
 
         if (rechercheTimeline.trim() === '' || titreAnnonce.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
-          const dateObj = annonce.date_debut ? new Date(annonce.date_debut) : new Date();
-          const dateStr = dateObj.toISOString().split('T')[0];
-          const timeStr = annonce.date_debut ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00';
+          const dateStr = plan.date || new Date().toISOString().split('T')[0];
+          const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
 
           eventsGenerees.push({
-            id: annonce.id,
+            id: plan.id,
             date_tri: dateStr,
             time: timeStr,
             name: titreAnnonce,
             details: {
-              type: annonce.type || 'Publicité',
-              duree: `${annonce.duration || 30}s`,
-              description: annonce.client ? `Client : ${annonce.client}` : (annonce.metadonne || '')
+              type: 'Publicité',
+              duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
+              description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
             }
           });
         }
@@ -335,8 +409,15 @@ const gererSoumissionFormulaire = async (e) => {
 
     return eventsGenerees.length > 0 ? eventsGenerees : mockEvents;
   };
+
+
+
+
+
+
+
+
   const [rechercheEpisodeForm, setRechercheEpisodeForm] = useState('');
-  const [isModalOuvert, setIsModalOuvert] = useState(false);
   const handleEpisodeSelection = (episodeId) => {
     setFormEpisodeId(episodeId);
     setFormAnnonces([{ idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }]);
@@ -362,8 +443,405 @@ const gererSoumissionFormulaire = async (e) => {
 
 
 
+  const [modalExportOuvert, setModalExportOuvert] = useState(false);
+  const [exportTitre, setExportTitre] = useState('');
+  const [exportDate, setExportDate] = useState('');
+  const [exportGrilleId, setExportGrilleId] = useState('');
+
+
+
+  const preparerDonneesExport = () => {
+    const donneesFiltrees = planificationsMedia.filter(plan => {
+      if (exportGrilleId && plan.grille_id !== exportGrilleId) return false;
+      if (exportDate) {
+        if (!plan.date) return false;
+        const planDateSeule = String(plan.date).split('T')[0].trim().substring(0, 10);
+        if (planDateSeule !== exportDate) return false;
+      }
+      return true;
+    });
+
+    if (donneesFiltrees.length === 0) {
+      alert("Aucune annonce planifiée pour cette date et cette grille.");
+      return null;
+    }
+
+    const joursFrancais = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+    const planificationsGroupees = donneesFiltrees.reduce((acc, plan) => {
+      if (!acc[plan.episode_id]) acc[plan.episode_id] = [];
+      acc[plan.episode_id].push(plan);
+      return acc;
+    }, {});
+
+    const lignesExport = [];
+
+    Object.values(planificationsGroupees).forEach(groupe => {
+      groupe.sort((a, b) => (a.timestart || '').localeCompare(b.timestart || ''));
+      groupe.forEach((plan, index) => {
+        const dateStr = String(plan.date).trim().substring(0, 10);
+        const [annee, mois, jour] = dateStr.split('-');
+        const dateObj = new Date(annee, mois - 1, jour);
+        const jourTexte = joursFrancais[dateObj.getDay()];
+
+        const episode = episodes.find(e => e.id === plan.episode_id) || {};
+        const programme = programmes.find(p => p.id === episode.programme_id) || {};
+        const stockAnnonce = stockAnnonces.find(a => a.id === plan.annonce_id) || plan.plan_media_stock || {};
+
+        const estPremiereLigne = index === 0;
+        const titreContexte = programme.titre || programme.nom || episode.titre || episode.nom || `Épisode ${episode.numero || ''}`;
+
+        const dureeSec = stockAnnonce.duration || 0;
+        const h = Math.floor(dureeSec / 3600);
+        const m = Math.floor((dureeSec % 3600) / 60);
+        const s = dureeSec % 60;
+
+        lignesExport.push({
+          JOUR: jourTexte,
+          H: estPremiereLigne && plan.timestart ? plan.timestart.substring(0, 5) : '',
+          CONTEXTE: estPremiereLigne ? titreContexte : '',
+          CONTENU: stockAnnonce.nom || stockAnnonce.title || 'Annonce Inconnue',
+          DUREE: `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        });
+      });
+    });
+
+    return lignesExport;
+  };
+
+
+  const exporterVersPDF = (e) => {
+    e.preventDefault();
+    const lignesExport = preparerDonneesExport();
+    if (!lignesExport) return;
+
+    // Création du document
+    const doc = new jsPDF('landscape');
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(titreFinal, doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+
+    const tableData = lignesExport.map(row => [row.JOUR, row.H, row.CONTEXTE, row.CONTENU, row.DUREE]);
+
+    // ATTENTION ICI : doc doit absolument être le premier paramètre !
+    autoTable(doc, {
+      startY: 25,
+      head: [['JOUR', 'H.', 'CONTEXTE', 'CONTENU', 'DUREE']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left' },
+      styles: { fontStyle: 'bold', valign: 'middle', textColor: [20, 20, 20] },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 'auto' },
+        4: { cellWidth: 25 }
+      }
+    });
+
+    doc.save(`PM_${exportDate || 'Export'}.pdf`);
+    setModalExportOuvert(false);
+  };
+
+  const exporterVersWord = async (e) => {
+    e.preventDefault();
+    const lignesExport = preparerDonneesExport();
+    if (!lignesExport) return;
+
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+
+    // En-têtes du tableau avec fond gris clair
+    const headerRow = new TableRow({
+      tableHeader: true,
+      children: ['JOUR', 'H.', 'CONTEXTE', 'CONTENU', 'DUREE'].map(text =>
+        new TableCell({
+          shading: { fill: "F3F4F6" },
+          children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 24 })] })]
+        })
+      )
+    });
+
+    // Lignes de données (Texte en gras / bold = true)
+    const dataRows = lignesExport.map(row =>
+      new TableRow({
+        children: [row.JOUR, row.H, row.CONTEXTE, row.CONTENU, row.DUREE].map(text =>
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: text || '', bold: true, size: 22 })] })]
+          })
+        )
+      })
+    );
+
+    const table = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [headerRow, ...dataRows]
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: titreFinal, bold: true, size: 32 })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 } // Espace sous le titre
+          }),
+          table
+        ]
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `PM_${exportDate || 'Export'}.docx`);
+    setModalExportOuvert(false);
+  };
+
+  const exporterVersExcel = (e) => {
+    e.preventDefault();
+
+    // 1. Filtrer les planifications selon la grille et la date sélectionnées
+
+
+
+    const donneesFiltrees = planificationsMedia.filter(plan => {
+      let correspond = true;
+      if (exportGrilleId && plan.grille_id !== exportGrilleId) correspond = false;
+      if (exportDate && plan.date !== exportDate) correspond = false;
+
+      return correspond;
+    });
+
+    if (donneesFiltrees.length === 0) {
+      alert("Aucune donnée ne correspond à cette grille et cette date.");
+      return;
+    }
+
+    const joursFrancais = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+
+    // 2. Grouper par épisode
+    const planificationsGroupees = donneesFiltrees.reduce((acc, plan) => {
+      if (!acc[plan.episode_id]) acc[plan.episode_id] = [];
+      acc[plan.episode_id].push(plan);
+      return acc;
+    }, {});
+
+    const lignesExcel = [];
+
+    // 3. Construire les lignes
+    Object.values(planificationsGroupees).forEach(groupe => {
+      groupe.sort((a, b) => (a.timestart || '').localeCompare(b.timestart || ''));
+
+      groupe.forEach((plan, index) => {
+        // Extraction du jour en gérant la conversion de date
+        const dateStr = String(plan.date).trim().substring(0, 10);
+        const [annee, mois, jour] = dateStr.split('-');
+        const dateObj = new Date(annee, mois - 1, jour);
+        const jourTexte = joursFrancais[dateObj.getDay()];
+
+        // Résolution manuelle depuis les tableaux (pas de relations Supabase directes)
+        const episode = episodes.find(e => e.id === plan.episode_id) || {};
+        const programme = programmes.find(p => p.id === episode.programme_id) || {};
+        const stockAnnonce = stockAnnonces.find(a => a.id === plan.annonce_id) || plan.plan_media_stock || {};
+
+        const estPremiereLigne = index === 0;
+
+        // Affichage prioritaire : Titre Programme -> Titre Épisode -> Numéro Épisode
+        const titreContexte = programme.titre || programme.nom || episode.titre || episode.nom || `Épisode ${episode.numero || ''}`;
+        const contexteTexte = estPremiereLigne ? titreContexte : '';
+
+        const heureTexte = estPremiereLigne && plan.timestart ? plan.timestart.substring(0, 5) : '';
+
+        const dureeSec = stockAnnonce.duration || 0;
+        const h = Math.floor(dureeSec / 3600);
+        const m = Math.floor((dureeSec % 3600) / 60);
+        const s = dureeSec % 60;
+        const dureeFormatee = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+        lignesExcel.push({
+          'JOUR': jourTexte,
+          'H.FIN': heureTexte,
+          'CONTEXTE': contexteTexte,
+          'CONTENU': stockAnnonce.nom || stockAnnonce.title || 'Annonce Inconnue',
+          'DUREE': dureeFormatee
+        });
+      });
+    });
+
+    // 4. Création de la feuille (Décalage à la ligne 3 pour laisser place au titre)
+    const worksheet = XLSX.utils.json_to_sheet(lignesExcel, { origin: "A3" });
+    // 5. Ajout du Titre personnalisé en A1
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+    XLSX.utils.sheet_add_aoa(worksheet, [[titreFinal]], { origin: "A1" });
+
+    // Fusionner les cellules (A1 à E1) pour que le titre soit centré visuellement
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }
+    ];
+
+    // Ajustement de la largeur des colonnes
+    worksheet['!cols'] = [
+      { wch: 15 }, // JOUR
+      { wch: 10 }, // H.
+      { wch: 40 }, // CONTEXTE
+      { wch: 55 }, // CONTENU
+      { wch: 12 }  // DUREE
+    ];
+
+
+    // 6. Application des styles (Titre, En-têtes, Contenu)
+    for (const cellAddress in worksheet) {
+      // Ignorer les métadonnées de la feuille (qui commencent par '!')
+      if (cellAddress.startsWith('!')) continue;
+
+      const rowNum = parseInt(cellAddress.replace(/\D/g, ''), 10);
+
+      // Initialiser l'objet style pour la cellule
+      worksheet[cellAddress].s = {};
+
+      if (rowNum === 1) {
+        // Titre principal (Ligne 1) : Grand et centré
+        worksheet[cellAddress].s = {
+          font: { sz: 16, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+      else if (rowNum === 3) {
+        // En-têtes de colonnes (Ligne 3) : En gras et fond léger
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 12 },
+          fill: { fgColor: { rgb: "F3F4F6" } }, // Gris très clair pour détacher l'en-tête
+          alignment: { horizontal: 'left', vertical: 'center' }
+        };
+      }
+      else if (rowNum > 3) {
+        // Contenu des données (Lignes > 3) : En gras ("bald") comme demandé
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 11 },
+          alignment: { vertical: 'center' }
+        };
+      }
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Conducteur PM");
+
+    XLSX.writeFile(workbook, `PM_${exportDate || 'Export'}.xlsx`);
+
+    // Fermer le modal
+    setModalExportOuvert(false);
+  };
+
+  const [exportFormat, setExportFormat] = useState('excel');
+  const [dateFiltreEpisodes, setDateFiltreEpisodes] = useState("");
+  const gererSoumissionExport = (e) => {
+    e.preventDefault();
+
+    if (exportFormat === 'excel') {
+      exporterVersExcel(e);
+    } else if (exportFormat === 'word') {
+      exporterVersWord(e);
+    } else if (exportFormat === 'pdf') {
+      exporterVersPDF(e);
+    }
+  };
   return (
     <div className="space-y-6">
+
+      {/* MODAL D'EXPORTATION EXCEL */}
+      {modalExportOuvert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+
+            {/* Header Modal */}
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-semibold text-slate-800 text-lg">Exporter le conducteur</h3>
+              <button onClick={() => setModalExportOuvert(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Formulaire */}
+            <form onSubmit={gererSoumissionExport} className="p-5 flex flex-col gap-5">
+
+              {/* Titre du document */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Titre du document Excel</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: PM VENDREDI 04 SEPT 2026"
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportTitre}
+                  onChange={(e) => setExportTitre(e.target.value)}
+                />
+              </div>
+
+              {/* Sélection de la Grille */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Grille ciblée</label>
+                <select
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportGrilleId}
+                  onChange={(e) => setExportGrilleId(e.target.value)}
+                >
+                  <option value="">-- Sélectionnez une grille --</option>
+                  {grilles.map(grille => (
+                    <option key={grille.id} value={grille.id}>
+                      {grille.nom || grille.titre || `Grille #${grille.id.substring(0, 5)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sélection de la Date */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date de programmation</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportDate}
+                  onChange={(e) => setExportDate(e.target.value)}
+                />
+              </div>
+
+              {/* Actions */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Format d'exportation</label>
+                <select
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                >
+                  <option value="excel">Excel (.xlsx)</option>
+                  <option value="word">Word (.docx)</option>
+                  <option value="pdf">PDF (.pdf)</option>
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-2 flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalExportOuvert(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+                >
+                  Générer le fichier
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Barre d'outils globale (Top) avec les 3 boutons de navigation */}
       <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -428,6 +906,40 @@ const gererSoumissionFormulaire = async (e) => {
                 })}
               </select>
             </div>
+
+            <button
+              onClick={() => { setModalExportOuvert(true) }}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-1.5 px-3 rounded shadow-sm transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Exporter
+            </button>
+
+
+            <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech classifications'
+
+              onClick={async () => {
+                if (!filtreGrilleId) {
+                  toast.error("Veuillez sélectionner une grille d'abord.");
+                  return;
+                }
+
+                try {
+                  await data_refrech(filtreGrilleId);
+                  toast.success("Classifications actualisées !");
+                } catch (error) {
+                  console.error(error);
+                  toast.error("Erreur lors de l'actualisation.");
+                }
+              }}
+            >
+              <MdCloudSync size={20} />
+
+            </button>
           </div>
         </div>
       </div>
@@ -506,7 +1018,7 @@ const gererSoumissionFormulaire = async (e) => {
 
                 {/* Barre de recherche */}
                 <div className="p-3 border-b border-slate-200 bg-slate-50/80 shrink-0">
-                  <div className="relative">
+                  <div className="relative" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
                     <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
                     <input
                       type="text"
@@ -514,6 +1026,14 @@ const gererSoumissionFormulaire = async (e) => {
                       className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-shadow"
                       value={rechercheEpisodeForm}
                       onChange={(e) => setRechercheEpisodeForm(e.target.value)}
+                    />
+                    <input
+                      type="date"
+
+                      style={{ maxWidth: "200px", height: "40px", fontSize: "14px" }}
+                      value={dateFiltreTimeline}
+                      onChange={(e) => setDateFiltreEpisodes(e.target.value)}
+                      className="w-full rounded-md border border-slate-200 py-1.5 px-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent "
                     />
                   </div>
                 </div>
@@ -658,27 +1178,78 @@ const gererSoumissionFormulaire = async (e) => {
             </div>
 
             {/* Contenu de la liste dynamique */}
-            <div className="space-y-3 overflow-y-auto flex-1">
+            <div className="space-y-0.5 overflow-y-auto flex-1">
               {listeFiltree.length === 0 ? (
                 <p className="text-xs text-slate-400 italic text-center py-6">Aucun élément trouvé.</p>
               ) : (
                 listeFiltree.map((item) => (
                   <div
                     key={item.id}
-                    className="group cursor-pointer rounded-md border border-slate-200 p-3 transition-colors hover:border-snrt-accent hover:bg-snrt-accent/5"
+                    className="
+          group flex items-center gap-2
+          h-7 px-2.5
+          rounded-sm
+          border border-slate-200/80
+          bg-white
+          cursor-pointer
+          transition-all duration-150
+          hover:border-snrt-accent/50
+          hover:bg-slate-50
+          hover:shadow-sm
+        "
                   >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-snrt-navy">{item.type}</span>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 group-hover:bg-white">
-                        {item.duration ? `${item.duration}s` : '30s'}
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium text-slate-800">{item.nom || item.title}</p>
+                    {/* Type */}
+                    <span
+                      className="
+            shrink-0 rounded
+            bg-snrt-navy/10
+            px-1.5 py-0.5
+            text-[9px] font-semibold uppercase tracking-wide
+            text-snrt-navy
+          "
+                    >
+                      {item.type}
+                    </span>
+
+                    {/* Name */}
+                    <p
+                      className="
+            min-w-0 flex-1 truncate
+            text-[12px] 
+            text-slate-700
+            group-hover:text-slate-900
+          "
+                      title={item.nom || item.title}
+                    >
+                      {item.nom || item.title}
+                    </p>
+
+                    {/* Duration */}
+                    <span
+                      className="
+            shrink-0
+            flex items-center gap-1
+            text-[10px] font-medium
+            text-slate-400
+            group-hover:text-snrt-navy
+          "
+                    >
+
+                      {item.duration}
+                    </span>
                   </div>
                 ))
               )}
             </div>
           </aside>
+
+
+
+
+
+
+
+
           {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
           {isModalOuvert && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -693,7 +1264,7 @@ const gererSoumissionFormulaire = async (e) => {
                       Insertion d'annonces
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Épisode sélectionné : <span className="font-medium text-indigo-600">
+                      Épisode sélectionné : <span className="font-medium" style={{ color: "orange" }}>
                         {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
                       </span>
                     </p>
@@ -709,25 +1280,33 @@ const gererSoumissionFormulaire = async (e) => {
                 {/* Corps de la modale avec défilement */}
                 <form onSubmit={gererSoumissionFormulaire} className="flex flex-col flex-1 overflow-hidden">
                   <div className="flex-1 overflow-y-auto p-5 pm-slim-scroll bg-slate-50/30">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-slate-700">Liste des annonces à attacher</h3>
-                      <button
-                        type="button"
-                        onClick={ajouterAnnonceAuFormulaire}
-                        className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
-                      >
-                        <Plus size={14} /> Ajouter une annonce
-                      </button>
+                    <div className="flex items-center justify-between mb-4" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                        <h3 className="text-sm font-semibold text-slate-700">Liste des annonces à attacher</h3>
+                      </div>
+                      <>{getclassifications()}</>
+                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+
+                        <button
+                          type="button"
+                          onClick={ajouterAnnonceAuFormulaire}
+                          className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
+                        >
+                          <Plus size={14} /> Ajouter une annonce
+                        </button>
+                      </div>
+
                     </div>
 
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
                       {formAnnonces.map((annonceItem) => (
-                        <div key={annonceItem.idUnique} className="flex flex-wrap items-end gap-3 p-3.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                        <div key={annonceItem.idUnique} className="flex flex-wrap items-end gap-1 p-1.5 bg-white   rounded-md " style={{ fontSize: "11px" }}>
 
                           <div className="flex-1 min-w-[200px] pm-form-group mb-0">
-                            <label className="pm-label text-xs">Annonce depuis le stock</label>
+                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>Annonce depuis le stock</label>
                             <select
-                              className="pm-select py-1.5 text-sm"
+                              className="pm-select py-1 text-sm"
+                              style={{ height: "35px", fontSize: "12px" }}
                               value={annonceItem.annonceId}
                               onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'annonceId', e.target.value)}
                               required
@@ -742,9 +1321,10 @@ const gererSoumissionFormulaire = async (e) => {
                           </div>
 
                           <div className="w-36 pm-form-group mb-0 shrink-0">
-                            <label className="pm-label text-xs">Type de départ</label>
+                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>Type de départ</label>
                             <select
-                              className="pm-select py-1.5 text-sm"
+                              className="pm-select py-1 text-sm"
+                              style={{ height: "35px", fontSize: "12px" }}
                               value={annonceItem.mode}
                               onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'mode', e.target.value)}
                             >
@@ -754,7 +1334,7 @@ const gererSoumissionFormulaire = async (e) => {
                           </div>
 
                           <div className="w-32 pm-form-group mb-0 shrink-0">
-                            <label className="pm-label text-xs">
+                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>
                               {annonceItem.mode === 'offset' ? 'Secondes après' : 'Heure exacte'}
                             </label>
                             {annonceItem.mode === 'offset' ? (
@@ -763,6 +1343,7 @@ const gererSoumissionFormulaire = async (e) => {
                                 min="0"
                                 className="pm-input py-1.5 text-sm"
                                 value={annonceItem.offsetSeconds}
+                                style={{ height: "35px", fontSize: "12px" }}
                                 onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'offsetSeconds', e.target.value)}
                                 required
                               />
@@ -771,6 +1352,7 @@ const gererSoumissionFormulaire = async (e) => {
                                 type="time"
                                 step="1"
                                 className="pm-input py-1.5 text-sm"
+                                style={{ height: "35px", fontSize: "12px" }}
                                 value={annonceItem.timeExact}
                                 onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'timeExact', e.target.value)}
                                 required

@@ -24,15 +24,15 @@ export function VerticalTimeline({ events }) {
 
     if (typeSaisi.includes('épisode') || typeSaisi.includes('episode')) {
       return {
-        backgroundColor: '#4291e0', // Bleu ardoise mat clair
+        backgroundColor: '#6710ca', // Bleu ardoise mat clair
         borderColor: '#ffffff',
         color: '#ffffff'
       };
     }
     if (typeSaisi.includes('programme')) {
       return {
-        backgroundColor: '#2c3e50', // Bleu nuit mat (Wet Asphalt)
-        borderColor: '#1a252f',
+        backgroundColor: '#3F51B5', // Bleu nuit mat (Wet Asphalt)
+        borderColor: '#3F51B5',
         color: '#f8fafc'
       };
     }
@@ -72,7 +72,7 @@ export function VerticalTimeline({ events }) {
             </div>
 
             <div className="pm-timeline-content ml-3">
-              <span className="pm-timeline-time">{event.time}</span>
+              <span className="pm-timeline-time">{event.time}{" "}{event.date_tri}</span>
               <span className="pm-timeline-name">{event.name}</span>
             </div>
 

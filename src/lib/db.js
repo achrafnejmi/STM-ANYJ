@@ -934,8 +934,8 @@ export async function listerPlanificationsMedia() {
     .from('planmediaplanifications')
     .select(`
       *,
-      episodes (*),
-      stock_annonces (*)
+      episode (*),
+      plan_media_stock (*)
     `)
     .order('date', { ascending: true })
     .order('timestart', { ascending: true });
@@ -971,4 +971,63 @@ export async function supprimerPlanificationMedia(id) {
     throw error;
   }
   return true;
+}
+
+
+// Récupérer toutes les classifications
+export async function listerClassificationsProgrammes() {
+  const { data, error } = await supabase
+    .from('programmes_classifications')
+    .select('*');
+
+  if (error) {
+    console.error("Erreur lors de la récupération des classifications :", error);
+    throw error;
+  }
+  return data;
+}
+
+// Ajouter ou mettre à jour la classification d'un programme (Upsert)
+export async function enregistrerClassificationProgramme(programme_id, scores) {
+  const { data, error } = await supabase
+    .from('programmes_classifications')
+    .upsert(
+      { 
+        programme_id, 
+        enfant_point: scores.enfant, 
+        adult_point: scores.adult, 
+        senior_point: scores.senior 
+      },
+      { onConflict: 'programme_id' } // Met à jour si le programme a déjà une classification
+    )
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de l'enregistrement de la classification :", error);
+    throw error;
+  }
+  return data;
+}
+
+
+
+export async function data_refrech(grille_id) {
+    try {
+        const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-programme/${grille_id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+            // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+        });
+
+        const jsonIA = await reponse.json();
+
+        if (jsonIA.succes && jsonIA.donnees) {
+            console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+            // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+        } else {
+            console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
+        }
+    } catch (erreur) {
+        console.error("Erreur de connexion avec le backend IA :", erreur);
+    }
 }
