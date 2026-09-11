@@ -1031,3 +1031,25 @@ export async function data_refrech(grille_id) {
         console.error("Erreur de connexion avec le backend IA :", erreur);
     }
 }
+
+
+export async function data_annonce_refrech() {
+    try {
+        const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-toutes-annonces`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+            // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+        });
+
+        const jsonIA = await reponse.json();
+
+        if (jsonIA.succes && jsonIA.donnees) {
+            console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+            // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+        } else {
+            console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
+        }
+    } catch (erreur) {
+        console.error("Erreur de connexion avec le backend IA :", erreur);
+    }
+}

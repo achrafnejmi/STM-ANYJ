@@ -116,7 +116,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           </div>
 
           <div className="classification-card classification-senior">
-            <span className="classification-label">Senior</span>
+            <span className="classification-label">Grand</span>
             <span className="classification-score">
               {classificationIA.senior_point ?? 0}
             </span>
@@ -151,7 +151,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
       const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
 
       if (!diffusionActuelle) {
-        console.error("Aucune diffusion trouvée pour cet épisode.");
+        toast.error("Aucune diffusion trouvée pour cet épisode.");
         return;
       }
 
@@ -171,7 +171,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
         const stockAnnonce = stockAnnonces.find(s => s.id === annonceItem.annonceId);
         const dureeSec = stockAnnonce?.duration || 30;
         const timeend = ajouterSecondesHeure(timestart, dureeSec);
-        if (!filtreGrilleId) { alert("ooops no grille id"); }
+        if (!filtreGrilleId) { toast.error("ooops no grille id"); }
         return {
           episode_id: formEpisodeId,
           annonce_id: annonceItem.annonceId,
@@ -183,15 +183,25 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
         };
       });
 
+
+      const heuresDeDebut = planificationsPayload.map(planification => planification.timestart);
+      const heuresUniques = new Set(heuresDeDebut);
+
+      if (heuresUniques.size !== heuresDeDebut.length) {
+        toast.error("Impossible d'insérer : Plusieurs annonces sont programmées exactement à la même heure.");
+        return; // Bloque la requête vers la base de données
+      }
       // 3. Appel de la fonction d'insertion en base de données
       await insererPlanificationsMedia(planificationsPayload);
 
-      console.log("Planifications enregistrées avec succès !");
+      toast.success("Planifications enregistrées avec succès !");
       fermerModal();
 
       // Optionnel : Recharger vos données de planifications ici si nécessaire
     } catch (error) {
       console.error("Erreur lors de l'enregistrement des planifications :", error);
+      toast.error("Erreur lors de l'enregistrement des planifications");
+
     }
   };
 
@@ -244,7 +254,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     return scoreB - scoreA;
   });
   const [isModalOuvert, setIsModalOuvert] = useState(false);
-
+  const [datachanged, setdatachanged] = useState(false);
 
 
 
@@ -305,7 +315,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           setProgrammeClassification(programmeclassificationDb)// <-- Stockez le résultat ici
         }
       } catch (erreur) {
-        console.error("Erreur lors du chargement des données Plan Média :", erreur);
+        toast.error("Erreur lors du chargement des données Plan Média :", erreur);
       } finally {
         if (actif) setChargement(false);
       }
@@ -316,7 +326,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     return () => {
       actif = false;
     };
-  }, [chaineActive?.id, filtreGrilleId, isModalOuvert]);
+  }, [chaineActive?.id, filtreGrilleId, isModalOuvert, datachanged]);
 
 
 
@@ -462,7 +472,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     });
 
     if (donneesFiltrees.length === 0) {
-      alert("Aucune annonce planifiée pour cette date et cette grille.");
+      toast.error("Aucune annonce planifiée pour cette date et cette grille.");
       return null;
     }
 
@@ -614,7 +624,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     });
 
     if (donneesFiltrees.length === 0) {
-      alert("Aucune donnée ne correspond à cette grille et cette date.");
+      toast.error("Aucune donnée ne correspond à cette grille et cette date.");
       return;
     }
 
@@ -932,7 +942,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   await data_refrech(filtreGrilleId);
                   toast.success("Classifications actualisées !");
                 } catch (error) {
-                  console.error(error);
+                  toast.error(error);
                   toast.error("Erreur lors de l'actualisation.");
                 }
               }}
@@ -1433,6 +1443,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           setStockAnnonces={setStockAnnonces}
           programmes={programmes}
           episodes={episodes}
+          setdatachanged={setdatachanged}
+          datachanged={datachanged}
         />
       )}
 

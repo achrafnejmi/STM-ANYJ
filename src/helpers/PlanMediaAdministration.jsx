@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Settings, Plus, Trash2, Edit3, Database, Search } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
-import { creerPlanMediaStock, mettreAJourPlanMediaStock, supprimerPlanMediaStock } from '../lib/db.js';
+import { creerPlanMediaStock, data_annonce_refrech, mettreAJourPlanMediaStock, supprimerPlanMediaStock } from '../lib/db.js';
 import { MdCloudSync } from "react-icons/md";
+import toast from 'react-hot-toast';
 
-export default function PlanMediaAdministration({ planMediaId, stockAnnonces, setStockAnnonces, programmes = [], episodes = [] }) {
+export default function PlanMediaAdministration({ planMediaId, stockAnnonces, setStockAnnonces, programmes = [], episodes = [] ,setdatachanged,datachanged}) {
   const [modalOuverte, setModalOuverte] = useState(false);
   const [rechercheAdmin, setRechercheAdmin] = useState('');
   const [actionEnCours, setActionEnCours] = useState(false);
@@ -179,7 +180,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
           <h2 className="text-base font-semibold text-slate-800">Administration — Stock d'annonces</h2>
           <p className="text-sm text-slate-500">Gérez le catalogue des annonces, leurs tarifs, budgets et répartitions de cibles.</p>
         </div>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:"10px"}} >
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }} >
           <button
             type="button"
             onClick={ouvrirModalAjout}
@@ -190,7 +191,22 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
           </button>
 
           <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech prediction'
-          >
+         
+         
+              onClick={async () => {
+                
+
+                try {
+                  await data_annonce_refrech();
+                  
+                  toast.success("Classifications actualisées !");
+                  setdatachanged(!datachanged);
+                } catch (error) {
+                  toast.error(error);
+                  toast.error("Erreur lors de l'actualisation.");
+                }
+              }}
+         >
             <MdCloudSync size={20} />
 
           </button>
@@ -218,105 +234,61 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         {stockFiltre.length === 0 ? (
           <p className="text-sm text-slate-400 italic py-8 text-center">Aucun élément trouvé dans le stock.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
             {stockFiltre.map((item) => (
               <div
                 key={item.id}
                 className="
-    group relative flex flex-col
-    gap-2.5
-    rounded-lg
-    border border-slate-200/80
-    bg-white
-    p-3
-    shadow-[0_1px_2px_rgba(15,23,42,0.03)]
-    transition-all duration-200
-    hover:-translate-y-[1px]
-    hover:border-snrt-accent/40
-    hover:shadow-[0_4px_12px_rgba(15,23,42,0.07)]
-  "
+        group
+        flex items-center gap-1
+        min-h-[40px]
+        rounded-md
+        border border-slate-200
+        bg-white
+        px-2 py-1
+        transition-all duration-150
+        hover:border-snrt-accent/30
+        hover:bg-slate-50/50
+        hover:shadow-sm
+      "
               >
-                {/* Header */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span
-                        className="
-            shrink-0 rounded-md
-            bg-snrt-navy/[0.07]
+                {/* Type */}
+                <div className="w-[85px] shrink-0">
+                  <span
+                    className="
+            inline-flex items-center
+            rounded
+            bg-snrt-navy/5
             px-1.5 py-0.5
-            text-[9px] font-semibold uppercase tracking-wide
+            text-[9px] font-semibold uppercase
+            tracking-wide
             text-snrt-navy
           "
-                      >
-                        {item.type}
-                      </span>
+          style={{backgroundColor:"orange"}}
+                  >
+                    {item.type}
+                  </span>
 
-                      {item.client && (
-                        <span
-                          className="
-              min-w-0 max-w-[140px] truncate
-              rounded-md
-              bg-slate-100
-              px-1.5 py-0.5
-              text-[9px] font-medium
-              text-slate-500
-            "
-                          title={item.client}
-                        >
-                          {item.client}
-                        </span>
-                      )}
+                  {item.client && (
+                    <div
+                      className="mt-0.5 max-w-[80px] truncate text-[9px] text-slate-400"
+                      title={item.client}
+                    >
+                      {item.client}
                     </div>
+                  )}
+                </div>
 
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => ouvrirModalEdition(item)}
-                        className="
-            flex h-6 w-6 items-center justify-center
-            rounded-md
-            border border-slate-200
-            text-slate-400
-            transition-all duration-150
-            hover:border-snrt-accent/30
-            hover:bg-snrt-accent/5
-            hover:text-snrt-navy
-          "
-                        title="Modifier l'annonce"
-                      >
-                        <Edit3 size={13} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => supprimerDuStock(item.id)}
-                        className="
-            flex h-6 w-6 items-center justify-center
-            rounded-md
-            border border-red-100
-            text-red-400
-            transition-all duration-150
-            hover:border-red-200
-            hover:bg-red-50
-            hover:text-red-600
-          "
-                        title="Supprimer du stock"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Title + Duration */}
-                  <div className="flex min-w-0 items-center gap-2">
+                {/* Main information */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
                     <h4
                       className="
-          min-w-0 flex-1 truncate
-          text-[13px] font-semibold
-          text-slate-700
-          group-hover:text-slate-900
-        "
+              min-w-0 truncate
+              text-[12px] font-semibold
+              text-slate-700
+              group-hover:text-slate-900
+            "
                       title={item.nom || item.title}
                     >
                       {item.nom || item.title}
@@ -324,21 +296,25 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
                     <span
                       className="
-          shrink-0 rounded-md
-          bg-slate-50
-          px-1.5 py-0.5
-          text-[10px] font-medium
-          text-slate-400
-        "
+              shrink-0
+              rounded bg-slate-100
+              px-1.5 py-0.5
+              text-[9px] font-medium
+              text-slate-400
+            "
                     >
                       ⌚ {item.duration ?? 30}s
                     </span>
                   </div>
 
-                  {/* Description */}
                   {item.metadonne && (
                     <p
-                      className="mt-1 truncate text-[10px] text-slate-400"
+                      className="
+              mt-0.5
+              truncate
+              text-[9px]
+              text-slate-400
+            "
                       title={item.metadonne}
                     >
                       {item.metadonne}
@@ -346,95 +322,109 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                   )}
                 </div>
 
-                {/* Price / Budget */}
-                <div
-                  className="
-      flex items-center justify-between
-      border-t border-slate-100
-      pt-2
-      text-[10px] text-slate-400
-    "
-                >
-                  <span>
+                {/* Price */}
+                <div className="hidden w-[75px] shrink-0 sm:block">
+                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
                     Prix/s
-                    <strong className="ml-1 text-[11px] font-semibold text-slate-600">
-                      {item.price_per_sec ?? item.pricePerSec ?? 0} DH
-                    </strong>
+                  </div>
+                  <div className="text-[11px] font-semibold text-slate-600">
+                    {item.price_per_sec ?? item.pricePerSec ?? 0} DH
+                  </div>
+                </div>
+
+                {/* Budget */}
+                <div className="hidden w-[75px] shrink-0 md:block">
+                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                    Budget
+                  </div>
+                  <div className="text-[11px] font-semibold text-slate-600">
+                    {item.budget ?? 0} DH
+                  </div>
+                </div>
+
+                {/* Audience */}
+                <div className="hidden w-[150px] shrink-0 lg:flex items-center gap-1">
+                  <span
+                    className="
+            rounded bg-blue-50
+            px-1.5 py-1
+            text-[9px] font-medium
+            text-blue-600
+          "
+                    title="Enfant"
+                  >
+                    E {item.enfantpercentage ?? item.pourcentages?.enfant ?? 0}%
                   </span>
 
-                  <span>
-                    Budget
-                    <strong className="ml-1 text-[11px] font-semibold text-slate-600">
-                      {item.budget ?? 0} DH
-                    </strong>
+                  <span
+                    className="
+            rounded bg-violet-50
+            px-1.5 py-1
+            text-[9px] font-medium
+            text-violet-600
+          "
+                    title="Jeune"
+                  >
+                    J {item.jeunepercentage ?? item.pourcentages?.jeune ?? 0}%
+                  </span>
+
+                  <span
+                    className="
+            rounded bg-orange-50
+            px-1.5 py-1
+            text-[9px] font-medium
+            text-orange-600
+          "
+                    title="Grand"
+                  >
+                    G {item.grand_percentage ??
+                      item.grandPercentage ??
+                      item.pourcentages?.grand ??
+                      0}%
                   </span>
                 </div>
 
-                {/* Audience percentages */}
+                {/* Actions */}
                 <div
                   className="
-      grid grid-cols-3
-      gap-1.5
-      border-t border-slate-100
-      pt-2
-    "
+          flex shrink-0 items-center gap-1
+          border-l border-slate-100
+          pl-2
+        "
                 >
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => ouvrirModalEdition(item)}
                     className="
-        flex items-center justify-between
-        rounded-md
-        border border-slate-100
-        bg-slate-50
-        px-2 py-1.5
-      "
+            flex h-6 w-6
+            items-center justify-center
+            rounded
+            text-slate-400
+            transition-colors
+            hover:bg-snrt-accent/10
+            hover:text-snrt-navy
+          "
+                    title="Modifier l'annonce"
                   >
-                    <span className="text-[9px] text-slate-400">
-                      Enfant
-                    </span>
+                    <Edit3 size={12} />
+                  </button>
 
-                    <span className="text-[11px] font-semibold text-slate-700">
-                      {item.enfantpercentage ?? item.pourcentages?.enfant ?? 0}%
-                    </span>
-                  </div>
-
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => supprimerDuStock(item.id)}
                     className="
-        flex items-center justify-between
-        rounded-md
-        border border-slate-100
-        bg-slate-50
-        px-2 py-1.5
-      "
+            flex h-6 w-6
+            items-center justify-center
+            rounded
+            text-slate-400
+            transition-colors
+            hover:bg-red-50
+            hover:text-red-600
+          "
+                    title="Supprimer du stock"
                   >
-                    <span className="text-[9px] text-slate-400">
-                      Jeune
-                    </span>
-
-                    <span className="text-[11px] font-semibold text-slate-700">
-                      {item.jeunepercentage ?? item.pourcentages?.jeune ?? 0}%
-                    </span>
-                  </div>
-
-                  <div
-                    className="
-        flex items-center justify-between
-        rounded-md
-        border border-slate-100
-        bg-slate-50
-        px-2 py-1.5
-      "
-                  >
-                    <span className="text-[9px] text-slate-400">
-                      Grand
-                    </span>
-
-                    <span className="text-[11px] font-semibold text-slate-700">
-                      {item.grand_percentage ??
-                        item.grandPercentage ??
-                        item.pourcentages?.grand ??
-                        0}%
-                    </span>
-                  </div>
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               </div>
             ))}
