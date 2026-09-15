@@ -48,6 +48,7 @@ import { couleurGenre } from '../lib/couleursGenre.js'
 import { calculerAnomalies, compterBloquantes } from '../lib/anomalies.js'
 import { blocsActifsCeJour, blocEnEcartDeGenre, messageEcartGenre } from '../lib/grilleType.js'
 import { estProgrammable, estEpisodePret } from '../lib/droits.js'
+import { peutEditerGrilleLineaire } from '../lib/roles.js'
 import { chaineAutoriseeProgramme } from '../lib/exclusivite.js'
 import { construireDonneesListeTransmissions, construireLignesExcelListeTransmissions, construireNomFichierListeTransmissions, ENTETE_LISTE_TRANSMISSIONS } from '../lib/exportListeTransmissions.js'
 import { etatRemplissageJour, resumeRemplissage } from '../lib/remplissageGrille.js'
@@ -103,7 +104,10 @@ const MARQUES_HEURES = genererMarquesHeures()
 // (recalculés à partir de la grille cible au moment de coller).
 const CHAMPS_COPIABLES = ['programme_id', 'episode_id', 'episode_numero', 'date', 'heure_debut', 'heure_fin', 'genre', 'titre_cache', 'vecteur']
 
-export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, onOuvrirProgramme, grilleCible }) {
+export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, onOuvrirProgramme, grilleCible, roleUtilisateur }) {
+  // P43b : l'Audit atteint cet écran seulement depuis le lien « Consulter la
+  // grille » du Dashboard — en LECTURE SEULE (peutEditerGrilleLineaire).
+  const lectureSeule = !peutEditerGrilleLineaire(roleUtilisateur)
   const [vue, setVue] = useState('SEMAINE')
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
@@ -823,6 +827,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   }
 
   async function allerVersAnomalie(id) {
+    if (lectureSeule) return
     const diffusion = diffusions.find((d) => d.id === id)
     if (!diffusion) return
     if (!(await changerBlocSelectionne(diffusion))) return
@@ -871,7 +876,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   }
 
   async function gererAnnuler() {
-    if (!grilleActive) return
+    if (lectureSeule || !grilleActive) return
     const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
@@ -881,7 +886,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   }
 
   async function gererRetablir() {
-    if (!grilleActive) return
+    if (lectureSeule || !grilleActive) return
     const resultat = await retablirAction(chaineActive.id, 'GRILLE_LINEAIRE', grilleActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
@@ -1120,6 +1125,12 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
 
   return (
     <div className="space-y-6">
+      {lectureSeule && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">
+          <CircleAlert size={14} />
+          Consultation (Audit) — lecture seule : création, glisser-déposer, déprogrammation et annuler/rétablir désactivés.
+        </div>
+      )}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         {/* Barre d'onglets (P23) : grilles ouvertes de la chaîne active. */}
         <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
@@ -1151,14 +1162,16 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => setModaleGrille('OUVRIR')}
-            title="Ouvrir une grille"
-            className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
-          >
-            <Plus size={15} />
-          </button>
+          {!lectureSeule && (
+            <button
+              type="button"
+              onClick={() => setModaleGrille('OUVRIR')}
+              title="Ouvrir une grille"
+              className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
+            >
+              <Plus size={15} />
+            </button>
+          )}
 
           {grilleActive && (
             <div className="ml-auto flex items-center gap-1.5">
@@ -1185,7 +1198,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                   },
                 ]}
               />
-              {!grilleActive.est_live && (
+              {!lectureSeule && !grilleActive.est_live && (
                 <button
                   type="button"
                   onClick={definirLive}
@@ -1194,14 +1207,16 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                   Définir comme live
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setMenuDocumentOuvert(true)}
-                title="Autres actions (renommer, dupliquer, supprimer)"
-                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
+              {!lectureSeule && (
+                <button
+                  type="button"
+                  onClick={() => setMenuDocumentOuvert(true)}
+                  title="Autres actions (renommer, dupliquer, supprimer)"
+                  className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1237,7 +1252,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                 onChange={(c) => setIndexZoom(Number(c))}
               />
             )}
-            {vueEditable && !selectionActive && (
+            {vueEditable && !lectureSeule && !selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
@@ -1247,7 +1262,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                 Sélectionner
               </button>
             )}
-            {vueEditable && selectionActive && (
+            {vueEditable && !lectureSeule && selectionActive && (
               <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-2.5 py-1 text-xs text-snrt-navy">
                 <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
                 <button
@@ -1263,7 +1278,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                 </button>
               </div>
             )}
-            {vueEditable && presseGaPapier.length > 0 && (
+            {vueEditable && !lectureSeule && presseGaPapier.length > 0 && (
               <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button
@@ -1279,7 +1294,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                 </button>
               </div>
             )}
-            {vueEditable && (
+            {vueEditable && !lectureSeule && (
               <div className="flex rounded-md border border-slate-300">
                 <button
                   type="button"
@@ -1375,17 +1390,19 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
               )}
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={enregistrerGrille}
-              title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
-            >
-              <Save size={14} />
-              Enregistrer
-            </button>
-          </div>
+          {!lectureSeule && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={enregistrerGrille}
+                title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
+                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
+              >
+                <Save size={14} />
+                Enregistrer
+              </button>
+            </div>
+          )}
         </div>
 
         {genresPresents.length > 0 && (
@@ -1414,7 +1431,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
       )}
 
       <div className="flex items-start gap-4">
-        {!pleinEcran && (
+        {!pleinEcran && !lectureSeule && (
           <CataloguePanel
             chaineActive={chaineActive}
             dragRef={dragRef}
@@ -1479,10 +1496,10 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                   return (
                     <div
                       key={j}
-                      className="relative cursor-pointer border-l border-slate-100 hover:bg-slate-50/50"
+                      className={`relative border-l border-slate-100 ${lectureSeule ? '' : 'cursor-pointer hover:bg-slate-50/50'}`}
                       style={{ gridRow: 2, gridColumn: i + 2, height: calculerHauteurTotale(presetZoom) }}
                       onClick={(e) => {
-                        if (selectionActive) return
+                        if (lectureSeule || selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
                         const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
                         ouvrirCreation(j, minutesEnHeure(minute))
@@ -1490,7 +1507,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault()
-                        if (selectionActive) return
+                        if (lectureSeule || selectionActive) return
                         const rect = e.currentTarget.getBoundingClientRect()
                         const minute = positionVersMinute(e.clientY - rect.top, presetZoom)
                         deposerEpisode(j, minute)
@@ -1553,6 +1570,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                         const enFlash = blocFlashId === diffusion.id
                         const selectionner = async (e) => {
                           e.stopPropagation()
+                          if (lectureSeule) return
                           if (selectionActive) {
                             setBlocsSelectionnesIds((prev) => {
                               const next = new Set(prev)
@@ -1577,7 +1595,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                               if (e.target !== e.currentTarget) return
                               if (e.key === 'Enter' || e.key === ' ') selectionner(e)
                             }}
-                            className={`group absolute cursor-pointer overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm transition-shadow ${fond} ${texte} ${
+                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm transition-shadow ${lectureSeule ? '' : 'cursor-pointer'} ${fond} ${texte} ${
                               enFlash
                                 ? 'ring-4 ring-offset-1 ring-amber-400'
                                 : estCoche
@@ -1595,7 +1613,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                               width: `${100 / nbPistes}%`,
                             }}
                           >
-                            {!selectionActive && (
+                            {!selectionActive && !lectureSeule && (
                               <button
                                 type="button"
                                 title="Déprogrammer"

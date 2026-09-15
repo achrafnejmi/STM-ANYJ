@@ -101,12 +101,13 @@ export const SECTIONS_PAR_ROLE = {
   // surtout l'onglet Historique (diffusions linéaires + non-linéaires d'un
   // titre) ; il ne crée, n'édite ni ne supprime rien.
   MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
-  // Audit (P43 — Taoufik, Ilyas) : rôle en LECTURE SEULE, trois écrans de
+  // Audit (P43 — Taoufik, Ilyas) : rôle en LECTURE SEULE, quatre écrans de
   // constat — « Respect de la grille type », le rapport de volume horaire
-  // (P40) et, puisque ce rapport est calculé depuis la pige, l'historique des
-  // piges qui l'alimentent (l'import reste réservé à l'Admin de chaîne / au
-  // Super Admin, cf. peutImporterPige : l'Audit ne voit que l'Historique).
-  AUDIT: ['DASHBOARD', 'PIGE', 'RAPPORT_VOLUME'],
+  // (P40), l'historique des piges qui l'alimentent (l'import reste réservé à
+  // l'Admin de chaîne / au Super Admin, cf. peutImporterPige) et, depuis P43b,
+  // la Grille linéaire elle-même (lien « Consulter la grille » du tableau des
+  // violations) — en LECTURE SEULE, cf. peutEditerGrilleLineaire.
+  AUDIT: ['DASHBOARD', 'PIGE', 'RAPPORT_VOLUME', 'GRILLE_LINEAIRE'],
   // Régie publicitaire (P39a — Abir) : prépare le cadre pub (Conducteur de
   // publicité), rien d'autre.
   REGIE_PUB: ['CONDUCTEUR_PUB'],
@@ -260,6 +261,15 @@ export function peutCalculerDroitsAuteur(role) {
 // édition.
 export function peutVoirRapportVolume(role) {
   return role === 'SUPER_ADMIN' || role === 'AUDIT'
+}
+
+// Édition de la Grille linéaire (P43b) : tous les rôles qui atteignent la
+// section peuvent créer/déplacer/supprimer des diffusions, SAUF l'Audit — il
+// y accède uniquement depuis le tableau des violations de grille type, en
+// consultation (catalogue masqué, création/glisser-déposer/déprogrammer/
+// sélection multiple/undo désactivés).
+export function peutEditerGrilleLineaire(role) {
+  return role !== 'AUDIT'
 }
 
 export function libelleRole(code) {
