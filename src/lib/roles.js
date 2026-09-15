@@ -102,12 +102,15 @@ export const SECTIONS_PAR_ROLE = {
   // titre) ; il ne crée, n'édite ni ne supprime rien.
   MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
   // Audit (P43 — Taoufik, Ilyas) : rôle en LECTURE SEULE, quatre écrans de
-  // constat — « Respect de la grille type », le rapport de volume horaire
-  // (P40), l'historique des piges qui l'alimentent (l'import reste réservé à
-  // l'Admin de chaîne / au Super Admin, cf. peutImporterPige) et, depuis P43b,
-  // la Grille linéaire elle-même (lien « Consulter la grille » du tableau des
-  // violations) — en LECTURE SEULE, cf. peutEditerGrilleLineaire.
-  AUDIT: ['DASHBOARD', 'PIGE', 'RAPPORT_VOLUME', 'GRILLE_LINEAIRE'],
+  // constat — « Respect de la grille type », la Grille type et la Grille
+  // linéaire elle-même (la grille type est la référence que la grille
+  // linéaire est censée respecter — l'auditeur doit pouvoir consulter l'une
+  // et l'autre, notamment depuis le lien « Consulter la grille » du tableau
+  // des violations), le rapport de volume horaire (P40) et l'historique des
+  // piges qui l'alimentent (l'import reste réservé à l'Admin de chaîne / au
+  // Super Admin, cf. peutImporterPige). Grille type et Grille linéaire en
+  // LECTURE SEULE — cf. peutEditerGrilleType / peutEditerGrilleLineaire.
+  AUDIT: ['DASHBOARD', 'GRILLE_TYPE', 'GRILLE_LINEAIRE', 'PIGE', 'RAPPORT_VOLUME'],
   // Régie publicitaire (P39a — Abir) : prépare le cadre pub (Conducteur de
   // publicité), rien d'autre.
   REGIE_PUB: ['CONDUCTEUR_PUB'],
@@ -269,6 +272,14 @@ export function peutVoirRapportVolume(role) {
 // consultation (catalogue masqué, création/glisser-déposer/déprogrammer/
 // sélection multiple/undo désactivés).
 export function peutEditerGrilleLineaire(role) {
+  return role !== 'AUDIT'
+}
+
+// Édition de la Grille type (P43b) : même principe — tous les rôles qui
+// atteignent la section peuvent créer/étirer/supprimer un bloc, SAUF l'Audit,
+// qui la consulte (référence de ce que la Grille linéaire est censée
+// respecter) sans pouvoir la modifier.
+export function peutEditerGrilleType(role) {
   return role !== 'AUDIT'
 }
 
