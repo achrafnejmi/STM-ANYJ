@@ -62,7 +62,6 @@ export const SECTIONS_PAR_ROLE = {
     'GRILLE_NON_LINEAIRE',
     'CONDUCTEUR',
     'PIGE',
-    'RAPPORT_VOLUME',
     'DEMANDES_PROGRAMMATION',
     'ADMINISTRATION',
   ],
@@ -84,8 +83,6 @@ export const SECTIONS_PAR_ROLE = {
     // Consulte la pige (retour d'antenne réel) en lecture seule — l'import est
     // réservé à l'Admin de chaîne / au Super Admin (cf. peutImporterPige).
     'PIGE',
-    // Produit le rapport de volume horaire depuis la pige (P40, Ilyas).
-    'RAPPORT_VOLUME',
   ],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
@@ -104,9 +101,12 @@ export const SECTIONS_PAR_ROLE = {
   // surtout l'onglet Historique (diffusions linéaires + non-linéaires d'un
   // titre) ; il ne crée, n'édite ni ne supprime rien.
   MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
-  // Audit (P43) : rôle en lecture seule, une seule section — le tableau de bord
-  // « Respect de la grille type ».
-  AUDIT: ['DASHBOARD'],
+  // Audit (P43 — Taoufik, Ilyas) : rôle en LECTURE SEULE, trois écrans de
+  // constat — « Respect de la grille type », le rapport de volume horaire
+  // (P40) et, puisque ce rapport est calculé depuis la pige, l'historique des
+  // piges qui l'alimentent (l'import reste réservé à l'Admin de chaîne / au
+  // Super Admin, cf. peutImporterPige : l'Audit ne voit que l'Historique).
+  AUDIT: ['DASHBOARD', 'PIGE', 'RAPPORT_VOLUME'],
   // Régie publicitaire (P39a — Abir) : prépare le cadre pub (Conducteur de
   // publicité), rien d'autre.
   REGIE_PUB: ['CONDUCTEUR_PUB'],
@@ -253,12 +253,13 @@ export function peutCalculerDroitsAuteur(role) {
 }
 
 // Rapport de volume horaire (P40) : le volume réellement diffusé, lu depuis la
-// pige, édité en Word — produit par le Programmateur (Ilyas), l'Administrateur
-// de chaîne et le Super Admin. Assistant de calcul : la ventilation par
+// pige, édité en Word — produit par l'Audit (Ilyas, Taoufik) et le Super Admin.
+// C'est un constat, pas un outil de programmation : ni le Programmateur ni
+// l'Admin de chaîne n'y ont accès. Assistant de calcul : la ventilation par
 // programme repose sur un rapprochement de nom approximatif, vérifié avant
 // édition.
 export function peutVoirRapportVolume(role) {
-  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'PROGRAMMATEUR'
+  return role === 'SUPER_ADMIN' || role === 'AUDIT'
 }
 
 export function libelleRole(code) {

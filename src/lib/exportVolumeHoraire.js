@@ -18,11 +18,21 @@ export function formaterVolumeSecondes(secondes) {
   return formaterVolumeHeures(Math.round((secondes ?? 0) / 60))
 }
 
+// `timestamptz` → « 31 août 2026 », « — » si absent ou illisible (l'export ne
+// doit jamais imprimer « NaN undefined NaN »).
+function formaterDateISOCourt(iso) {
+  const jour = (iso ?? '').slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(jour) ? formaterDateLongue(jour) : '—'
+}
+
 export const ENTETE_GENRE = ['Genre (pige)', 'Nb diffusions', 'Volume horaire']
 export const ENTETE_PROGRAMME = ['Genre', 'Programme', 'Nb diffusions réelles', 'Volume horaire']
 export const ENTETE_NON_RAPPROCHEES = ['Programme (nom de pige)', 'Genre (pige)', 'Nb diffusions', 'Volume horaire']
+export const ENTETE_SOURCES = ['Pige', "Date d'antenne", 'Lignes', 'Importée le']
 
-export function construireDonneesVolumeHoraire({ chaineNom, periodeLabel, dateISO, utilisateur, rapport }) {
+// `imports` : les import_pige ACTIFS de la période — la source exacte des
+// chiffres. Un rapport d'audit doit pouvoir dire d'où il sort.
+export function construireDonneesVolumeHoraire({ chaineNom, periodeLabel, dateISO, utilisateur, rapport, imports = [] }) {
   const { parGenre, groupes, lignesNonRapprochees, totaux } = rapport
 
   return {
@@ -34,6 +44,20 @@ export function construireDonneesVolumeHoraire({ chaineNom, periodeLabel, dateIS
       "Source : pige (retour d'antenne réel), programmes uniquement — bandes-annonces, spots, auto-promotions et communiqués exclus. " +
       'La répartition par genre est calculée depuis le genre porté par la pige (fiable). ' +
       'La ventilation par programme repose sur un rapprochement de nom (approximatif), vérifié avant édition.',
+
+    // Sources — les piges effectivement prises en compte
+    tableSources: {
+      titre: 'Piges prises en compte',
+      note: "Seules les piges actives alimentent le calcul (un ré-import archive la précédente).",
+      entete: ENTETE_SOURCES,
+      lignes: imports.map((i) => [
+        i.nom ?? '—',
+        formaterDateLongue(i.date),
+        String(i.nb_lignes ?? 0),
+        `${formaterDateISOCourt(i.cree_le)}${i.cree_par ? ` par ${i.cree_par}` : ''}`,
+      ]),
+      vide: imports.length === 0,
+    },
 
     // Table 1 — fiable
     tableGenre: {

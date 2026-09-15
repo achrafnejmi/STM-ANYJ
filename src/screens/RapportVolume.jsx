@@ -25,8 +25,12 @@ import {
   WidthType,
   BorderStyle,
 } from 'docx'
-import { BarChart3, FileText, ChevronLeft, ChevronRight, TriangleAlert, ListChecks, CheckCircle2 } from 'lucide-react'
-import { listerProgrammesParChaine, listerDiffusionsReellesParChaineEtPeriode } from '../lib/db.js'
+import { BarChart3, FileText, ChevronLeft, ChevronRight, TriangleAlert, ListChecks, CheckCircle2, Radio } from 'lucide-react'
+import {
+  listerProgrammesParChaine,
+  listerDiffusionsReellesParChaineEtPeriode,
+  listerImportsPigeParChaine,
+} from '../lib/db.js'
 import { construireRapport, rapprocher } from '../lib/volumeHoraire.js'
 import {
   construireDonneesVolumeHoraire,
@@ -44,7 +48,16 @@ const GRANULARITES = [
   { code: 'JOUR', label: 'Jour' },
   { code: 'SEMAINE', label: 'Semaine' },
   { code: 'MOIS', label: 'Mois' },
+  { code: 'ANNEE', label: 'Année' },
 ]
+
+// Horodatage court d'un import (timestamptz) → « 31/08/2026 14:23 ».
+function formaterHorodatage(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function RapportVolume({ chaineActive, roleUtilisateur }) {
   const autorise = peutVoirRapportVolume(roleUtilisateur)
@@ -53,6 +66,7 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
   const [refDate, setRefDate] = useState(() => aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
   const [programmes, setProgrammes] = useState([])
+  const [imports, setImports] = useState([])
   const [exclusions, setExclusions] = useState(new Set())
   const [genere, setGenere] = useState(false)
   const [chargement, setChargement] = useState(false)
@@ -69,6 +83,25 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
     setDiffusions([])
     setExclusions(new Set())
   }, [granularite, refDate, chaineActive])
+
+  // Piges de la chaîne, chargées en amont : l'utilisateur voit CE QUI VA entrer
+  // dans le calcul avant de lancer la génération (traçabilité de la source).
+  useEffect(() => {
+    listerImportsPigeParChaine(chaineActive.id)
+      .then(setImports)
+      .catch((err) => setErreur(err.message))
+  }, [chaineActive])
+
+  // Seuls les imports ACTIFS alimentent le calcul (un ré-import archive le
+  // précédent) — les archivés sont montrés mais signalés comme non comptés.
+  const importsPeriode = useMemo(
+    () =>
+      imports
+        .filter((i) => i.date >= debut && i.date <= fin)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.cree_le ?? '').localeCompare(b.cree_le ?? '')),
+    [imports, debut, fin]
+  )
+  const importsComptes = useMemo(() => importsPeriode.filter((i) => i.actif), [importsPeriode])
 
   function generer() {
     setChargement(true)
@@ -123,6 +156,7 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
         dateISO: aujourdHuiISO(),
         utilisateur: lireUtilisateur(),
         rapport,
+        imports: importsComptes,
       })
 
       const trait = { style: BorderStyle.SINGLE, size: 2, color: '999999' }
@@ -145,6 +179,13 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
         new Paragraph({ text: donnees.titre, heading: HeadingLevel.HEADING_1 }),
         new Paragraph({ text: donnees.sousTitre }),
         new Paragraph({ children: [new TextRun({ text: donnees.mention, italics: true, size: 18 })] }),
+        new Paragraph({ text: '' }),
+
+        new Paragraph({ text: donnees.tableSources.titre, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ children: [new TextRun({ text: donnees.tableSources.note, italics: true, size: 18 })] }),
+        ...(donnees.tableSources.vide
+          ? [new Paragraph({ text: 'Aucune pige active sur la période.' })]
+          : [tableau([ligne(donnees.tableSources.entete, true), ...donnees.tableSources.lignes.map((l) => ligne(l))])]),
         new Paragraph({ text: '' }),
 
         new Paragraph({ text: donnees.tableGenre.titre, heading: HeadingLevel.HEADING_2 }),
@@ -196,7 +237,7 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
   }
 
   if (!autorise) {
-    return <p className="text-sm text-slate-500">Accès réservé au Programmateur et à l'Administrateur de chaîne.</p>
+    return <p className="text-sm text-slate-500">Accès réservé à l'Audit.</p>
   }
 
   const { totaux } = rapport
@@ -295,6 +336,61 @@ export default function RapportVolume({ chaineActive, roleUtilisateur }) {
           </span>
         </div>
         {erreur && <p className="mt-2 text-xs text-red-600">{erreur}</p>}
+      </div>
+
+      {/* Traçabilité de la source : ce qui va entrer (ou est entré) dans le
+          calcul, visible AVANT de générer — un rapport d'audit doit pouvoir
+          dire d'où viennent ses chiffres. */}
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <Radio size={15} /> Piges prises en compte — {periodeLabel}
+        </h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Seules les piges <strong>actives</strong> alimentent le calcul : un ré-import de la même chaîne et de la même
+          date archive le précédent. Vérifiez cette liste avant de générer.
+        </p>
+        {importsPeriode.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Aucune pige enregistrée sur cette période pour {chaineActive.nom}. Le rapport serait vide — importez-la
+            depuis la section Pige.
+          </p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500">
+                <th className="py-2 pr-4 font-medium">Pige</th>
+                <th className="py-2 pr-4 font-medium">Date d'antenne</th>
+                <th className="py-2 pr-4 font-medium">Lignes</th>
+                <th className="py-2 pr-4 font-medium">Importée le</th>
+                <th className="py-2 font-medium">Comptée</th>
+              </tr>
+            </thead>
+            <tbody>
+              {importsPeriode.map((i) => (
+                <tr key={i.id} className={`border-b border-slate-100 ${i.actif ? '' : 'opacity-50'}`}>
+                  <td className="py-2 pr-4 text-slate-800">{i.nom}</td>
+                  <td className="py-2 pr-4 text-slate-600">{formaterDateLongue(i.date)}</td>
+                  <td className="py-2 pr-4 text-slate-600">{i.nb_lignes}</td>
+                  <td className="py-2 pr-4 text-[11px] text-slate-400">
+                    {formaterHorodatage(i.cree_le)}
+                    {i.cree_par ? ` par ${i.cree_par}` : ''}
+                  </td>
+                  <td className="py-2">
+                    {i.actif ? (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                        Oui
+                      </span>
+                    ) : (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                        Non — archivée
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {!genere ? (
