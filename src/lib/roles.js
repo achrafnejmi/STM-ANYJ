@@ -275,6 +275,15 @@ export function peutEditerGrilleLineaire(role) {
   return role !== 'AUDIT'
 }
 
+// Lien Mplanner (P54) : renseigné par la Gestion des droits et du stock
+// (Oumnia) et l'Administrateur de chaîne (Safae), plus le Super Admin — un
+// périmètre plus étroit que peutEditerProgramme (le Programmateur/Younes et
+// le Chargé d'acquisitions éditent le reste de la fiche mais consultent ce
+// lien en lecture seule, cf. son rendu dans FicheProgramme.jsx).
+export function peutEditerLienMplanner(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'GESTION_DROITS_STOCK'
+}
+
 // Édition de la Grille type (P43b) : même principe — tous les rôles qui
 // atteignent la section peuvent créer/étirer/supprimer un bloc, SAUF l'Audit,
 // qui la consulte (référence de ce que la Grille linéaire est censée
