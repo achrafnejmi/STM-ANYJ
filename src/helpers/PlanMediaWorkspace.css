@@ -109,9 +109,9 @@
 }
 
 .pm-timeline-name {
-  font-size: 0.875rem;
+  font-size: 12px;
   font-weight: 500;
-  color: #1e293b;
+  color: #bd5b00be;
   transition: color 180ms ease;
 }
 
@@ -197,7 +197,42 @@
 
 
 
+/* =========================================================
+   TIMELINE EMPTY STATE
+========================================================= */
+.pm-timeline-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 50px 20px;
+    margin: 20px 0;
+    background: #f8fafc;
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    text-align: center;
+    animation: fadeIn 0.4s ease-out;
+}
 
+.pm-empty-icon {
+    font-size: 42px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+    filter: grayscale(100%);
+}
+
+.pm-timeline-empty h3 {
+    margin: 0 0 6px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.pm-timeline-empty p {
+    margin: 0;
+    font-size: 13px;
+    color: #94a3b8;
+}
 
 
 

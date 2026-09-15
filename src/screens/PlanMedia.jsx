@@ -4,6 +4,8 @@ import { VerticalTimeline } from '../helpers/VerticalTimeline';
 import PlanMediaAdministration from '../helpers/PlanMediaAdministration.jsx';
 import './PlanMedia.css';
 import { MdCloudSync } from "react-icons/md";
+import { Edit3 } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
 
 import { useEffect } from 'react';
 import {
@@ -15,7 +17,7 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
   insererPlanificationsMedia, listerPlanificationsMedia,
-  data_refrech, listerClassificationsProgrammes
+  data_refrech, listerClassificationsProgrammes, data_annonce_refrech
 } from '../lib/db.js';
 import { Plus, Trash2, X } from 'lucide-react';
 // Remplacez import * as XLSX from 'xlsx'; par :
@@ -28,6 +30,7 @@ import toast from 'react-hot-toast';
 
 export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = false }) {
 
+  const [isLoading, setIsLoading] = useState(false);
   // États pour le formulaire d'insertion d'annonces
   const [formProgrammeId, setFormProgrammeId] = useState('');
   const [formEpisodeId, setFormEpisodeId] = useState('');
@@ -38,7 +41,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
   /*const [formAnnonces, setFormAnnonces] = useState([
     { idUnique: Date.now(), annonceId: '', heureDebut: '00:00:00' }
   ]);
-*/
+*/const [selectedEpisodeId, setSelectedEpisodeId] = useState(null);
   // Gestion des changements dans la liste dynamique d'annonces
 
   // Tableau dynamique pour gérer plusieurs annonces simultanément
@@ -104,21 +107,21 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           <div className="classification-card classification-enfant">
             <span className="classification-label">Enfant</span>
             <span className="classification-score">
-              {classificationIA.enfant_point ?? 0}
+              {classificationIA.enfant_point ?? 0}%
             </span>
           </div>
 
           <div className="classification-card classification-adulte">
             <span className="classification-label">Adulte</span>
             <span className="classification-score">
-              {classificationIA.adult_point ?? 0}
+              {classificationIA.adult_point ?? 0}%
             </span>
           </div>
 
           <div className="classification-card classification-senior">
             <span className="classification-label">Grand</span>
             <span className="classification-score">
-              {classificationIA.senior_point ?? 0}
+              {classificationIA.senior_point ?? 0}%
             </span>
           </div>
 
@@ -237,8 +240,9 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
         : [...prev, filtre]
     );
   };
-  const [dateFiltreTimeline, setDateFiltreTimeline] = useState('');
-
+  const [dateFiltreTimeline, setDateFiltreTimeline] = useState(
+    new Date().toISOString().split('T')[0]
+  );
   // Fake data for the timeline
   const mockEvents = [
   ];
@@ -328,6 +332,27 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
     };
   }, [chaineActive?.id, filtreGrilleId, isModalOuvert, datachanged]);
 
+
+
+
+  async function update_clasification() {
+    try {
+      setIsLoading(true);
+      if (vuePrincipale === "PLAN_MEDIA") {
+        await data_refrech(filtreGrilleId);
+        setdatachanged(!datachanged);
+      } else if (vuePrincipale === "PLAN_MEDIA_ADMIN") {
+        await data_annonce_refrech();
+        setdatachanged(!datachanged);
+      }
+
+    } catch (err) {
+      toast.error("Problèmes lors de la génération des classifications ! Contactez l’administrateur.");
+    } finally {
+      setIsLoading(false);
+      toast.success("Le calcul des classifications est terminé.");
+    }
+  }
 
 
 
@@ -428,8 +453,9 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
 
   const [rechercheEpisodeForm, setRechercheEpisodeForm] = useState('');
-  const handleEpisodeSelection = (episodeId) => {
+  const handleEpisodeSelection = (episodeId, df_id) => {
     setFormEpisodeId(episodeId);
+    setSelectedEpisodeId(df_id);
     setFormAnnonces([{ idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }]);
 
     if (episodeId) {
@@ -755,9 +781,55 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
       exporterVersPDF(e);
     }
   };
+
+
+
+  // --- NOUVEAUX ÉTATS POUR L'ÉDITION DES ANNONCES EXISTANTES ---
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [editPlanForm, setEditPlanForm] = useState({ timestart: "", duree: 30 });
+
+  // --- FONCTIONS DE GESTION (MODIFICATION & SUPPRESSION) ---
+  const gererSuppressionPlanification = async (idPlan) => {
+    if (window.confirm("Êtes-vous sûr de vouloir retirer cette annonce de l'épisode ?")) {
+      try {
+        // TODO: Ajoutez votre appel API ici (ex: await supprimerPlanificationMedia(idPlan); )
+
+        // Mise à jour de l'interface immédiatement
+        setPlanificationsMedia(prev => prev.filter(p => p.id !== idPlan));
+        toast.success("Annonce supprimée avec succès !");
+      } catch (error) {
+        toast.error("Erreur lors de la suppression.");
+      }
+    }
+  };
+
+  const gererModificationPlanification = async (idPlan) => {
+    try {
+      // Recalcule l'heure de fin en fonction de la nouvelle durée
+      const timeend = ajouterSecondesHeure(editPlanForm.timestart, editPlanForm.duree);
+
+      // TODO: Ajoutez votre appel API ici (ex: await modifierPlanificationMedia(idPlan, { timestart: editPlanForm.timestart, timeend }); )
+
+      // Mise à jour de l'interface
+      setPlanificationsMedia(prev => prev.map(p =>
+        p.id === idPlan ? { ...p, timestart: editPlanForm.timestart, timeend: timeend } : p
+      ));
+      setEditingPlanId(null);
+      toast.success("Horaires mis à jour !");
+    } catch (error) {
+      toast.error("Erreur lors de la modification.");
+    }
+  };
+
+
   return (
     <div className="space-y-6">
-
+      {isLoading && <div className="modern-overlay">
+        <div className="modern-loader-card">
+          <div className="modern-spinner"></div>
+          <div className="modern-loader-text">Chargement...</div>
+        </div>
+      </div>}
       {/* MODAL D'EXPORTATION EXCEL */}
       {modalExportOuvert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
@@ -765,7 +837,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
             {/* Header Modal */}
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="font-semibold text-slate-800 text-lg">Exporter le conducteur</h3>
+              <h3 className=" text-slate-800 text-lg">Exporter le conducteur</h3>
               <button onClick={() => setModalExportOuvert(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
                 <X size={20} />
               </button>
@@ -892,7 +964,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
               Administration Plan Média
             </button>
 
-            <div>
+            {vuePrincipale === 'PLAN_MEDIA' && <div>
               <select
                 className="w-full rounded-md border border-slate-300 py-1.5 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                 value={filtreGrilleId}
@@ -915,7 +987,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                   );
                 })}
               </select>
-            </div>
+            </div>}
 
             <button
               onClick={() => { setModalExportOuvert(true) }}
@@ -930,16 +1002,17 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             </button>
 
 
-            <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech classifications'
+            {vuePrincipale !== 'PIGE_VALIDATION' && <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech classifications'
 
               onClick={async () => {
-                if (!filtreGrilleId) {
+                if (!filtreGrilleId && vuePrincipale !== "PLAN_MEDIA_ADMIN") {
                   toast.error("Veuillez sélectionner une grille d'abord.");
                   return;
                 }
 
                 try {
-                  await data_refrech(filtreGrilleId);
+                  await update_clasification();
+
                   toast.success("Classifications actualisées !");
                 } catch (error) {
                   toast.error(error);
@@ -949,7 +1022,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             >
               <MdCloudSync size={20} />
 
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -1019,7 +1092,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
               {/* En-tête : fixe en haut (Padding appliqué uniquement ici) */}
               <div className="shrink-0 p-5 pb-4 border-b border-slate-100 bg-white">
-                <h2 className="pm-form-title m-0 text-lg font-semibold text-slate-800">Planifier des annonces</h2>
+                <h2 className="pm-form-title m-0 text-lg font-semibold text-slate-800">Planifier les annonces</h2>
                 <p className="pm-form-subtitle mt-1 text-sm text-slate-500">Recherchez et sélectionnez un épisode pour y attacher des annonces.</p>
               </div>
 
@@ -1042,7 +1115,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
                       style={{ maxWidth: "200px", height: "40px", fontSize: "14px" }}
                       value={dateFiltreTimeline}
-                      onChange={(e) => setDateFiltreEpisodes(e.target.value)}
+                      onChange={(e) => setDateFiltreTimeline(e.target.value)}
                       className="w-full rounded-md border border-slate-200 py-1.5 px-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent "
                     />
                   </div>
@@ -1057,6 +1130,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                       const prog = ep ? programmes.find(p => p.id === ep.programme_id) : null;
 
                       return {
+
                         ...ep, // Inclut toutes les propriétés de l'épisode s'il est trouvé
                         episode_id_reel: ep?.id, // Sécurité pour vérifier si l'épisode existe
                         diffusion_id: diffusion.id, // Identifiant unique de la diffusion
@@ -1069,6 +1143,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                     // 2. INNER JOIN : On exclut toutes les diffusions dont l'épisode n'existe pas dans le state
                     .filter(item => item.episode_id_reel)
                     .filter(item => !filtreGrilleId || item.grille_id === filtreGrilleId)
+                    .filter(item => !dateFiltreTimeline || item.date_diffusion === dateFiltreTimeline)
+
                     // 3. Filtrage par recherche utilisateur
                     .filter(item => {
                       const titreProg = item.programme?.titre || '';
@@ -1076,6 +1152,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                       const recherche = rechercheEpisodeForm.toLowerCase();
                       return titreEp.toLowerCase().includes(recherche) || titreProg.toLowerCase().includes(recherche);
                     })
+
+
                     // 4. Tri chronologique strict
                     .sort((a, b) => {
                       if (a.date_diffusion !== b.date_diffusion) {
@@ -1089,11 +1167,19 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                       return (
                         <div
                           key={`diff-${item.diffusion_id}-ep-${item.episode_id_reel}`}
-                          onClick={() => handleEpisodeSelection(item.episode_id_reel)}
-                          className="border-b border-slate-100 bg-white cursor-pointer px-5 py-3 transition-colors hover:bg-indigo-50/60 border-l-4 border-l-transparent hover:border-l-indigo-400 flex items-center justify-between group"
-                        >
+                          onClick={() => handleEpisodeSelection(item.episode_id_reel, item.diffusion_id)}
+                          className={`border-b border-slate-100 cursor-pointer px-5 py-3 transition-colors border-l-4 flex items-center justify-between group
+    ${selectedEpisodeId === item.diffusion_id
+                              ? 'bg-amber-30 border-l-amber-500'
+                              : 'bg-white border-l-transparent hover:bg-amber-10 hover:border-l-amber-500'
+                            }
+`}                        >
                           <div className="pr-4">
-                            <div className="text-sm font-semibold text-slate-700 group-hover:text-indigo-700 transition-colors line-clamp-1">
+                            <div
+                              className={`text-sm font-semibold transition-colors line-clamp-1 ${selectedEpisodeId === item.diffusion_id
+                                ? 'text-amber-700'
+                                : 'text-slate-700 group-hover:text-amber-700'
+                                }`}                             >
                               {item.titre || item.nom || `Épisode ${item.numero || 'N/C'}`}
                             </div>
                             <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
@@ -1148,110 +1234,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
             </div>
           </main>
-          {/* 3. Colonne Droite : Liste connectée au stock global d'administration */}
-          <aside
-            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col"
-            style={{ flex: '0 0 320px', overflowY: 'auto' }}
-          >
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
-              <ListIcon size={16} className="text-snrt-navy" />
-              <span>Éléments disponibles ({listeFiltree.length})</span>
-            </div>
 
-            {/* 4 Boutons de filtres (enfant, jeune, grand, budget) */}
-            <div className="mb-3 grid grid-cols-2 gap-1.5 shrink-0">
-              {['enfant', 'jeune', 'grand', 'budget'].map((btn) => (
-                <button
-                  key={btn}
-                  type="button"
-                  onClick={() => setFiltreOrdre(btn)}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
-                    ? 'bg-snrt-navy text-white'
-                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
-                >
-                  {btn}
-                </button>
-              ))}
-            </div>
-
-            {/* Barre de recherche de la liste */}
-            <div className="relative mb-4 shrink-0">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={rechercheListe}
-                onChange={(e) => setRechercheListe(e.target.value)}
-                placeholder="Rechercher dans la liste..."
-                className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
-              />
-            </div>
-
-            {/* Contenu de la liste dynamique */}
-            <div className="space-y-0.5 overflow-y-auto flex-1">
-              {listeFiltree.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-6">Aucun élément trouvé.</p>
-              ) : (
-                listeFiltree.map((item) => (
-                  <div
-                    key={item.id}
-                    className="
-          group flex items-center gap-2
-          h-7 px-2.5
-          rounded-sm
-          border border-slate-200/80
-          bg-white
-          cursor-pointer
-          transition-all duration-150
-          hover:border-snrt-accent/50
-          hover:bg-slate-50
-          hover:shadow-sm
-        "
-                  >
-                    {/* Type */}
-                    <span
-                      className="
-            shrink-0 rounded
-            bg-snrt-navy/10
-            px-1.5 py-0.5
-            text-[9px] font-semibold uppercase tracking-wide
-            text-snrt-navy
-          "
-                    >
-                      {item.type}
-                    </span>
-
-                    {/* Name */}
-                    <p
-                      className="
-            min-w-0 flex-1 truncate
-            text-[12px] 
-            text-slate-700
-            group-hover:text-slate-900
-          "
-                      title={item.nom || item.title}
-                    >
-                      {item.nom || item.title}
-                    </p>
-
-                    {/* Duration */}
-                    <span
-                      className="
-            shrink-0
-            flex items-center gap-1
-            text-[10px] font-medium
-            text-slate-400
-            group-hover:text-snrt-navy
-          "
-                    >
-
-                      {item.duration}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </aside>
 
 
 
@@ -1262,148 +1245,627 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
           {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
           {isModalOuvert && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div
-                className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
-              >
-                {/* En-tête de la modale */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-800">
-                      Insertion d'annonces
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Épisode sélectionné : <span className="font-medium" style={{ color: "orange" }}>
-                        {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
-                      </span>
-                    </p>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap" }}>
+
+
+
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "10px", minWidth: "800px" }}>
+
+                <div
+                  className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
+                >
+                  {/* En-tête de la modale */}
+                  <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-800">
+                        Insertion d'annonces
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Épisode sélectionné : <span className="font-medium" style={{ color: "orange" }}>
+                          {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={fermerModal}
+                      className="text-slate-400 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
-                  <button
-                    onClick={fermerModal}
-                    className="text-slate-400 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
 
-                {/* Corps de la modale avec défilement */}
-                <form onSubmit={gererSoumissionFormulaire} className="flex flex-col flex-1 overflow-hidden">
-                  <div className="flex-1 overflow-y-auto p-5 pm-slim-scroll bg-slate-50/30">
-                    <div className="flex items-center justify-between mb-4" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-                        <h3 className="text-sm font-semibold text-slate-700">Liste des annonces à attacher</h3>
+                  {/* Corps de la modale avec défilement */}
+                  <form onSubmit={gererSoumissionFormulaire} className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-5 pm-slim-scroll bg-slate-50/30">
+                      <div className="flex items-center justify-between mb-4" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                        </div>
+                        <>{getclassifications()}</>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+
+                          <button
+                            type="button"
+                            onClick={ajouterAnnonceAuFormulaire}
+                            className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
+                          >
+                            <Plus size={14} /> Ajouter une annonce
+                          </button>
+                        </div>
+
                       </div>
-                      <>{getclassifications()}</>
-                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
 
-                        <button
-                          type="button"
-                          onClick={ajouterAnnonceAuFormulaire}
-                          className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
-                        >
-                          <Plus size={14} /> Ajouter une annonce
-                        </button>
+                      <div className="flex flex-col gap-1" style={{ maxHeight: "200px", overflow: "auto" }}>
+                        {formAnnonces.map((annonceItem) => (
+                          <div key={annonceItem.idUnique} className="flex flex-wrap items-end gap-1 p-1.5 bg-white   rounded-md " style={{ fontSize: "11px" }}>
+
+                            <div className="flex-1 min-w-[250px] pm-form-group mb-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>Annonce depuis le stock</label>
+                              <select
+                                className="pm-select py-1 text-sm"
+                                style={{ height: "35px", fontSize: "12px" }}
+
+                                value={annonceItem.annonceId}
+                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'annonceId', e.target.value)}
+                                required
+                              >
+                                <option value="">-- Sélectionner une annonce --</option>
+                                {stockAnnonces
+                                  .filter(stock => {
+                                    // 1. Récupérer la date de diffusion de l'épisode au lieu de la date du jour
+                                    const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
+
+                                    // Si on a la date de la grille/diffusion, on l'utilise. Sinon, on prend aujourd'hui.
+                                    const dateReference = diffusionActuelle?.date_diffusion || diffusionActuelle?.date
+                                      ? new Date(diffusionActuelle.date_diffusion || diffusionActuelle.date)
+                                      : new Date();
+
+                                    dateReference.setHours(0, 0, 0, 0); // On remet à minuit
+
+                                    // 2. Préparer la date de début
+                                    let dateDebut = null;
+                                    if (stock.validite_debut) {
+                                      dateDebut = new Date(stock.validite_debut);
+                                      dateDebut.setHours(0, 0, 0, 0);
+                                    }
+                                    // 3. Préparer la date de fin
+                                    let dateFin = null;
+                                    if (stock.validite_fin) {
+                                      dateFin = new Date(stock.validite_fin);
+                                      dateFin.setHours(0, 0, 0, 0);
+                                    }
+
+                                    // Comparaison avec la date de l'épisode (dateReference)
+                                    if (dateDebut && dateDebut > dateReference) return false;
+                                    if (dateFin && dateFin < dateReference) return false;
+                                    if (!stock.PAD) return false;
+                                    return true;
+                                  })
+                                  .map(stock => (
+                                    // ... votre code option habituel.map(stock => (
+                                    <option key={stock.id} value={stock.id} style={{ backgroundColor: stock.pad ? "red" : "" }}>
+                                      {stock.nom || stock.title} · {stock.duration || 30}s · F{stock.enfantpercentage}% · J{stock.jeunepercentage}% · G{stock.grand_percentage}% · PAD{JSON.stringify(stock.pad)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            <div className="w-36 pm-form-group mb-0 shrink-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>Type de départ</label>
+                              <select
+                                className="pm-select py-1 text-sm"
+                                style={{ height: "35px", fontSize: "12px" }}
+                                value={annonceItem.mode}
+                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'mode', e.target.value)}
+                              >
+                                <option value="offset">Décalage (secondes)</option>
+                                <option value="exact">Heure fixe</option>
+                              </select>
+                            </div>
+
+                            <div className="w-32 pm-form-group mb-0 shrink-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>
+                                {annonceItem.mode === 'offset' ? 'Secondes après' : 'Heure exacte'}
+                              </label>
+                              {annonceItem.mode === 'offset' ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="pm-input py-1.5 text-sm"
+                                  value={annonceItem.offsetSeconds}
+                                  style={{ height: "35px", fontSize: "12px" }}
+                                  onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'offsetSeconds', e.target.value)}
+                                  required
+                                />
+                              ) : (
+                                <input
+                                  type="time"
+                                  step="1"
+                                  className="pm-input py-1.5 text-sm"
+                                  style={{ height: "35px", fontSize: "12px" }}
+                                  value={annonceItem.timeExact}
+                                  onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'timeExact', e.target.value)}
+                                  required
+                                />
+                              )}
+                            </div>
+
+                            {formAnnonces.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => supprimerAnnonceDuFormulaire(annonceItem.idUnique)}
+                                className="p-2 mb-[2px] text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded transition-colors"
+                                title="Retirer cette annonce"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
 
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      {formAnnonces.map((annonceItem) => (
-                        <div key={annonceItem.idUnique} className="flex flex-wrap items-end gap-1 p-1.5 bg-white   rounded-md " style={{ fontSize: "11px" }}>
 
-                          <div className="flex-1 min-w-[200px] pm-form-group mb-0">
-                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>Annonce depuis le stock</label>
-                            <select
-                              className="pm-select py-1 text-sm"
-                              style={{ height: "35px", fontSize: "12px" }}
-                              value={annonceItem.annonceId}
-                              onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'annonceId', e.target.value)}
-                              required
+
+
+
+
+
+
+
+
+
+
+
+
+                    {/* Pied de la modale (Boutons d'action) */}
+                    <div className="p-4 border-t border-slate-100 bg-white shrink-0 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="pm-btn pm-btn-secondary"
+                        onClick={fermerModal}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="pm-btn pm-btn-primary"
+                        disabled={!formEpisodeId || formAnnonces.some(a => !a.annonceId)}
+                      >
+                        Enregistrer les planifications
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
+                >
+
+
+
+                  {planificationsMedia.filter(p => p.episode_id === formEpisodeId).length > 0 && (
+                    <div
+                      className="border-t border-slate-200 p-5"
+                      style={{ maxHeight: "400px", overflow: "auto" }}
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-50 text-amber-600">
+                            <Megaphone size={13} />
+                          </span>
+
+                          <span>
+                            Annonces déjà planifiées
+                            <span className="ml-1.5 text-[10px] font-medium text-slate-400">
+                              ({planificationsMedia.filter(p => p.episode_id === formEpisodeId).length})
+                            </span>
+                          </span>
+                        </h3>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        {planificationsMedia.filter(p => p.episode_id === formEpisodeId).map(plan => {
+                          const stockAnnonce = stockAnnonces.find(s => s.id === plan.annonce_id);
+                          const isEditing = editingPlanId === plan.id;
+
+                          return (
+                            <div
+                              key={plan.id}
+                              className={`group rounded-md border transition-all duration-150 ${isEditing
+                                ? "border-amber-300 bg-amber-50/40"
+                                : "border-slate-200 bg-white hover:border-amber-200 hover:bg-slate-50/70"
+                                }`}
                             >
-                              <option value="">-- Sélectionner une annonce --</option>
-                              {stockAnnonces.map(stock => (
-                                <option key={stock.id} value={stock.id}>
-                                  {stock.nom || stock.title} ({stock.duration || 30}s)
-                                </option>
-                              ))}
-                            </select>
-                          </div>
 
-                          <div className="w-36 pm-form-group mb-0 shrink-0">
-                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>Type de départ</label>
-                            <select
-                              className="pm-select py-1 text-sm"
-                              style={{ height: "35px", fontSize: "12px" }}
-                              value={annonceItem.mode}
-                              onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'mode', e.target.value)}
+                              {!isEditing ? (
+                                <div className="flex items-center min-h-[30px] px-3 py-1" style={{ cursor: "pointer" }}>
+
+                                  {/* Time */}
+                                  <div className="w-[58px] shrink-0 text-center">
+                                    <div className="text-xs font-semibold font-mono text-slate-700">
+                                      {plan.timestart}
+                                    </div>
+
+                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">
+                                      → {plan.timeend}
+                                    </div>
+                                  </div>
+
+                                  <div className="w-px h-7 bg-slate-200 mx-3" />
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-slate-700 truncate">
+                                      {stockAnnonce?.nom || stockAnnonce?.title || "Annonce Inconnue"}
+                                    </div>
+
+                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                      {stockAnnonce?.duration || 30}s
+                                    </div>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingPlanId(plan.id);
+                                        setEditPlanForm({
+                                          timestart: plan.timestart,
+                                          duree: stockAnnonce?.duration || 30
+                                        });
+                                      }}
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                      title="Modifier l'heure"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      <Edit3 size={14} />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => gererSuppressionPlanification(plan.id)}
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                      title="Retirer l'annonce"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex w-full items-end gap-2 p-2.5">
+                                  <div className="flex-1">
+                                    <label className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-1 block">
+                                      Heure de début
+                                    </label>
+
+                                    <input
+                                      type="time"
+                                      step="1"
+                                      value={editPlanForm.timestart}
+                                      onChange={e => setEditPlanForm({
+                                        ...editPlanForm,
+                                        timestart: e.target.value
+                                      })}
+                                      className="w-full h-8 border border-slate-200 bg-white rounded-md px-2 text-xs outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 font-mono"
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingPlanId(null)}
+                                      className="h-8 px-2.5 text-[10px] font-medium text-slate-500 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      Annuler
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => gererModificationPlanification(plan.id)}
+                                      className="h-8 px-3 text-[10px] font-medium text-white bg-amber-500 rounded-md hover:bg-amber-600 transition-colors shadow-sm"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      Sauver
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+
+
+
+
+
+
+
+              {/* 3. Colonne Droite : Liste connectée au stock global d'administration */}
+              <aside
+                className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col"
+                style={{ flex: '0 0 600px', overflowY: 'auto', height: "750px" }}
+              >
+                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
+                  <ListIcon size={16} className="text-snrt-navy" />
+                  <span>Éléments disponibles ({listeFiltree.length})</span>
+                </div>
+
+                {/* 4 Boutons de filtres (enfant, jeune, grand, budget) */}
+                <div className="mb-3 grid grid-cols-2 gap-1.5 shrink-0">
+                  {['enfant', 'jeune', 'grand', 'budget'].map((btn) => (
+                    <button
+                      key={btn}
+                      type="button"
+                      onClick={() => setFiltreOrdre(btn)}
+                      className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
+                        ? 'bg-snrt-navy text-white'
+                        : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                      {btn}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Barre de recherche de la liste */}
+                <div className="relative mb-4 shrink-0">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={rechercheListe}
+                    onChange={(e) => setRechercheListe(e.target.value)}
+                    placeholder="Rechercher dans la liste..."
+                    className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+                  />
+                </div>
+
+                {/* Contenu de la liste dynamique */}
+                <div className="space-y-0.5 overflow-y-auto flex-1">
+                  {listeFiltree.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-6">Aucun élément trouvé.</p>
+                  ) : (
+                    listeFiltree.map((item) => (
+                      <div
+                        key={item.id}
+                        className="
+        group
+        flex flex-col
+        min-h-[40px]
+        rounded-md
+        border border-slate-200
+        bg-white
+        px-2 py-1
+        transition-all duration-150
+        hover:border-snrt-accent/30
+        hover:bg-slate-50/50
+        hover:shadow-sm
+    "
+                      >
+                        {/* Main row */}
+                        <div
+                          className="flex items-center gap-1 w-full"
+                          style={{
+                            justifyContent: "space-between",
+                            gap: "5px"
+                          }}
+                        >
+                          {/* Type */}
+                          <div className="w-[85px] shrink-0">
+                            <span
+                              className="
+                    inline-flex items-center
+                    rounded
+                    bg-snrt-navy/5
+                    px-1.5 py-0.5
+                    text-[9px] font-semibold uppercase
+                    tracking-wide
+                    text-snrt-navy
+                "
+                              style={{ backgroundColor: "orange" }}
                             >
-                              <option value="offset">Décalage (secondes)</option>
-                              <option value="exact">Heure fixe</option>
-                            </select>
-                          </div>
+                              {item.type}
+                            </span>
 
-                          <div className="w-32 pm-form-group mb-0 shrink-0">
-                            <label className="pm-label text-xs" style={{ fontSize: "13px", color: "", fontWeight: "none" }}>
-                              {annonceItem.mode === 'offset' ? 'Secondes après' : 'Heure exacte'}
-                            </label>
-                            {annonceItem.mode === 'offset' ? (
-                              <input
-                                type="number"
-                                min="0"
-                                className="pm-input py-1.5 text-sm"
-                                value={annonceItem.offsetSeconds}
-                                style={{ height: "35px", fontSize: "12px" }}
-                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'offsetSeconds', e.target.value)}
-                                required
-                              />
-                            ) : (
-                              <input
-                                type="time"
-                                step="1"
-                                className="pm-input py-1.5 text-sm"
-                                style={{ height: "35px", fontSize: "12px" }}
-                                value={annonceItem.timeExact}
-                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'timeExact', e.target.value)}
-                                required
-                              />
+                            {item.PAD && (
+                              <span
+                                className="
+                        inline-flex items-center
+                        rounded
+                        px-1.5 py-0.5 ml-1
+                        text-[9px] font-semibold uppercase
+                        tracking-wide
+                        text-green-600 bg-green-100
+                    "
+                                title="Prêt à diffuser"
+                              >
+                                PAD
+                              </span>
+                            )}
+
+                            {!item.PAD && (
+                              <span
+                                className="
+                        inline-flex items-center
+                        rounded
+                        px-1.5 py-0.5 ml-1
+                        text-[9px] font-semibold uppercase
+                        tracking-wide
+                        text-red-600 bg-red-100
+                    "
+                                title="PAD non disponible"
+                              >
+                                NO PAD
+                              </span>
+                            )}
+
+                            {item.client && (
+                              <div
+                                className="
+                        mt-0.5
+                        max-w-[80px]
+                        truncate
+                        text-[9px]
+                        text-slate-400
+                    "
+                                title={item.client}
+                              >
+                                {item.client}
+                              </div>
                             )}
                           </div>
 
-                          {formAnnonces.length > 1 && (
+                          {/* Main information */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4
+                                className="
+                        min-w-0 truncate
+                        text-[12px]
+                        text-slate-700
+                        group-hover:text-slate-900
+                    "
+                                title={item.nom || item.title}
+                              >
+                                {item.nom || item.title}
+                              </h4>
+
+                              <span
+                                className="
+                        shrink-0
+                        rounded bg-slate-100
+                        px-1.5 py-0.5
+                        text-[9px] font-medium
+                        text-slate-400
+                    "
+                              >
+                                ⌚ {item.duration ?? 30}s
+                              </span>
+                            </div>
+
+                            {item.metadonne && (
+                              <p
+                                className="
+                        mt-0.5
+                        truncate
+                        text-[9px]
+                        text-slate-400
+                    "
+                                title={item.metadonne}
+                              >
+                                {item.metadonne}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Budget */}
+                          <div className="hidden w-[45px] shrink-0 md:block">
+                            <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                              Budget
+                            </div>
+
+                            <div className="text-[11px] text-slate-600">
+                              {item.budget ?? 0} DH
+                            </div>
+                          </div>
+
+                          {/* Audience */}
+                          <div className="hidden w-[100px] shrink-0 lg:flex items-center gap-1">
+                            <span
+                              className="
+                    rounded bg-blue-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-blue-600
+                "
+                              title="Enfant"
+                            >
+                              E {item.enfantpercentage ?? item.pourcentages?.enfant ?? 0}%
+                            </span>
+
+                            <span
+                              className="
+                    rounded bg-violet-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-violet-600
+                "
+                              title="Jeune"
+                            >
+                              J {item.jeunepercentage ?? item.pourcentages?.jeune ?? 0}%
+                            </span>
+
+                            <span
+                              className="
+                    rounded bg-orange-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-orange-600
+                "
+                              title="Grand"
+                            >
+                              G {
+                                item.grand_percentage ??
+                                item.grandPercentage ??
+                                item.pourcentages?.grand ??
+                                0
+                              }%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* PAD request - full width underneath */}
+                        {!item.PAD && (
+                          <div className="w-full mt-1">
                             <button
                               type="button"
-                              onClick={() => supprimerAnnonceDuFormulaire(annonceItem.idUnique)}
-                              className="p-2 mb-[2px] text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded transition-colors"
-                              title="Retirer cette annonce"
+                              className="
+                    w-full
+                    rounded-md
+                    border border-amber-200
+                    bg-amber-50
+                    px-2 py-1
+                    text-[10px]
+                    font-medium
+                    text-amber-700
+                    transition-all duration-150
+                    hover:bg-amber-100
+                    hover:border-amber-300
+                    hover:text-amber-800
+                "
+                style={{cursor:"pointer"}}
                             >
-                              <Trash2 size={16} />
+                              Demander PAD
                             </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
 
-                  {/* Pied de la modale (Boutons d'action) */}
-                  <div className="p-4 border-t border-slate-100 bg-white shrink-0 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      className="pm-btn pm-btn-secondary"
-                      onClick={fermerModal}
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      className="pm-btn pm-btn-primary"
-                      disabled={!formEpisodeId || formAnnonces.some(a => !a.annonceId)}
-                    >
-                      Enregistrer les planifications
-                    </button>
-                  </div>
-                </form>
-              </div>
+
+
+                </div>
+              </aside>
+
+
+
+
+
+
             </div>
           )}
         </div>
@@ -1414,7 +1876,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
             <Upload size={32} />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-slate-800">Validation Pige — Import de données</h2>
+            <h2 className="text-base  text-slate-800">Validation Pige — Import de données</h2>
             <p className="text-sm text-slate-500 mt-1">Téléchargez un fichier Excel pour lancer le traitement et l'analyse.</p>
           </div>
           <div className="mt-4">
@@ -1445,6 +1907,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
           episodes={episodes}
           setdatachanged={setdatachanged}
           datachanged={datachanged}
+          setIsLoading={setIsLoading}
         />
       )}
 

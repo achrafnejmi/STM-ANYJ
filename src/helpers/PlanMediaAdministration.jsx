@@ -5,7 +5,7 @@ import { creerPlanMediaStock, data_annonce_refrech, mettreAJourPlanMediaStock, s
 import { MdCloudSync } from "react-icons/md";
 import toast from 'react-hot-toast';
 
-export default function PlanMediaAdministration({ planMediaId, stockAnnonces, setStockAnnonces, programmes = [], episodes = [] ,setdatachanged,datachanged}) {
+export default function PlanMediaAdministration({ planMediaId, stockAnnonces, setStockAnnonces, programmes = [], episodes = [], setdatachanged, datachanged, setIsLoading }) {
   const [modalOuverte, setModalOuverte] = useState(false);
   const [rechercheAdmin, setRechercheAdmin] = useState('');
   const [actionEnCours, setActionEnCours] = useState(false);
@@ -30,6 +30,11 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
   const [jeunepercentage, setJeunepercentage] = useState('0');
   const [grandPercentage, setGrandPercentage] = useState('0');
 
+  // NOUVEAUX CHAMPS
+  const [validiteDebut, setValiditeDebut] = useState('');
+  const [validiteFin, setValiditeFin] = useState('');
+  const [isPad, setIsPad] = useState(false);
+
   // Ouvrir la modale en mode Création
   const ouvrirModalAjout = () => {
     setElementEnEdition(null);
@@ -45,6 +50,9 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
     setEnfantpercentage('0');
     setJeunepercentage('0');
     setGrandPercentage('0');
+    setValiditeDebut('');
+    setValiditeFin('');
+    setIsPad(false);
     setModalOuverte(true);
   };
 
@@ -63,6 +71,14 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
     setEnfantpercentage(String(item.enfantpercentage ?? item.pourcentages?.enfant ?? 0));
     setJeunepercentage(String(item.jeunepercentage ?? item.pourcentages?.jeune ?? 0));
     setGrandPercentage(String(item.grand_percentage ?? item.grandPercentage ?? item.pourcentages?.grand ?? 0));
+
+    // FORMATAGE DES DATES POUR L'INPUT type="datetime-local" (ou type="date")
+    // Note: Si validite_debut contient une heure (timestamptz), on gère ici pour un input simple (Date uniquement ou Date+Time)
+    // Pour simplifier on va utiliser un input type="date" donc on coupe à 10 caractères (YYYY-MM-DD)
+    setValiditeDebut(item.validite_debut ? String(item.validite_debut).substring(0, 10) : '');
+    setValiditeFin(item.validite_fin ? String(item.validite_fin).substring(0, 10) : '');
+    setIsPad(item.PAD ?? false);
+
     setModalOuverte(true);
   };
 
@@ -104,7 +120,34 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
   const soumettreFormulaire = async (e) => {
     e.preventDefault();
-    if (!nom.trim() || !planMediaId) return;
+
+    if (!nom.trim() || !planMediaId) {
+      toast.error("Le nom de l'annonce est requis.");
+      return;
+    }
+
+    // ==========================================
+    // VALIDATIONS DES DONNÉES
+    // ==========================================
+
+    // 1. Validation des pourcentages
+    const totalPourcentages = Number(enfantpercentage) + Number(jeunepercentage) + Number(grandPercentage);
+    if (totalPourcentages !== 100) {
+      toast.error(`La somme des cibles est de ${totalPourcentages}%. Elle doit etre 100%.`);
+      return; // Bloque la soumission
+    }
+
+    // 2. Validation des dates de validité
+    if (validiteDebut && validiteFin) {
+      const dateDebut = new Date(validiteDebut);
+      const dateFin = new Date(validiteFin);
+      if (dateDebut > dateFin) {
+        toast.error("La date de fin de validité ne peut pas être antérieure à la date de début.");
+        return; // Bloque la soumission
+      }
+    }
+
+    // ==========================================
 
     setActionEnCours(true);
 
@@ -123,6 +166,9 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
       grand_percentage: Number(grandPercentage) || 0,
       title: nom.trim(),
       duration: Number(duration) || 30,
+      validite_debut: validiteDebut ? new Date(validiteDebut).toISOString() : null,
+      validite_fin: validiteFin ? new Date(validiteFin).toISOString() : null,
+      PAD: isPad,
       pourcentages: {
         enfant: Number(enfantpercentage) || 0,
         jeune: Number(jeunepercentage) || 0,
@@ -138,6 +184,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         setStockAnnonces((prev) =>
           prev.map((item) => (item.id === elementEnEdition.id ? elementMisAJour : item))
         );
+        toast.success("Annonce mise à jour avec succès.");
       } else {
         // Mode Création
         const nouvelleDonnee = {
@@ -146,17 +193,18 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         };
         const elementCree = await creerPlanMediaStock(nouvelleDonnee);
         setStockAnnonces((prev) => [elementCree, ...prev]);
+        toast.success("Annonce ajoutée au stock.");
       }
 
       setModalOuverte(false);
       setElementEnEdition(null);
     } catch (erreur) {
       console.error("Erreur lors de l'enregistrement de l'annonce :", erreur);
+      toast.error("Une erreur est survenue lors de l'enregistrement.");
     } finally {
       setActionEnCours(false);
     }
   };
-
   const supprimerDuStock = async (id) => {
     try {
       await supprimerPlanMediaStock(id);
@@ -172,12 +220,13 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
     (item.client || '').toLowerCase().includes(rechercheAdmin.toLowerCase())
   );
 
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-6 min-h-[500px] space-y-6">
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-800">Administration — Stock d'annonces</h2>
+          <h2 className="text-base font-semibold text-slate-800">Stock d'annonces</h2>
           <p className="text-sm text-slate-500">Gérez le catalogue des annonces, leurs tarifs, budgets et répartitions de cibles.</p>
         </div>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }} >
@@ -190,26 +239,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
             Ajouter au stock
           </button>
 
-          <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech prediction'
-         
-         
-              onClick={async () => {
-                
 
-                try {
-                  await data_annonce_refrech();
-                  
-                  toast.success("Classifications actualisées !");
-                  setdatachanged(!datachanged);
-                } catch (error) {
-                  toast.error(error);
-                  toast.error("Erreur lors de l'actualisation.");
-                }
-              }}
-         >
-            <MdCloudSync size={20} />
-
-          </button>
 
         </div>
       </div>
@@ -252,22 +282,38 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         hover:shadow-sm
       "
               >
-                {/* Type */}
+                {/* Type & PAD */}
                 <div className="w-[85px] shrink-0">
-                  <span
-                    className="
-            inline-flex items-center
-            rounded
-            bg-snrt-navy/5
-            px-1.5 py-0.5
-            text-[9px] font-semibold uppercase
-            tracking-wide
-            text-snrt-navy
-          "
-          style={{backgroundColor:"orange"}}
-                  >
-                    {item.type}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="
+              inline-flex items-center
+              rounded
+              bg-snrt-navy/5
+              px-1.5 py-0.5
+              text-[9px] font-semibold uppercase
+              tracking-wide
+              text-snrt-navy
+            "
+                      style={{ backgroundColor: "orange" }}
+                    >
+                      {item.type}
+                    </span>
+                    {item.PAD && (
+                      <span className="text-[9px] font-bold text-green-600 bg-green-100 rounded px-1" title="Prêt à diffuser">PAD</span>
+                    )}
+
+                    {!item.PAD && (
+                      <span className="text-[9px] font-bold  rounded px-1
+            text-red-600 bg-red-100
+            " title="Prêt à diffuser">NO PAD</span>
+
+
+
+
+                    )}
+                  </div>
+
 
                   {item.client && (
                     <div
@@ -307,21 +353,28 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                     </span>
                   </div>
 
-                  {item.metadonne && (
-                    <p
-                      className="
-              mt-0.5
-              truncate
-              text-[9px]
-              text-slate-400
-            "
-                      title={item.metadonne}
-                    >
-                      {item.metadonne}
-                    </p>
-                  )}
-                </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {item.metadonne && (
+                      <p
+                        className="truncate text-[9px] text-slate-400"
+                        title={item.metadonne}
+                      >
+                        {item.metadonne}
+                      </p>
+                    )}
 
+                  </div>
+                </div>
+                <div className="hidden w-[180px] shrink-0 sm:block">
+                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                    {/* Affichage des dates de validité */}
+                    {(item.validite_debut || item.validite_fin) && (
+                      <span className="text-[9px] text-slate-400 bg-slate-50 px-1 rounded border border-slate-100">
+                        Validité: {item.validite_debut ? new Date(item.validite_debut).toLocaleDateString() : '...'} au {item.validite_fin ? new Date(item.validite_fin).toLocaleDateString() : '...'}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 {/* Price */}
                 <div className="hidden w-[75px] shrink-0 sm:block">
                   <div className="text-[8px] uppercase tracking-wide text-slate-400">
@@ -465,6 +518,28 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
               </div>
             </div>
 
+            {/* NOUVEAUX CHAMPS : VALIDITE ET PAD */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Début de validité</label>
+                <input
+                  type="date"
+                  value={validiteDebut}
+                  onChange={(e) => setValiditeDebut(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Fin de validité</label>
+                <input
+                  type="date"
+                  value={validiteFin}
+                  onChange={(e) => setValiditeFin(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Métadonnée / Description</label>
               <textarea
@@ -525,48 +600,12 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                 />
               </div>
             </div>
-            {/*
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Programme (Optionnel)</label>
-                <select
-                  value={programmeid}
-                  onChange={(e) => setProgrammeid(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white"
-                >
-                  <option value="">Sélectionner un programme...</option>
-                  {programmes.map((prog) => (
-                    <option key={prog.id} value={prog.id}>
-                      {prog.titre}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Épisode (Optionnel)</label>
-                <select
-                  value={episodeid}
-                  onChange={handleEpisodeChange}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white"
-                >
-                  <option value="">Sélectionner un épisode...</option>
-                  {episodes
-                    .filter(ep => !programmeid || ep.programme_id === programmeid)
-                    .map((ep) => (
-                      <option key={ep.id} value={ep.id}>
-                        {ep.titre || `Épisode ${ep.numero || ''}`}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
-*/}
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Pourcentages de cibles (%)</label>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="text-xs text-slate-500">Enfant (def: 0)</span>
+                  <span className="text-xs text-slate-500">Enfant </span>
                   <input
                     type="number"
                     min="0"
