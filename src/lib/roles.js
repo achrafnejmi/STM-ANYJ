@@ -34,6 +34,7 @@ const TOUTES = [
   'GRILLE_NON_LINEAIRE',
   'CONDUCTEUR',
   'PIGE',
+  'RAPPORT_VOLUME',
   'ADMINISTRATION',
   'BIBLE',
   'SYNOPSIS_FR',
@@ -61,6 +62,7 @@ export const SECTIONS_PAR_ROLE = {
     'GRILLE_NON_LINEAIRE',
     'CONDUCTEUR',
     'PIGE',
+    'RAPPORT_VOLUME',
     'DEMANDES_PROGRAMMATION',
     'ADMINISTRATION',
   ],
@@ -82,6 +84,8 @@ export const SECTIONS_PAR_ROLE = {
     // Consulte la pige (retour d'antenne réel) en lecture seule — l'import est
     // réservé à l'Admin de chaîne / au Super Admin (cf. peutImporterPige).
     'PIGE',
+    // Produit le rapport de volume horaire depuis la pige (P40, Ilyas).
+    'RAPPORT_VOLUME',
   ],
   ACQUISITIONS: ['PROGRAMMES', 'CONTRATS'],
   // Pilote le stock, les droits et le circuit PAD (sans faire la mise en PAD) :
@@ -246,6 +250,15 @@ export function peutImporterPige(role) {
 // validation humaine et le calcul des montants restent hors app.
 export function peutCalculerDroitsAuteur(role) {
   return role === 'SUPER_ADMIN' || role === 'GESTION_DROITS_STOCK'
+}
+
+// Rapport de volume horaire (P40) : le volume réellement diffusé, lu depuis la
+// pige, édité en Word — produit par le Programmateur (Ilyas), l'Administrateur
+// de chaîne et le Super Admin. Assistant de calcul : la ventilation par
+// programme repose sur un rapprochement de nom approximatif, vérifié avant
+// édition.
+export function peutVoirRapportVolume(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'PROGRAMMATEUR'
 }
 
 export function libelleRole(code) {

@@ -39,6 +39,7 @@ import ConducteurPub from './screens/ConducteurPub.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
 import Pige from './screens/Pige.jsx'
+import RapportVolume from './screens/RapportVolume.jsx'
 import DemandesProgrammation from './screens/DemandesProgrammation.jsx'
 import PilotageDroitsStock from './screens/PilotageDroitsStock.jsx'
 import SuiviPad from './screens/SuiviPad.jsx'
@@ -64,6 +65,7 @@ const ECRANS = {
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
   PIGE: Pige,
+  RAPPORT_VOLUME: RapportVolume,
   DEMANDES_PROGRAMMATION: DemandesProgrammation,
   PILOTAGE_DROITS_STOCK: PilotageDroitsStock,
   SUIVI_PAD: SuiviPad,

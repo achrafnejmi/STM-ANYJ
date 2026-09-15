@@ -21,12 +21,11 @@ import { etatPile, annulerDerniereAction, retablirAction, enregistrerAction } fr
 import { lireUtilisateur } from '../lib/session.js'
 import {
   aujourdHuiISO,
-  ajouterJours,
-  lundiDeLaSemaine,
   formaterDateLongue,
   formaterDateJJMMAAAA,
-  formaterPlageSemaine,
-  formaterMoisAnnee,
+  bornesPeriode,
+  labelPeriode,
+  decalerRefPeriode,
 } from '../lib/semaine.js'
 import { LIBELLES_TYPE_ELEMENT } from '../lib/importPige.js'
 import { peutImporterPige } from '../lib/roles.js'
@@ -43,29 +42,8 @@ const GRANULARITES = [
   { code: 'MOIS', label: 'Mois' },
 ]
 
-// Bornes ISO [début, fin] de la période affichée (null, null = pas de filtre).
-function bornesPeriode(granularite, refDate) {
-  if (granularite === 'JOUR') return [refDate, refDate]
-  if (granularite === 'SEMAINE') {
-    const lundi = lundiDeLaSemaine(refDate)
-    return [lundi, ajouterJours(lundi, 6)]
-  }
-  if (granularite === 'MOIS') {
-    const d = new Date(`${refDate}T00:00:00Z`)
-    const y = d.getUTCFullYear()
-    const m = d.getUTCMonth()
-    const fin = new Date(Date.UTC(y, m + 1, 0))
-    return [`${y}-${String(m + 1).padStart(2, '0')}-01`, fin.toISOString().slice(0, 10)]
-  }
-  return [null, null]
-}
-
-function labelPeriode(granularite, refDate) {
-  if (granularite === 'JOUR') return formaterDateLongue(refDate)
-  if (granularite === 'SEMAINE') return formaterPlageSemaine(lundiDeLaSemaine(refDate))
-  if (granularite === 'MOIS') return formaterMoisAnnee(refDate)
-  return 'Tous les imports'
-}
+// `bornesPeriode` / `labelPeriode` / `decalerRefPeriode` vivent désormais dans
+// semaine.js (P40) — partagés avec le Rapport de volume horaire.
 
 // Horodatage court d'un import (timestamptz) → « 31/08/2026 14:23 ».
 function formaterHorodatage(iso) {
@@ -113,16 +91,7 @@ export default function Pige({ chaineActive, roleUtilisateur, pigeCible }) {
   )
 
   function decalerPeriode(sens) {
-    setRefDate((d) => {
-      if (granularite === 'JOUR') return ajouterJours(d, sens)
-      if (granularite === 'SEMAINE') return ajouterJours(d, sens * 7)
-      if (granularite === 'MOIS') {
-        const dt = new Date(`${d}T00:00:00Z`)
-        dt.setUTCMonth(dt.getUTCMonth() + sens)
-        return dt.toISOString().slice(0, 10)
-      }
-      return d
-    })
+    setRefDate((d) => decalerRefPeriode(granularite, d, sens))
   }
 
   const importActif = useMemo(() => imports.find((i) => i.id === importActifId) ?? null, [imports, importActifId])

@@ -1031,6 +1031,26 @@ export async function listerDiffusionsReellesProgrammesActives() {
   )
 }
 
+// P40 : les diffusions réelles de type PROGRAMME (hors sous-lignes) d'UNE chaîne
+// sur UNE période, issues des imports pige ACTIFS — socle du rapport de volume
+// horaire. Contrairement à listerDiffusionsReellesProgrammesActives (P37b, toutes
+// chaînes), le volume horaire se lit chaîne par chaîne.
+export async function listerDiffusionsReellesParChaineEtPeriode(chaineId, debutISO, finISO) {
+  return verifie(
+    await supabase
+      .from('diffusion_reelle')
+      .select('*, import_pige!inner(actif)')
+      .eq('chaine_id', chaineId)
+      .eq('type_element', 'PROGRAMME')
+      .eq('est_sous_ligne', false)
+      .eq('import_pige.actif', true)
+      .gte('date', debutISO)
+      .lte('date', finISO)
+      .order('date')
+      .order('debut_secondes')
+  )
+}
+
 // --- droit_auteur (P37b : comptage des diffusions payantes pour la finance) ---
 // Une ligne par programme externe que le Chargé d'acquisitions a vérifié.
 // Aucun montant : seuil + exclusions (faux positifs) + override + validation.

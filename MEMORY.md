@@ -140,6 +140,7 @@ P36b| La pige alimente l'historique fiche | ✅ | 635f9b4..f672ab1 | HistoriqueT
 P36c| Section Pige : Import / Historique + save explicite | ✅ | 8144c7f | Pige.jsx, PanneauImportPige.jsx, TableauLignesPige.jsx | 2 vues internes ; brouillon EN MÉMOIRE → « Enregistrer dans l'historique » (rien en base avant) ; filtres Jour/Semaine/Mois
 P37b| Droits d'auteur : nb de diffusions payantes | ✅ | f632eaf 7119a27 | droitsAuteur.js, exportDroitsAuteur.js, DroitsAuteur.jsx, migration-p37b | table droit_auteur ; comptage SEUL (aucun montant, la finance calcule) ; > 3e diffusion réelle = payante ; exclusions[] + override + valide ; rôle GESTION_DROITS_STOCK + SUPER_ADMIN
 P37c| Contrat obligatoire pour production externe | ✅ | 56d37ab | FicheProgramme.jsx | EXTERNE sans référence ni fichier de contrat → blocage à l'enregistrement (édition) ET à la sortie de fiche
+P40 | Rapport de volume horaire (depuis la pige) | ✅ | (ce commit) | volumeHoraire.js, exportVolumeHoraire.js, RapportVolume.jsx, semaine.js, migration-p53 | volume RÉEL diffusé par période (jour/semaine/mois) : table par GENRE pige (fiable, aucun rapprochement) + table par PROGRAMME (rapproché par nom, approximatif, corrigeable) + table des NON RAPPROCHÉES ; égalité de contrôle T1 = T2 + T3 affichée et exportée ; export Word (docx) ; aucune persistance (régénérable) ; compte démo ilyas.prog (PROGRAMMATEUR)
 ```
 
 ## 5. Décisions structurantes (pièges à ne pas refaire)
@@ -154,14 +155,14 @@ P37c| Contrat obligatoire pour production externe | ✅ | 56d37ab | FicheProgram
 - **Rapprochement pige ↔ catalogue PAR LE NOM** (`rapprochementPige.js` : normalisation sans accents/casse/ponctuation/parenthèses + inclusion bidirectionnelle ≥ 4 caractères) — **imparfait**, faux positifs/négatifs assumés → toute consommation montre les diffusions rapprochées et laisse l'humain corriger/valider.
 - **Droits d'auteur = assistant de COMPTAGE, pas autorité** : l'app ne calcule **aucun montant** ; > 3e diffusion réelle = payante ; la finance applique ses barèmes. Concerne **uniquement** la production EXTERNE (interne = acteurs salariés SNRT).
 - **Production EXTERNE** : contrat obligatoire (référence ou fichier), blocage à l'enregistrement et à la sortie de fiche. INTERNE : droits illimités.
-- **Genre** stocké comme **libellé FR en clair** (pas de FK vers table `genre`, jointure par texte).
+- **Genre** stocké comme **libellé FR en clair** (pas de FK vers table `genre`, jointure par texte). Le **genre de la pige** (`genre_niv1/2/3`) est une **autre taxonomie** : utilisé **brut**, jamais mappé vers les 9 genres internes (un mapping rendrait approximatif un chiffre par ailleurs fiable).
+- **Consommer la pige sans rien perdre** (P40, patron à réutiliser) : ce qu'aucun programme ne réclame — ou que l'humain a décoché — bascule dans une table « non rapprochées » et jamais hors du total. D'où l'**égalité de contrôle affichée** `total par genre = total par programme + total non rapprochées`. Une ligne de pige est attribuée à **au plus un** programme (titre le plus long, départage alphabétique) — sinon le double comptage casse l'égalité.
 - **Couleur = genre** uniquement ; signalisation rouge/ambre/vert.
 - **Numérotation phases** : deux séries parallèles (linéaire P0→P49 + suffixes P36a/b/c, P37a/b/c). Le n° de fichier migration ≠ le n° de phase (ex. « P36 » PLAN.md = migration-p40 ; « P36a » = migration-p36a).
 
 ## 6. Reste à faire (planifié, non codé)
 
 - **P39b — Comparaison Plan média (prévu) vs pige (réel)** : rapprochement d'écarts, patron `DashboardAudit.jsx`. Dépend de P36.
-- **Volume horaire réalisé par genre/chaîne** depuis la pige (`bilans.js` `calculerRepartitionParGenre` nourri par `diffusion_reelle`). Dépend de P36.
 - **Décompte auto des passages de droits** (`fenetre_droits.passages_consommes`) à la diffusion RÉELLE (RG-06) — jamais automatique aujourd'hui. Dépend de P36.
 - **« Type de bloc == Genre » (grille linéaire)** : correction de logique en attente de clarification utilisateur (PLAN.md §21).
 - **Vraie auth Supabase** : mot de passe, RLS par rôle via `auth.uid()`, ciblage des notifications par utilisateur — reporté à la production.
