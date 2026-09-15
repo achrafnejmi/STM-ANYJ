@@ -859,7 +859,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             {/* Header Modal */}
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className=" text-slate-800 text-lg">Exporter le conducteur</h3>
-              <button onClick={() => setModalExportOuvert(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+              <button onClick={() => setModalExportOuvert(false)} className="text-slate-500 hover:text-slate-600 transition-colors p-1">
                 <X size={20} />
               </button>
             </div>
@@ -1090,7 +1090,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             </div>
             {/* Barre de recherche */}
             <div className="relative mb-6 shrink-0">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={rechercheTimeline}
@@ -1123,7 +1123,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                 {/* Barre de recherche */}
                 <div className="p-3 border-b border-slate-200 bg-slate-50/80 shrink-0">
                   <div className="relative" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
-                    <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                    <Search size={16} className="absolute left-3 top-2.5 text-slate-500" />
                     <input
                       type="text"
                       placeholder="Rechercher par titre, numéro ou programme..."
@@ -1211,7 +1211,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                           {/* Bloc Date et Heure direct depuis la diffusion */}
                           <div className="flex flex-col items-end shrink-0 gap-1">
                             {item.date_diffusion && (
-                              <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                              <div className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
                                 {item.date_diffusion}
                               </div>
                             )}
@@ -1235,7 +1235,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                       const titreEp = item.titre || item.nom || `Épisode ${item.numero || ''}`;
                       return titreEp.toLowerCase().includes(rechercheEpisodeForm.toLowerCase()) || titreProg.toLowerCase().includes(rechercheEpisodeForm.toLowerCase());
                     }).length === 0 && (
-                      <div className="p-8 text-center text-sm text-slate-400 italic">
+                      <div className="p-8 text-center text-sm text-slate-500 italic">
                         Aucun épisode programmé ne correspond à votre recherche.
                       </div>
                     )}
@@ -1246,7 +1246,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                     const titreEp = ep.titre || ep.nom || `Épisode ${ep.numero || ''}`;
                     return titreEp.toLowerCase().includes(rechercheEpisodeForm.toLowerCase()) || titreProg.toLowerCase().includes(rechercheEpisodeForm.toLowerCase());
                   }).length === 0 && (
-                      <div className="p-8 text-center text-sm text-slate-400 italic">
+                      <div className="p-8 text-center text-sm text-slate-500 italic">
                         Aucun épisode ne correspond à votre recherche.
                       </div>
                     )}
@@ -1266,7 +1266,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
           {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
           {isModalOuvert && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap" }}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap",overflow:"auto" }}>
 
 
 
@@ -1290,7 +1290,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                     </div>
                     <button
                       onClick={fermerModal}
-                      className="text-slate-400 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
+                      className="text-slate-500 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
                     >
                       <X size={18} />
                     </button>
@@ -1481,7 +1481,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
                           <span>
                             Annonces déjà planifiées
-                            <span className="ml-1.5 text-[10px] font-medium text-slate-400">
+                            <span className="ml-1.5 text-[10px] font-medium text-slate-500">
                               ({planificationsMedia.filter(p => p.episode_id === formEpisodeId).length})
                             </span>
                           </span>
@@ -1511,7 +1511,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                       {plan.timestart}
                                     </div>
 
-                                    <div className="text-[9px] font-mono text-slate-400 mt-0.5">
+                                    <div className="text-[9px] font-mono text-slate-500 mt-0.5">
                                       → {plan.timeend}
                                     </div>
                                   </div>
@@ -1524,7 +1524,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                       {stockAnnonce?.nom || stockAnnonce?.title || "Annonce Inconnue"}
                                     </div>
 
-                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                    <div className="text-[10px] text-slate-500 mt-0.5">
                                       {stockAnnonce?.duration || 30}s
                                     </div>
                                   </div>
@@ -1540,7 +1540,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                           duree: stockAnnonce?.duration || 30
                                         });
                                       }}
-                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                                       title="Modifier l'heure"
                                       style={{ cursor: "pointer" }}
                                     >
@@ -1550,7 +1550,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                     <button
                                       type="button"
                                       onClick={() => gererSuppressionPlanification(plan.id)}
-                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors"
                                       title="Retirer l'annonce"
                                       style={{ cursor: "pointer" }}
                                     >
@@ -1561,7 +1561,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                               ) : (
                                 <div className="flex w-full items-end gap-2 p-2.5">
                                   <div className="flex-1">
-                                    <label className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold mb-1 block">
+                                    <label className="text-[9px] text-slate-500 uppercase tracking-wide font-semibold mb-1 block">
                                       Heure de début
                                     </label>
 
@@ -1644,7 +1644,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
                 {/* Barre de recherche de la liste */}
                 <div className="relative mb-4 shrink-0">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     type="text"
                     value={rechercheListe}
@@ -1657,7 +1657,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                 {/* Contenu de la liste dynamique */}
                 <div className="space-y-0.5 overflow-y-auto flex-1">
                   {listeFiltree.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic text-center py-6">Aucun élément trouvé.</p>
+                    <p className="text-xs text-slate-500 italic text-center py-6">Aucun élément trouvé.</p>
                   ) : (
                     listeFiltree.map((item) => (
                       <div
@@ -1740,7 +1740,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                         max-w-[80px]
                         truncate
                         text-[9px]
-                        text-slate-400
+                        text-slate-500
                     "
                                 title={item.client}
                               >
@@ -1770,7 +1770,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                         rounded bg-slate-100
                         px-1.5 py-0.5
                         text-[9px] font-medium
-                        text-slate-400
+                        text-slate-500
                     "
                               >
                                 ⌚ {item.duration ?? 30}s
@@ -1783,7 +1783,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                         mt-0.5
                         truncate
                         text-[9px]
-                        text-slate-400
+                        text-slate-500
                     "
                                 title={item.metadonne}
                               >
@@ -1794,7 +1794,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
                           {/* Budget */}
                           <div className="hidden w-[45px] shrink-0 md:block">
-                            <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                            <div className="text-[8px] uppercase tracking-wide text-slate-500">
                               Budget
                             </div>
 

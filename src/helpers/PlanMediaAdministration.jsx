@@ -245,7 +245,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
       </div>
 
       <div className="relative max-w-md flex items-center">
-        <Search size={16} className="absolute left-3 text-slate-400 pointer-events-none" />
+        <Search size={16} className="absolute left-3 text-slate-500 pointer-events-none" />
         <input
           type="text"
           value={rechercheAdmin}
@@ -262,7 +262,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         </div>
 
         {stockFiltre.length === 0 ? (
-          <p className="text-sm text-slate-400 italic py-8 text-center">Aucun élément trouvé dans le stock.</p>
+          <p className="text-sm text-slate-500 italic py-8 text-center">Aucun élément trouvé dans le stock.</p>
         ) : (
           <div className="flex flex-col gap-1">
             {stockFiltre.map((item) => (
@@ -317,7 +317,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
                   {item.client && (
                     <div
-                      className="mt-0.5 max-w-[80px] truncate text-[9px] text-slate-400"
+                      className="mt-0.5 max-w-[80px] truncate text-[9px] text-slate-500"
                       title={item.client}
                     >
                       {item.client}
@@ -346,7 +346,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
               rounded bg-slate-100
               px-1.5 py-0.5
               text-[9px] font-medium
-              text-slate-400
+              text-slate-500
             "
                     >
                       ⌚ {item.duration ?? 30}s
@@ -356,7 +356,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                   <div className="flex items-center gap-2 mt-0.5">
                     {item.metadonne && (
                       <p
-                        className="truncate text-[9px] text-slate-400"
+                        className="truncate text-[9px] text-slate-500"
                         title={item.metadonne}
                       >
                         {item.metadonne}
@@ -366,10 +366,10 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                   </div>
                 </div>
                 <div className="hidden w-[180px] shrink-0 sm:block">
-                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                  <div className="text-[9px] uppercase tracking-wide text-slate-500">
                     {/* Affichage des dates de validité */}
                     {(item.validite_debut || item.validite_fin) && (
-                      <span className="text-[9px] text-slate-400 bg-slate-50 px-1 rounded border border-slate-300">
+                      <span className="text-[9px] text-slate-500 bg-slate-50 px-1 rounded border border-slate-300">
                         Validité: {item.validite_debut ? new Date(item.validite_debut).toLocaleDateString() : '...'} au {item.validite_fin ? new Date(item.validite_fin).toLocaleDateString() : '...'}
                       </span>
                     )}
@@ -377,7 +377,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                 </div>
                 {/* Price */}
                 <div className="hidden w-[75px] shrink-0 sm:block">
-                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                  <div className="text-[9px] uppercase tracking-wide text-slate-500">
                     Prix/s
                   </div>
                   <div className="text-[11px] font-semibold text-slate-600">
@@ -387,7 +387,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
                 {/* Budget */}
                 <div className="hidden w-[75px] shrink-0 md:block">
-                  <div className="text-[8px] uppercase tracking-wide text-slate-400">
+                  <div className="text-[9px] uppercase tracking-wide text-slate-500">
                     Budget
                   </div>
                   <div className="text-[11px] font-semibold text-slate-600">
@@ -452,7 +452,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
             flex h-6 w-6
             items-center justify-center
             rounded
-            text-slate-400
+            text-slate-500
             transition-colors
             hover:bg-snrt-accent/10
             hover:text-snrt-navy
@@ -469,7 +469,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
             flex h-6 w-6
             items-center justify-center
             rounded
-            text-slate-400
+            text-slate-500
             transition-colors
             hover:bg-red-50
             hover:text-red-600
