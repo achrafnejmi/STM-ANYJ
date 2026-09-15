@@ -41,6 +41,7 @@ export function analyserConformiteGrilleType({ diffusions, blocsGrilleType, prog
       genre: d.genre,
       genreAttendu: bloc.genre_attendu,
       blocNom: bloc.nom,
+      blocId: bloc.id,
       overrideAssume: d.ecart_grille_type_accepte === true,
     })
   }

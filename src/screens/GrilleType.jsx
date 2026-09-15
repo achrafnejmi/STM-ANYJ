@@ -143,7 +143,7 @@ function calculerNouveauxJours(joursOriginaux, jourOccurrence, mode, jourPointeu
   return [...jours].sort((a, b) => a - b)
 }
 
-export default function GrilleType({ chaineActive, roleUtilisateur }) {
+export default function GrilleType({ chaineActive, roleUtilisateur, grilleTypeCible }) {
   // P43b : même traitement que GrilleLineaire.jsx — l'Audit atteint cet écran
   // depuis le menu, en LECTURE SEULE (peutEditerGrilleType).
   const lectureSeule = !peutEditerGrilleType(roleUtilisateur)
@@ -172,6 +172,10 @@ export default function GrilleType({ chaineActive, roleUtilisateur }) {
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
   const [importOuvert, setImportOuvert] = useState(false)
+  // Surlignage temporaire d'un bloc (bouton « Grille type » du tableau des
+  // violations, P43b — même mécanique que GrilleLineaire.jsx/Pige.jsx).
+  const [blocFlashId, setBlocFlashId] = useState(null)
+  const flashFaitPourRef = useRef(null)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
@@ -212,6 +216,37 @@ export default function GrilleType({ chaineActive, roleUtilisateur }) {
   useEffect(() => {
     if (grillesTypeOuvertesIds.length > 0) definirGrillesTypeOuvertes(chaineActive.code, grillesTypeOuvertesIds)
   }, [chaineActive.code, grillesTypeOuvertesIds])
+
+  // Arrivée depuis le tableau des violations (P43b) : bascule sur le document
+  // qui contient le bloc visé, même s'il n'était pas déjà ouvert (un bloc
+  // récurrent n'est pas daté — pas de navigation de période à gérer, juste le
+  // bon onglet).
+  useEffect(() => {
+    if (!grilleTypeCible?.blocId) return
+    const bloc = blocsChaine.find((b) => b.id === grilleTypeCible.blocId)
+    if (!bloc) return
+    setGrillesTypeOuvertesIds((prev) => (prev.includes(bloc.grille_type_id) ? prev : [...prev, bloc.grille_type_id]))
+    setGrilleTypeActiveId(bloc.grille_type_id)
+  }, [grilleTypeCible, blocsChaine])
+
+  // Une fois le bon document effectivement actif, centre et surligne le bloc
+  // ~2,6 s. Un bloc récurrent apparaît sur plusieurs colonnes (un par jour de
+  // semaine où il est actif) : `data-bloc-id` (pas `id`, dupliqué exprès) sur
+  // chaque occurrence pour que le surlignage s'applique à toutes, en
+  // scrollant vers la première (querySelector).
+  useEffect(() => {
+    if (!grilleTypeCible?.cle || !grilleTypeCible?.blocId) return
+    if (flashFaitPourRef.current === grilleTypeCible.cle) return
+    const bloc = blocsChaine.find((b) => b.id === grilleTypeCible.blocId)
+    if (!bloc || bloc.grille_type_id !== grilleTypeActiveId) return
+    flashFaitPourRef.current = grilleTypeCible.cle
+    setBlocFlashId(grilleTypeCible.blocId)
+    document
+      .querySelector(`[data-bloc-id="${grilleTypeCible.blocId}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const t = setTimeout(() => setBlocFlashId(null), 2600)
+    return () => clearTimeout(t)
+  }, [grilleTypeCible, blocsChaine, grilleTypeActiveId])
 
   const grilleTypeActive = useMemo(() => grillesType.find((g) => g.id === grilleTypeActiveId) ?? null, [grillesType, grilleTypeActiveId])
   const grillesTypeOuvertes = useMemo(
@@ -1062,13 +1097,21 @@ export default function GrilleType({ chaineActive, roleUtilisateur }) {
                         const { fond, texte } = couleurGenre(bloc.genre_attendu)
                         const estSelectionne = blocSelectionne?.id === bloc.id
                         const estCoche = selectionActive && blocsSelectionnesIds.has(bloc.id)
+                        const enFlash = blocFlashId === bloc.id
                         return (
                           <button
                             type="button"
                             key={bloc.id}
+                            data-bloc-id={bloc.id}
                             onClick={() => (selectionActive ? toggleSelectionBloc(bloc.id) : selectionnerBloc(bloc))}
-                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${lectureSeule ? 'cursor-default' : ''} ${fond} ${texte} ${
-                              estCoche ? 'ring-2 ring-offset-1 ring-emerald-600' : estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
+                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm transition-shadow ${lectureSeule ? 'cursor-default' : ''} ${fond} ${texte} ${
+                              enFlash
+                                ? 'ring-4 ring-offset-1 ring-amber-400'
+                                : estCoche
+                                  ? 'ring-2 ring-offset-1 ring-emerald-600'
+                                  : estSelectionne
+                                    ? 'ring-2 ring-offset-1 ring-snrt-navy'
+                                    : ''
                             }`}
                             style={{
                               top: `${top}px`,

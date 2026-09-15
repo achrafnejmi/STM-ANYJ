@@ -96,6 +96,7 @@ function App() {
   const [synopsisCible, setSynopsisCible] = useState(null)
   const [pigeCible, setPigeCible] = useState(null)
   const [grilleCible, setGrilleCible] = useState(null)
+  const [grilleTypeCible, setGrilleTypeCible] = useState(null)
   // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
   // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
   // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
@@ -301,6 +302,16 @@ function App() {
     setGrilleCible({ date, diffusionId, cle: crypto.randomUUID() })
   }
 
+  // Ouvre la Grille type à un bloc précis (bouton « Grille type » du tableau
+  // des violations, P43b). Un bloc de grille type est récurrent par jour de
+  // semaine, pas daté — pas de navigation de période à gérer, juste basculer
+  // sur le bon document et surligner. `blocId` optionnel : les lignes « hors
+  // bloc » n'ont aucun bloc à montrer, on ouvre juste la grille type LIVE.
+  function ouvrirGrilleType(blocId = null) {
+    naviguer('GRILLE_TYPE')
+    setGrilleTypeCible({ blocId, cle: crypto.randomUUID() })
+  }
+
   // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un
   // programme — vers la section de la langue que le rôle courant peut voir.
   function ouvrirSynopsis(id) {
@@ -382,11 +393,13 @@ function App() {
             synopsisCible={synopsisCible}
             pigeCible={pigeCible}
             grilleCible={grilleCible}
+            grilleTypeCible={grilleTypeCible}
             langue={langueEcran}
             onOuvrirProgramme={ouvrirProgramme}
             onOuvrirSynopsis={ouvrirSynopsis}
             onOuvrirPige={ouvrirPige}
             onOuvrirGrille={ouvrirGrilleADate}
+            onOuvrirGrilleType={ouvrirGrilleType}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
           />

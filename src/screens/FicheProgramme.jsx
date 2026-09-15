@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react'
-import { ArrowLeft, Paperclip, Loader2, Trash2, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Paperclip, Loader2, Trash2, TriangleAlert, ExternalLink } from 'lucide-react'
 import {
   obtenirProgramme,
   creerProgramme,
@@ -71,6 +71,7 @@ const FORM_VIDE = {
   exclusif: false,
   chaineExclusiveId: '',
   reference_contrat: '',
+  lien_mplanner: '',
 }
 
 // `chaineExclusiveId` garde toujours une valeur (jamais '') même pour un
@@ -99,6 +100,7 @@ function versFormulaire(programme, chaineActive) {
     exclusif: programme.chaine_id != null,
     chaineExclusiveId: programme.chaine_id ?? chaineActive.id,
     reference_contrat: programme.reference_contrat ?? '',
+    lien_mplanner: programme.lien_mplanner ?? '',
   }
 }
 
@@ -200,6 +202,9 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       interpretes: form.interpretes.trim() || null,
       mots_cles: form.mots_cles.trim() || null,
       reference_contrat: form.reference_contrat.trim() || null,
+      // Champ masqué (pas effacé) quand la production repasse Externe — on ne
+      // perd jamais silencieusement une valeur saisie, cf. CLAUDE.md.
+      lien_mplanner: form.lien_mplanner.trim() || null,
     }
     if (!champs.titre) {
       setErreur('Le titre (français) est obligatoire.')
@@ -592,6 +597,39 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 production externe : un contrat est attendu dans l'onglet Droits.
               </p>
             </div>
+
+            {/* Mplanner (P54) : outil externe de gestion des ressources — coût,
+                acteurs… — des productions INTERNES uniquement (une production
+                externe n'a pas de ressources SNRT à planifier). Champ conservé
+                en base même masqué : rebasculer en Interne le retrouve intact. */}
+            {form.production === 'INTERNE' && (
+              <div className="border-t border-slate-100 pt-4">
+                <div className="flex items-end gap-3">
+                  <div className="max-w-md flex-1">
+                    <Champ
+                      label="Lien Mplanner"
+                      type="url"
+                      value={form.lien_mplanner}
+                      onChange={(v) => setForm({ ...form, lien_mplanner: v })}
+                    />
+                  </div>
+                  {programme?.lien_mplanner && (
+                    <a
+                      href={programme.lien_mplanner}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-0.5 flex items-center gap-1.5 text-sm text-snrt-blue hover:underline"
+                    >
+                      Ouvrir Mplanner
+                      <ExternalLink size={14} />
+                    </a>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Ressources, coût et acteurs de cette production : gérés dans Mplanner, un outil externe.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>

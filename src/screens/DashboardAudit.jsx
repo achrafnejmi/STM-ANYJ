@@ -5,7 +5,7 @@
 // filtrer un sous-ensemble précis (juste les overrides, juste hors-bloc).
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { ShieldCheck, Download, CalendarDays, ChevronDown } from 'lucide-react'
+import { ShieldCheck, Download, CalendarDays, Layers3, ChevronDown } from 'lucide-react'
 import {
   obtenirGrilleLiveParChaine,
   listerDiffusionsLineairesParGrille,
@@ -33,7 +33,7 @@ function PastilleGenre({ genre }) {
   return <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${fond} ${texte}`}>{genre}</span>
 }
 
-export default function DashboardAudit({ chaineActive, onOuvrirProgramme, onOuvrirGrille }) {
+export default function DashboardAudit({ chaineActive, onOuvrirProgramme, onOuvrirGrille, onOuvrirGrilleType }) {
   const [diffusions, setDiffusions] = useState([])
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
   const [grilleType, setGrilleType] = useState(null)
@@ -288,21 +288,37 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme, onOuvr
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right">
-                            {onOuvrirGrille && (
-                              <button
-                                type="button"
-                                title="Consulter la grille"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onOuvrirGrille(l.date, l.id)
-                                }}
-                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
-                              >
-                                <CalendarDays size={12} />
-                                Grille
-                              </button>
-                            )}
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {onOuvrirGrille && (
+                                <button
+                                  type="button"
+                                  title="Consulter la grille"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOuvrirGrille(l.date, l.id)
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
+                                >
+                                  <CalendarDays size={12} />
+                                  Grille
+                                </button>
+                              )}
+                              {onOuvrirGrilleType && (
+                                <button
+                                  type="button"
+                                  title="Consulter la grille type"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOuvrirGrilleType(l.blocId ?? null)
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
+                                >
+                                  <Layers3 size={12} />
+                                  Grille type
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
