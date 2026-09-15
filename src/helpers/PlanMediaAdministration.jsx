@@ -222,9 +222,9 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 min-h-[500px] space-y-6">
+    <div className="rounded-lg border border-slate-300 bg-white p-6 min-h-[500px] space-y-6">
 
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 pb-4">
         <div>
           <h2 className="text-base font-semibold text-slate-800">Stock d'annonces</h2>
           <p className="text-sm text-slate-500">Gérez le catalogue des annonces, leurs tarifs, budgets et répartitions de cibles.</p>
@@ -251,7 +251,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
           value={rechercheAdmin}
           onChange={(e) => setRechercheAdmin(e.target.value)}
           placeholder="Rechercher par nom, client ou type..."
-          className="w-full rounded-md border border-slate-200 py-2 pl-10 pr-3 text-sm text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+          className="w-full rounded-md border border-slate-300 py-2 pl-10 pr-3 text-sm text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
         />
       </div>
 
@@ -273,7 +273,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
         flex items-center gap-1
         min-h-[40px]
         rounded-md
-        border border-slate-200
+        border border-slate-300
         bg-white
         px-2 py-1
         transition-all duration-150
@@ -369,7 +369,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                   <div className="text-[8px] uppercase tracking-wide text-slate-400">
                     {/* Affichage des dates de validité */}
                     {(item.validite_debut || item.validite_fin) && (
-                      <span className="text-[9px] text-slate-400 bg-slate-50 px-1 rounded border border-slate-100">
+                      <span className="text-[9px] text-slate-400 bg-slate-50 px-1 rounded border border-slate-300">
                         Validité: {item.validite_debut ? new Date(item.validite_debut).toLocaleDateString() : '...'} au {item.validite_fin ? new Date(item.validite_fin).toLocaleDateString() : '...'}
                       </span>
                     )}
@@ -441,7 +441,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                 <div
                   className="
           flex shrink-0 items-center gap-1
-          border-l border-slate-100
+          border-l border-slate-300
           pl-2
         "
                 >
@@ -640,7 +640,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-300">
               <button
                 type="button"
                 onClick={() => { setModalOuverte(false); setElementEnEdition(null); }}

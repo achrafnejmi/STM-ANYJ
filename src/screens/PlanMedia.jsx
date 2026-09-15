@@ -17,7 +17,7 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
   insererPlanificationsMedia, listerPlanificationsMedia,
-  data_refrech, listerClassificationsProgrammes, data_annonce_refrech,creerDemandePad
+  data_refrech, listerClassificationsProgrammes, data_annonce_refrech, creerDemandePad
 } from '../lib/db.js';
 import { Plus, Trash2, X } from 'lucide-react';
 // Remplacez import * as XLSX from 'xlsx'; par :
@@ -28,7 +28,7 @@ import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, Align
 import { saveAs } from 'file-saver';
 import toast from 'react-hot-toast';
 
-export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = false }) {
+export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = false }) {
 
   const [isLoading, setIsLoading] = useState(false);
   // États pour le formulaire d'insertion d'annonces
@@ -822,13 +822,25 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
   };
 
   async function send_pad_demande(id) {
-    const demande ={
-      chaine_id:chaineActive.id,
-      demandeur:utilisateur.nom_utilisateur,
-      statut:"EN_ATTENTE",
-      relances:0,
+
+    const demande = {
+      chaine_id: chaineActive.id,
+      demandeur: Utilisateur.nom_affiche,
+      statut: "EN_ATTENTE",
+      relances: 0,
+      spot_bibliotheque_id: id
     }
-  } 
+    try {
+      const result = await creerDemandePad(demande);
+      toast.success("Demande PAD envoyée ")
+
+    } catch (error) {
+
+      toast.error("Erreur création demande");
+    }
+
+
+  }
 
 
   return (
@@ -1855,8 +1867,8 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                     hover:border-amber-300
                     hover:text-amber-800
                 "
-                style={{cursor:"pointer"}}
-                onClick={()=>{send_pad_demande(item.id)}}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => { send_pad_demande(item.id) }}
                             >
                               Demander PAD
                             </button>

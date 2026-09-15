@@ -360,6 +360,7 @@ function App() {
             onOuvrirSynopsis={ouvrirSynopsis}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
+            Utilisateur={utilisateurCourant}
           />
         </main>
       </div>
