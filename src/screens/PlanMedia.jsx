@@ -823,10 +823,10 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
 
   async function send_pad_demande(id) {
     const demande ={
-      chaine_id:"",
-      demandeur:"",
+      chaine_id:chaineActive.id,
+      demandeur:utilisateur.nom_utilisateur,
       statut:"EN_ATTENTE",
-      relances:1,
+      relances:0,
     }
   } 
 
