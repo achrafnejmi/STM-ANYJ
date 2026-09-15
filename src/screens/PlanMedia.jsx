@@ -17,7 +17,7 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
   insererPlanificationsMedia, listerPlanificationsMedia,
-  data_refrech, listerClassificationsProgrammes, data_annonce_refrech
+  data_refrech, listerClassificationsProgrammes, data_annonce_refrech,creerDemandePad
 } from '../lib/db.js';
 import { Plus, Trash2, X } from 'lucide-react';
 // Remplacez import * as XLSX from 'xlsx'; par :
@@ -820,6 +820,15 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
       toast.error("Erreur lors de la modification.");
     }
   };
+
+  async function send_pad_demande(id) {
+    const demande ={
+      chaine_id:"",
+      demandeur:"",
+      statut:"EN_ATTENTE",
+      relances:1,
+    }
+  } 
 
 
   return (
@@ -1847,6 +1856,7 @@ export default function PlanMedia({ chaineActive, utilisateur, isReadOnly = fals
                     hover:text-amber-800
                 "
                 style={{cursor:"pointer"}}
+                onClick={()=>{send_pad_demande(item.id)}}
                             >
                               Demander PAD
                             </button>
