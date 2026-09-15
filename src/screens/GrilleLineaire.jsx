@@ -103,7 +103,7 @@ const MARQUES_HEURES = genererMarquesHeures()
 // (recalculés à partir de la grille cible au moment de coller).
 const CHAMPS_COPIABLES = ['programme_id', 'episode_id', 'episode_numero', 'date', 'heure_debut', 'heure_fin', 'genre', 'titre_cache', 'vecteur']
 
-export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, onOuvrirProgramme }) {
+export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, onOuvrirProgramme, grilleCible }) {
   const [vue, setVue] = useState('SEMAINE')
   const [dateReference, setDateReference] = useState(aujourdHuiISO())
   const [diffusions, setDiffusions] = useState([])
@@ -136,6 +136,11 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   // défaut Satellite, la vue où se fait l'édition au quotidien.
   const [vueVecteur, setVueVecteur] = useState('SATELLITE')
   const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
+  // Surlignage temporaire d'un bloc précis (clic « Consulter la grille » depuis
+  // le tableau des violations de grille type, P43b — même mécanique que le
+  // clignotement de ligne de pige, P36b).
+  const [blocFlashId, setBlocFlashId] = useState(null)
+  const flashFaitPourRef = useRef(null)
   const dragRef = useRef(null)
   const chargementIdRef = useRef(0)
   const { confirmer, succes, info, erreur: notifierErreur } = useNotification()
@@ -219,6 +224,32 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
   useEffect(() => {
     if (grillesOuvertesIds.length > 0) definirGrillesOuvertes(chaineActive.code, grillesOuvertesIds)
   }, [chaineActive.code, grillesOuvertesIds])
+
+  // Arrivée depuis le tableau des violations de grille type (P43b) : bascule
+  // sur la bonne semaine (peu importe la vue/date en cours).
+  useEffect(() => {
+    if (!grilleCible?.date) return
+    setVue('SEMAINE')
+    setDateReference(grilleCible.date)
+  }, [grilleCible])
+
+  // Une fois la semaine ciblée effectivement affichée (vue SEMAINE, bonne
+  // date, diffusions chargées), centre et surligne le bloc visé ~2,6 s — en
+  // deux effets séparés (ci-dessus) car changer vue/dateReference ne met pas
+  // à jour le DOM avant le prochain rendu : ce second effet se redéclenche
+  // jusqu'à ce que les conditions soient réunies (garde flashFaitPourRef pour
+  // ne le faire qu'une fois par clic, même mécanique que P36b/Pige.jsx).
+  useEffect(() => {
+    if (!grilleCible?.cle || !grilleCible?.diffusionId) return
+    if (flashFaitPourRef.current === grilleCible.cle) return
+    if (vue !== 'SEMAINE' || dateReference !== grilleCible.date) return
+    if (!diffusions.some((d) => d.id === grilleCible.diffusionId)) return
+    flashFaitPourRef.current = grilleCible.cle
+    setBlocFlashId(grilleCible.diffusionId)
+    document.getElementById(`grille-bloc-${grilleCible.diffusionId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const t = setTimeout(() => setBlocFlashId(null), 2600)
+    return () => clearTimeout(t)
+  }, [grilleCible, diffusions, vue, dateReference])
 
   const grilleActive = useMemo(() => grilles.find((g) => g.id === grilleActiveId) ?? null, [grilles, grilleActiveId])
   const grilleLive = useMemo(() => grilles.find((g) => g.est_live) ?? null, [grilles])
@@ -1519,6 +1550,7 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                         const estSelectionne = blocSelectionne?.id === diffusion.id
                         const estCoche = selectionActive && blocsSelectionnesIds.has(diffusion.id)
                         const enAnomalieBloquante = idsBloquants.has(diffusion.id)
+                        const enFlash = blocFlashId === diffusion.id
                         const selectionner = async (e) => {
                           e.stopPropagation()
                           if (selectionActive) {
@@ -1539,19 +1571,22 @@ export default function GrilleLineaire({ chaineActive, onAnomaliesBloquantes, on
                             role="button"
                             tabIndex={0}
                             key={diffusion.id}
+                            id={`grille-bloc-${diffusion.id}`}
                             onClick={selectionner}
                             onKeyDown={(e) => {
                               if (e.target !== e.currentTarget) return
                               if (e.key === 'Enter' || e.key === ' ') selectionner(e)
                             }}
-                            className={`group absolute cursor-pointer overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
-                              estCoche
-                                ? 'ring-2 ring-offset-1 ring-emerald-600'
-                                : estSelectionne
-                                  ? 'ring-2 ring-offset-1 ring-snrt-navy'
-                                  : enAnomalieBloquante
-                                    ? 'ring-2 ring-offset-1 ring-red-600'
-                                    : ''
+                            className={`group absolute cursor-pointer overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm transition-shadow ${fond} ${texte} ${
+                              enFlash
+                                ? 'ring-4 ring-offset-1 ring-amber-400'
+                                : estCoche
+                                  ? 'ring-2 ring-offset-1 ring-emerald-600'
+                                  : estSelectionne
+                                    ? 'ring-2 ring-offset-1 ring-snrt-navy'
+                                    : enAnomalieBloquante
+                                      ? 'ring-2 ring-offset-1 ring-red-600'
+                                      : ''
                             }`}
                             style={{
                               top: `${top}px`,

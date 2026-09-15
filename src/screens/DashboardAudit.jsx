@@ -1,8 +1,11 @@
 // Dashboard d'audit (P43 partie B) — « Respect de la grille type ».
-// Rôle AUDIT (Taoufik). Par chaîne, sur la grille LIVE : KPI cliquables +
-// tableau dépliable des diffusions programmées hors du genre prévu.
+// Rôle AUDIT (Taoufik, Ilyas). Par chaîne, sur la grille LIVE : KPI cliquables
+// + tableau permanent des violations les plus récentes (P43b, toujours
+// visible, exportable, lien vers la grille) + tableau dépliable par KPI pour
+// filtrer un sous-ensemble précis (juste les overrides, juste hors-bloc).
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { ShieldCheck, Download, CalendarDays, ChevronDown } from 'lucide-react'
 import {
   obtenirGrilleLiveParChaine,
   listerDiffusionsLineairesParGrille,
@@ -11,9 +14,12 @@ import {
   listerProgrammesParChaine,
 } from '../lib/db.js'
 import { analyserConformiteGrilleType } from '../lib/conformiteGrilleType.js'
-import { formaterJourCourt } from '../lib/semaine.js'
+import { formaterJourCourt, formaterDateLongue, aujourdHuiISO } from '../lib/semaine.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
+import { lireUtilisateur } from '../lib/session.js'
 import CarteIndicateur from '../components/CarteIndicateur.jsx'
+
+const TAILLE_PAGE = 30
 
 // Colonnes du tableau dépliable selon le KPI ouvert.
 const COLONNES = {
@@ -27,7 +33,7 @@ function PastilleGenre({ genre }) {
   return <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${fond} ${texte}`}>{genre}</span>
 }
 
-export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
+export default function DashboardAudit({ chaineActive, onOuvrirProgramme, onOuvrirGrille }) {
   const [diffusions, setDiffusions] = useState([])
   const [blocsGrilleType, setBlocsGrilleType] = useState([])
   const [grilleType, setGrilleType] = useState(null)
@@ -36,11 +42,16 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
   const [erreur, setErreur] = useState(null)
   // KPI dont le tableau est déplié : 'tout' | 'ecarts' | 'horsBloc' | 'overrides' | null
   const [kpiActif, setKpiActif] = useState(null)
+  // Tableau permanent des violations les plus récentes : combien de lignes
+  // affichées, révélées par 30 au défilement (pas de re-fetch, tout est déjà
+  // en mémoire — juste la fenêtre de rendu qui s'agrandit).
+  const [nbAffichees, setNbAffichees] = useState(TAILLE_PAGE)
 
   useEffect(() => {
     setChargement(true)
     setErreur(null)
     setKpiActif(null)
+    setNbAffichees(TAILLE_PAGE)
     Promise.all([obtenirGrilleLiveParChaine(chaineActive.id), obtenirGrilleTypeLiveParChaine(chaineActive.id)])
       .then(([grilleLive, grilleTypeLive]) =>
         Promise.all([
@@ -90,6 +101,51 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
       }
     return { titreTableau: null, colonnes: [], lignes: [], mode: null }
   }, [kpiActif, analyse])
+
+  // Tableau permanent (P43b) : écarts + hors bloc combinés, DU PLUS RÉCENT AU
+  // PLUS ANCIEN (analyserConformiteGrilleType trie l'inverse pour les besoins
+  // du calcul — tri dédié ici, rien retouché côté fonction pure).
+  const violationsRecentes = useMemo(() => {
+    const combinees = [
+      ...analyse.lignesEcartGenre.map((l) => ({ ...l, horsBloc: false })),
+      ...analyse.lignesHorsBloc.map((l) => ({ ...l, horsBloc: true, genreAttendu: null, blocNom: null })),
+    ]
+    return combinees.sort((a, b) => b.date.localeCompare(a.date) || b.heure.localeCompare(a.heure))
+  }, [analyse])
+
+  const violationsAffichees = violationsRecentes.slice(0, nbAffichees)
+  const resteAAfficher = violationsRecentes.length > nbAffichees
+
+  // Défilement dans le tableau : révèle 30 lignes de plus en approchant du bas
+  // (pas de bouton « Charger plus » — tout est déjà en mémoire).
+  function gererScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    if (resteAAfficher && scrollHeight - scrollTop - clientHeight < 150) {
+      setNbAffichees((n) => Math.min(n + TAILLE_PAGE, violationsRecentes.length))
+    }
+  }
+
+  function exporterViolations() {
+    const lignes = violationsRecentes.map((l) => [
+      formaterDateLongue(l.date),
+      (l.heure ?? '').slice(0, 5),
+      l.titre,
+      l.genre ?? '—',
+      l.genreAttendu ?? '—',
+      l.horsBloc ? 'Hors grille type' : (l.blocNom ?? '—'),
+      l.overrideAssume ? 'Oui' : 'Non',
+    ])
+    const feuille = XLSX.utils.aoa_to_sheet([
+      [`Violations de la grille type — ${chaineActive.nom}`],
+      [`Édité le ${formaterDateLongue(aujourdHuiISO())} par ${lireUtilisateur() ?? '—'}`],
+      [],
+      ['Date', 'Heure', 'Programme', 'Genre programmé', 'Genre attendu', 'Bloc', 'Override assumé'],
+      ...lignes,
+    ])
+    const classeur = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(classeur, feuille, 'Violations')
+    XLSX.writeFile(classeur, `violations-grille-type_${chaineActive.nom}_${aujourdHuiISO()}.xlsx`)
+  }
 
   // Rien à évaluer (aucune diffusion dans un bloc avec un genre).
   const rienAEvaluer = analyse.nbEvaluees === 0
@@ -156,6 +212,119 @@ export default function DashboardAudit({ chaineActive, onOuvrirProgramme }) {
               actif={kpiActif === 'overrides'}
               description="Écarts que l'utilisateur a explicitement confirmés au moment du geste."
             />
+          </div>
+
+          {/* Tableau permanent (P43b) : les programmations hors grille type les
+              plus récentes, toujours visibles — sans clic sur une carte KPI.
+              30 lignes à la fois, 30 de plus au défilement ; export ; lien
+              direct vers la grille pour chaque ligne. */}
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Programmations hors grille type — les plus récentes</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {violationsRecentes.length} programmation{violationsRecentes.length > 1 ? 's' : ''} au total (écarts de
+                  genre + hors bloc), triées de la plus récente à la plus ancienne.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={exporterViolations}
+                disabled={violationsRecentes.length === 0}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+              >
+                <Download size={14} />
+                Exporter
+              </button>
+            </div>
+
+            {violationsRecentes.length === 0 ? (
+              <p className="text-sm text-slate-500">Rien à signaler : aucune programmation hors grille type actuellement.</p>
+            ) : (
+              <>
+                <div
+                  onScroll={gererScroll}
+                  className="max-h-[32rem] overflow-y-auto rounded-md border border-slate-200"
+                >
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 shadow-[0_1px_0_0] shadow-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Heure</th>
+                        <th className="px-3 py-2 font-medium">Programme</th>
+                        <th className="px-3 py-2 font-medium">Genre programmé</th>
+                        <th className="px-3 py-2 font-medium">Genre attendu</th>
+                        <th className="px-3 py-2 font-medium">Bloc</th>
+                        <th className="px-3 py-2 font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {violationsAffichees.map((l) => (
+                        <tr
+                          key={l.id}
+                          onClick={() => onOuvrirProgramme?.(l.programmeId)}
+                          className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-600">{formaterJourCourt(l.date)}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-600">{(l.heure ?? '').slice(0, 5)}</td>
+                          <td className="px-3 py-2 text-slate-800">{l.titre}</td>
+                          <td className="px-3 py-2">
+                            <PastilleGenre genre={l.genre} />
+                          </td>
+                          <td className="px-3 py-2">
+                            {l.horsBloc ? (
+                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
+                                hors grille type
+                              </span>
+                            ) : (
+                              <PastilleGenre genre={l.genreAttendu} />
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {l.horsBloc ? '—' : (l.blocNom ?? '—')}
+                            {l.overrideAssume && (
+                              <span className="ml-1.5 rounded-full bg-snrt-blue/10 px-2 py-0.5 text-[11px] font-medium text-snrt-blue">
+                                override assumé
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {onOuvrirGrille && (
+                              <button
+                                type="button"
+                                title="Consulter la grille"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onOuvrirGrille(l.date, l.id)
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
+                              >
+                                <CalendarDays size={12} />
+                                Grille
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {resteAAfficher && (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-2 text-center text-xs text-slate-400">
+                            <span className="inline-flex items-center gap-1">
+                              <ChevronDown size={12} className="animate-bounce" />
+                              Faites défiler pour voir la suite
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  {violationsAffichees.length} / {violationsRecentes.length} affichées · cliquer une ligne ouvre la fiche du
+                  programme.
+                </p>
+              </>
+            )}
           </div>
 
           {kpiActif && (

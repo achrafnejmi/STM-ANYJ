@@ -95,6 +95,7 @@ function App() {
   const [programmeCible, setProgrammeCible] = useState(null)
   const [synopsisCible, setSynopsisCible] = useState(null)
   const [pigeCible, setPigeCible] = useState(null)
+  const [grilleCible, setGrilleCible] = useState(null)
   // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
   // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
   // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
@@ -291,6 +292,15 @@ function App() {
     setPigeCible({ id: importId, ligneId, cle: crypto.randomUUID() })
   }
 
+  // Ouvre la Grille linéaire à une date précise, avec la diffusion visée
+  // surlignée (clic « Consulter la grille » depuis le tableau des violations
+  // de grille type, P43b). `diffusionId` optionnel : sans lui, on ouvre juste
+  // la bonne semaine.
+  function ouvrirGrilleADate(date, diffusionId = null) {
+    naviguer('GRILLE_LINEAIRE')
+    setGrilleCible({ date, diffusionId, cle: crypto.randomUUID() })
+  }
+
   // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un
   // programme — vers la section de la langue que le rôle courant peut voir.
   function ouvrirSynopsis(id) {
@@ -371,10 +381,12 @@ function App() {
             programmeCible={programmeCible}
             synopsisCible={synopsisCible}
             pigeCible={pigeCible}
+            grilleCible={grilleCible}
             langue={langueEcran}
             onOuvrirProgramme={ouvrirProgramme}
             onOuvrirSynopsis={ouvrirSynopsis}
             onOuvrirPige={ouvrirPige}
+            onOuvrirGrille={ouvrirGrilleADate}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
           />
