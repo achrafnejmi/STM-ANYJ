@@ -27,6 +27,7 @@ import autoTable from 'jspdf-autotable'; // <-- Modification ici
 import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, AlignmentType, WidthType } from 'docx';
 import { saveAs } from 'file-saver';
 import toast from 'react-hot-toast';
+import PigeValidation from '../helpers/PigeValidation.jsx';
 
 export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = false }) {
 
@@ -420,7 +421,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             time: timeStr,
             name: titreAnnonce,
             details: {
-              type: 'Publicité',
+              type: stockAnnonce.type,
               duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
               description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
             }
@@ -985,7 +986,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
               Administration Plan Média
             </button>
 
-            {vuePrincipale === 'PLAN_MEDIA' && <div>
+            {(vuePrincipale === 'PLAN_MEDIA' || vuePrincipale==='PIGE_VALIDATION') && <div>
               <select
                 className="w-full rounded-md border border-slate-300 py-1.5 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                 value={filtreGrilleId}
@@ -1266,7 +1267,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
           {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
           {isModalOuvert && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap",overflow:"auto" }}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap", overflow: "auto" }}>
 
 
 
@@ -1892,32 +1893,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           )}
         </div>
       ) : vuePrincipale === 'PIGE_VALIDATION' ? (
-        /* Vue Validation Pige : Uploader un fichier Excel pour traitement et analyse */
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center min-h-[500px] flex flex-col items-center justify-center space-y-4">
-          <div className="rounded-full bg-slate-100 p-4 text-snrt-navy">
-            <Upload size={32} />
-          </div>
-          <div>
-            <h2 className="text-base  text-slate-800">Validation Pige — Import de données</h2>
-            <p className="text-sm text-slate-500 mt-1">Téléchargez un fichier Excel pour lancer le traitement et l'analyse.</p>
-          </div>
-          <div className="mt-4">
-            <input
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={(e) => setFichierPige(e.target.files[0])}
-              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-snrt-navy file:text-white hover:file:bg-snrt-navy-hover cursor-pointer"
-            />
-            {fichierPige && (
-              <p className="mt-2 text-xs font-medium text-emerald-700">Fichiers sélectionnés : {fichierPige.name}</p>
-            )}
-          </div>
-
-
-
-
-
-        </div>
+        <PigeValidation events={genererEvenementsTimeline()} />
       ) : (
         /* Vue Administration Plan Média connectée au stock global */
         <PlanMediaAdministration
