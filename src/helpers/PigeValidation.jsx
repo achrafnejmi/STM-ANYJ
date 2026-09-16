@@ -166,7 +166,7 @@ export default function PigeValidation({ events }) {
         anomaliesList.sort((a, b) => a.time - b.time);
 
         return { donneesPige: pigeAnalysee, listeAnomalies: anomaliesList, statsAnomalies: anomaliesCount, activePlan: planRef };
-    }, [rawData, page]);
+    }, [rawData, page,events]);
 
 
 
