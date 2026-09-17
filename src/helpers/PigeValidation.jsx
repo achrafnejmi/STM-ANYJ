@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { BarChart3,MonitorPlay, Activity, X, Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle, Clock, ZoomIn, ZoomOut, Database } from 'lucide-react';
+import { BarChart3, MonitorPlay, Activity, X, Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle, Clock, ZoomIn, ZoomOut, Database } from 'lucide-react';
 import { Megaphone } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
-import {sauvegarderPigeEnBase, chargerHistoriquePiges, handleDeletePige, chargerPigeDetail } from '../lib/db.js';
+import { sauvegarderPigeEnBase, chargerHistoriquePiges, handleDeletePige, chargerPigeDetail } from '../lib/db.js';
+import { get } from '../lib/storage.js';
 // --- UTILITAIRES DE TEMPS ---
 
 
@@ -50,7 +51,7 @@ const mockPlanifieProgrammes = [
     { id: 'prog_3', nom: 'JT METEO', debut: '12:45:00', duree: 300 },      // 5 min
     { id: 'prog_4', nom: 'DOCUMENTAIRE', debut: '13:00:00', duree: 3600 }, // 1 heure
 ];
-export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
+export default function PigeValidation({ events, chaineId, setVuePrincipale, chaine }) {
     // États de base
 
     const [historique, setHistorique] = useState([]);
@@ -59,7 +60,21 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
     const [etape, setEtape] = useState('upload');
     const [page, setPage] = useState("annonce");
     const [rawData, setRawData] = useState([]);
+    // --- ISOLATION DE LA CHAÎNE ACTIVE ---
+    // On ne garde que les lignes Excel qui correspondent à la chaîne sélectionnée
+    const rawDataActive = useMemo(() => {
+        if (!rawData || rawData.length === 0 || !chaine?.nom) return rawData || [];
 
+        const nomActive = chaine.nom.toLowerCase().trim();
+
+        return rawData.filter(row => {
+            // S'adapter aux colonnes possibles dans Excel
+            const nomRow = String(row['Chaîne'] || row['Chaine'] || row['chaine'] || '').toLowerCase().trim();
+
+            // Tolérance (ex: si active="Al Aoula" et Excel="Al Aoula Inter")
+            return nomRow === nomActive || nomRow.includes(nomActive) || nomActive.includes(nomRow);
+        });
+    }, [rawData, chaine]);
 
 
     // NOUVEAU : On stocke uniquement l'extraction brute de l'Excel
@@ -75,13 +90,106 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
     const zoomEnd = Math.min(115200, zoomCenterSec + (ZOOM_WINDOW_SEC / 2)); // Limite à 32h
 
     // --- EXTRACTION ET SÉPARATION DES VRAIES DONNÉES (PROPS) ---
-    const { planAnnonces, planProgrammes } = useMemo(() => {
 
+
+    /*
+      const { planAnnonces, planProgrammes } = useMemo(() => {
+  
+          if (!events || events.length === 0) {
+              return { planAnnonces: [], planProgrammes: [] };
+          }
+  
+          // Fonction pour convertir les durées textuelles ("30s", "45 min", "00:30:00") en secondes
+          const parseDuree = (dureeStr) => {
+              if (!dureeStr) return 30;
+              const str = String(dureeStr).toLowerCase();
+              if (str.includes('s')) return parseInt(str) || 30;
+              if (str.includes('min')) return (parseInt(str) || 30) * 60;
+              if (str.includes(':')) return timeToSec(str);
+              return parseInt(str) || 30;
+          };
+  
+          const formatEvent = (evt, index) => {
+              const heurePropre = evt.time && evt.time.length === 5 ? `${evt.time}:00` : (evt.time || '00:00:00');
+              return {
+                  id: evt.id || `evt_${index}`,
+                  nom: evt.name || 'Sans nom',
+                  debut: heurePropre,
+                  duree: parseDuree(evt.details?.duree),
+                  date:evt.date_tri
+              };
+          };
+  
+          // Séparation selon vos types exacts :
+          // - Programmes & Épisodes
+          
+          //get chaines and dates from pige stord in the state rawData
+          const chaines_days_from_pige = [{ "chainex": ["31/08/2026", "31/08/2026"] }]
+          
+          const programmesBruts = events.filter(evt =>
+              evt.details?.type === 'Programme' || evt.details?.type === 'Épisode'
+          ).filter(row => {
+              //check using active chaine called chaine.nom and filter based on those days using  datetri
+              if (chaine.nom.toLowerCase().trim().includes) {
+  
+              }
+          });
+  
+          // - Annonces (spot, pub, auto promotion, etc.)
+          const annoncesBrutes = events.filter(evt =>
+              evt.details?.type !== 'Programme' && evt.details?.type !== 'Épisode'
+          ).filter(row => {
+              //check using active chaine called chaine.nom and 
+              if (chaine.nom.toLowerCase().trim().includes) {
+  
+              }
+          });
+  
+          return {
+              planAnnonces: annoncesBrutes.map(formatEvent),
+              planProgrammes: programmesBruts.map(formatEvent)
+          };
+      }, [events]);
+      */
+
+
+
+
+    const { planAnnonces, planProgrammes } = useMemo(() => {
         if (!events || events.length === 0) {
             return { planAnnonces: [], planProgrammes: [] };
         }
 
-        // Fonction pour convertir les durées textuelles ("30s", "45 min", "00:30:00") en secondes
+        // 1. EXTRACTION : Récupérer les dates uniques depuis la pige filtrée
+        const validDatesForChaine = new Set();
+
+        if (rawDataActive && rawDataActive.length > 0) {
+            rawDataActive.forEach(row => {
+                const rawDate = String(row['Date'] || row['date'] || row['DATE'] || '').trim();
+
+                if (rawDate) {
+                    let normalizedDate = rawDate;
+                    // Formatage DD/MM/YYYY vers YYYY-MM-DD
+                    if (rawDate.includes('/')) {
+                        const parts = rawDate.split('/');
+                        if (parts.length === 3 && parts[2].length === 4) {
+                            normalizedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                        }
+                    }
+                    validDatesForChaine.add(normalizedDate);
+                }
+            });
+        }
+
+        // 2. FILTRAGE : On ne garde le plan théorique que sur les jours où la pige existe
+        const filtreParDatePige = (evt) => {
+            if (validDatesForChaine.size > 0) {
+                return validDatesForChaine.has(evt.date_tri);
+            }
+            return true;
+        };
+
+        // Utilitaire de durée
         const parseDuree = (dureeStr) => {
             if (!dureeStr) return 30;
             const str = String(dureeStr).toLowerCase();
@@ -97,47 +205,73 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
                 id: evt.id || `evt_${index}`,
                 nom: evt.name || 'Sans nom',
                 debut: heurePropre,
-                duree: parseDuree(evt.details?.duree)
+                duree: parseDuree(evt.details?.duree),
+                date: evt.date_tri
             };
         };
 
-        // Séparation selon vos types exacts :
-        // - Programmes & Épisodes
-        const programmesBruts = events.filter(evt =>
-            evt.details?.type === 'Programme' || evt.details?.type === 'Épisode'
-        );
+        // --- SÉPARATION FINALE ---
+        const programmesBruts = events
+            .filter(evt => evt.details?.type === 'Programme' || evt.details?.type === 'Épisode')
+            .filter(filtreParDatePige);
 
-        // - Annonces (spot, pub, auto promotion, etc.)
-        const annoncesBrutes = events.filter(evt =>
-            evt.details?.type !== 'Programme' && evt.details?.type !== 'Épisode'
-        );
+        const annoncesBrutes = events
+            .filter(evt => evt.details?.type !== 'Programme' && evt.details?.type !== 'Épisode')
+            .filter(filtreParDatePige);
 
         return {
             planAnnonces: annoncesBrutes.map(formatEvent),
             planProgrammes: programmesBruts.map(formatEvent)
         };
-    }, [events]);
+    }, [events, rawDataActive]); // <-- ATTENTION : la dépendance est maintenant rawDataActive
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // <-- TRÈS IMPORTANT : ajoutez rawDataActive et chaine ici !
     const { donneesPige, listeAnomalies, statsAnomalies, activePlan } = useMemo(() => {
 
 
         const planRef = page === 'annonce' ? planAnnonces : planProgrammes;
 
-        if (rawData.length === 0) return { donneesPige: [], listeAnomalies: [], statsAnomalies: 0, activePlan: planRef };
-        // 1. Filtrage brut selon la vue active
-        const brutes = rawData.filter(row => {
+        if (rawDataActive.length === 0) return { donneesPige: [], listeAnomalies: [], statsAnomalies: 0, activePlan: planRef };
+
+        const brutes = rawDataActive.filter(row => {
             if (page === 'annonce') {
                 return row['Programme'] === 'AUTO PROMOTION' || row['Genre Niv.2'] === 'AUTO PROMOTION' || row['Genre Niv.1'] === 'DIVERS';
             } else {
                 return row['Programme'] && row['Programme'] !== 'AUTO PROMOTION' && row['Genre Niv.2'] !== 'AUTO PROMOTION';
             }
-        }).map((row, index) => ({
-            id: `${page}_${index}`,
-            nom: row['Programme'] || (page === 'annonce' ? 'AUTO PROMO' : 'Programme'),
-            debut: row['H.Début'],
-            duree: timeToSec(row['Durée'] || (page === 'annonce' ? '00:00:30' : '00:30:00')),
-            status: 'ghost',
-            matchedPlanId: null
-        }));
+        })
+            .map((row, index) => ({
+                id: `${page}_${index}`,
+                nom: row['Programme'] || (page === 'annonce' ? 'AUTO PROMO' : 'Programme'),
+                debut: row['H.Début'],
+                duree: timeToSec(row['Durée'] || (page === 'annonce' ? '00:00:30' : '00:30:00')),
+                status: 'ghost',
+                chaine: row['Chaîne'],
+                date: row['Date'],
+                matchedPlanId: null
+            }));
 
         // 2. Réconciliation
         let anomaliesCount = 0;
@@ -172,7 +306,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
         anomaliesList.sort((a, b) => a.time - b.time);
 
         return { donneesPige: pigeAnalysee, listeAnomalies: anomaliesList, statsAnomalies: anomaliesCount, activePlan: planRef };
-    }, [rawData, page, events]);
+    }, [rawDataActive, page, events]);
 
     const [showManager, setShowManager] = useState(true);
 
@@ -193,11 +327,11 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
     // --- CALCUL DES STATISTIQUES GLOBALES POUR LE DASHBOARD ---
     // --- CALCUL DES STATISTIQUES AVANCÉES (GROUPÉES) ---
     const dashboardStats = useMemo(() => {
-        if (!rawData || rawData.length === 0) return null;
+        if (!rawDataActive || rawDataActive.length === 0) return null;
 
         // 1. Séparation des données brutes Excel selon vos critères
-        const annoncesReelles = rawData.filter(row => row['Programme'] === 'AUTO PROMOTION' || row['Genre Niv.2'] === 'AUTO PROMOTION');
-        const progsReels = rawData.filter(row => row['Programme'] && row['Programme'] !== 'AUTO PROMOTION');
+        const annoncesReelles = rawDataActive.filter(row => row['Programme'] === 'AUTO PROMOTION' || row['Genre Niv.2'] === 'AUTO PROMOTION');
+        const progsReels = rawDataActive.filter(row => row['Programme'] && row['Programme'] !== 'AUTO PROMOTION');
 
         // 2. Fonction d'analyse universelle pour un groupe donné
         const analyserGroupe = (typeDataReel, planRef, toleranceSec) => {
@@ -247,7 +381,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
             annonces: statsAnnonces,
             programmes: statsProgrammes
         };
-    }, [rawData, planAnnonces, planProgrammes]);
+    }, [rawDataActive, planAnnonces, planProgrammes]);
 
     // --- MOTEUR DE PARSING ET RÉCONCILIATION ---
 
@@ -286,7 +420,6 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
             // On définit une chaineId par défaut ou issue de vos props
 
             // 1. Sauvegarde via db.js en passant les plans actuels
-            console.log(chaineId);
             const savedRecord = await sauvegarderPigeEnBase(file.name, excelData, chaineId, planAnnonces, planProgrammes);
 
             if (savedRecord) {
@@ -894,7 +1027,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
             {(page === 'annonce' || page === 'programme') && <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 overflow-hidden">
 
                 {/* TABLEAU DE DÉTAIL DE LA FENÊTRE (5 MIN) */}
-                <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-col min-h-[300px] max-h-[400px] ">
+                <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-col min-h-[300px] max-h-[600px] ">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3 shrink-0">
                         <div className="flex items-center gap-2">
                             <Clock size={18} className="text-slate-600" />
@@ -916,7 +1049,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale }) {
                                     <th className="py-2 px-3 ">Écart / Statut</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 max-h-[400px]" style={{ overflow: "auto" }}>
+                            <tbody className="divide-y divide-slate-100" style={{ overflow: "auto" }}>
                                 {(() => {
                                     // Récupère les spots prévus et réels dans la fenêtre de zoom
                                     const prevusInView = activePlan.filter(s => timeToSec(s.debut) >= zoomStart && timeToSec(s.debut) <= zoomEnd);

@@ -233,7 +233,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
           <button
             type="button"
             onClick={ouvrirModalAjout}
-            className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors"
+            className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm  text-white hover:bg-snrt-navy-hover transition-colors"
           >
             <Plus size={16} />
             Ajouter au stock
@@ -345,7 +345,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
               shrink-0
               rounded bg-slate-100
               px-1.5 py-0.5
-              text-[9px] font-medium
+              text-[9px] 
               text-slate-500
             "
                     >
@@ -401,7 +401,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                     className="
             rounded bg-blue-50
             px-1.5 py-1
-            text-[9px] font-medium
+            text-[9px] 
             text-blue-600
           "
                     title="Enfant"
@@ -413,7 +413,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                     className="
             rounded bg-violet-50
             px-1.5 py-1
-            text-[9px] font-medium
+            text-[9px] 
             text-violet-600
           "
                     title="Jeune"
@@ -425,7 +425,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                     className="
             rounded bg-orange-50
             px-1.5 py-1
-            text-[9px] font-medium
+            text-[9px] 
             text-orange-600
           "
                     title="Grand"
@@ -490,11 +490,13 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
           titre={elementEnEdition ? "Modifier l'annonce" : "Ajouter une annonce au stock"}
           onFermer={() => { setModalOuverte(false); setElementEnEdition(null); }}
         >
-          <form onSubmit={soumettreFormulaire} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <form onSubmit={soumettreFormulaire} className="space-y-5 max-h-[70vh] overflow-y-auto p-1">
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Nom de l'annonce</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Nom de l'annonce
+                </label>
                 <input
                   type="text"
                   required
@@ -502,61 +504,82 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                   value={nom}
                   onChange={(e) => setNom(e.target.value)}
                   placeholder="ex. Spot Été"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
                 />
               </div>
 
+              
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Client</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Client
+                </label>
                 <input
                   type="text"
                   value={client}
                   onChange={(e) => setClient(e.target.value)}
                   placeholder="ex. Nom du client"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
                 />
               </div>
+              
+
             </div>
 
             {/* NOUVEAUX CHAMPS : VALIDITE ET PAD */}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Début de validité</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Début de validité
+                </label>
                 <input
                   type="date"
                   value={validiteDebut}
                   onChange={(e) => setValiditeDebut(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
                 />
               </div>
+
+              
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Fin de validité</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Fin de validité
+                </label>
                 <input
                   type="date"
                   value={validiteFin}
                   onChange={(e) => setValiditeFin(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
                 />
               </div>
+              
+
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Métadonnée / Description</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                Métadonnée / Description
+              </label>
               <textarea
                 value={metadonne}
                 onChange={(e) => setMetadonne(e.target.value)}
                 placeholder="Détails supplémentaires..."
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm h-16"
+                className="h-16 w-full resize-none rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
               />
             </div>
 
             <div className="grid grid-cols-4 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Type</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Type
+                </label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm capitalize"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm capitalize outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
                 >
                   <option value="spot">Spot</option>
                   <option value="bande danonce">Bande d'annonce</option>
@@ -565,99 +588,128 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
                 </select>
               </div>
 
+              
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Durée (s)</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Durée (s)
+                </label>
                 <input
                   type="number"
                   min="1"
                   value={duration}
                   onChange={(e) => handleDurationChange(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Prix / s</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Prix / s
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   value={pricePerSec}
                   onChange={(e) => handlePricePerSecChange(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Budget</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Budget
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   value={budget}
                   onChange={(e) => handleBudgetChange(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                  style={{ color: "rgba(0,0,0,0.7)" }}
                 />
               </div>
+              
+
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Pourcentages de cibles (%)</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                Pourcentages de cibles (%)
+              </label>
+
+              
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="text-xs text-slate-500">Enfant </span>
+                  <span className="mb-1 block text-xs text-slate-500">Enfant</span>
                   <input
                     type="number"
                     min="0"
                     max="100"
                     value={enfantpercentage}
                     onChange={(e) => setEnfantpercentage(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm text-center"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-1.5 text-sm text-center text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                    style={{ color: "rgba(0,0,0,0.7)" }}
                   />
                 </div>
+
                 <div>
-                  <span className="text-xs text-slate-500">Jeune</span>
+                  <span className="mb-1 block text-xs text-slate-500">Jeune</span>
                   <input
                     type="number"
                     min="0"
                     max="100"
                     value={jeunepercentage}
                     onChange={(e) => setJeunepercentage(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm text-center"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-1.5 text-sm text-center text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                    style={{ color: "rgba(0,0,0,0.7)" }}
                   />
                 </div>
+
                 <div>
-                  <span className="text-xs text-slate-500">Grand</span>
+                  <span className="mb-1 block text-xs text-slate-500">Grand</span>
                   <input
                     type="number"
                     min="0"
                     max="100"
                     value={grandPercentage}
                     onChange={(e) => setGrandPercentage(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm text-center"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-1.5 text-sm text-center text-slate-700 outline-none transition focus:border-snrt-accent focus:bg-white focus:ring-2 focus:ring-snrt-accent/10"
+                    style={{ color: "rgba(0,0,0,0.7)" }}
                   />
                 </div>
               </div>
+              
+
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-300">
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
               <button
                 type="button"
                 onClick={() => { setModalOuverte(false); setElementEnEdition(null); }}
                 disabled={actionEnCours}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
               >
                 Annuler
               </button>
+
+              
               <button
                 type="submit"
                 disabled={actionEnCours}
-                className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover"
+                className="rounded-lg bg-snrt-navy px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-snrt-navy-hover hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionEnCours ? 'Enregistrement...' : elementEnEdition ? 'Mettre à jour' : 'Ajouter au stock'}
               </button>
+              
+
             </div>
+
           </form>
+
         </Modal>
       )}
 

@@ -486,8 +486,9 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
     // 1. Sécurisation du tableau de base: (diffusions || [])
     const diffusionsFiltrees = (diffusions || []).filter(diff => {
       if (!diff) return false; // Protection contre un objet vide/null dans le tableau
-      if (!filtreGrilleId) return true;
-      return diff.grille_id === filtreGrilleId;
+      //if (!filtreGrilleId) return true;
+      //return diff.grille_id === filtreGrilleId;
+      return true;
     });
 
     const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
@@ -532,7 +533,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
     (planificationsMedia || []).forEach((plan) => {
       if (!plan) return;
 
-      if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+      //if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
 
       // Sécurisation de la recherche dans stockAnnonces
       const stockAnnonce = (stockAnnonces || []).find(s => s && s.id === plan.annonce_id);
@@ -600,19 +601,30 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       setFormAnnonces([{ idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }]);
     }, 200); // Petit délai pour laisser l'animation de fermeture (optionnel)
   };
+  // 1. Obtenir la date du jour au format YYYY-MM-DD
+  const dateDuJour = new Date().toISOString().split('T')[0];
 
+  // 2. Fonction pour générer le titre basé sur la date
+  const genererTitreParDefaut = (dateString) => {
+    const dateObj = new Date(dateString);
+    const options = { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' };
+    let formatted = dateObj.toLocaleDateString('fr-FR', options);
+    // Transforme "jeudi 17 sept. 2026" en "PM JEUDI 17 SEPT 2026"
+    return `PM ${formatted.replace('.', '').toUpperCase()}`;
+  };
 
 
   const [modalExportOuvert, setModalExportOuvert] = useState(false);
-  const [exportTitre, setExportTitre] = useState('');
-  const [exportDate, setExportDate] = useState('');
+  const [exportTitre, setExportTitre] = useState(genererTitreParDefaut(dateDuJour));
+  const [exportDate, setExportDate] = useState(dateDuJour);
   const [exportGrilleId, setExportGrilleId] = useState('');
 
-
+  useEffect(() => {
+    setExportTitre(genererTitreParDefaut(exportDate));
+  }, [exportDate]);
 
   const preparerDonneesExport = () => {
     const donneesFiltrees = planificationsMedia.filter(plan => {
-      if (exportGrilleId && plan.grille_id !== exportGrilleId) return false;
       if (exportDate) {
         if (!plan.date) return false;
         const planDateSeule = String(plan.date).split('T')[0].trim().substring(0, 10);
@@ -767,7 +779,6 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
     const donneesFiltrees = planificationsMedia.filter(plan => {
       let correspond = true;
-      if (exportGrilleId && plan.grille_id !== exportGrilleId) correspond = false;
       if (exportDate && plan.date !== exportDate) correspond = false;
 
       return correspond;
@@ -1004,23 +1015,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                 />
               </div>
 
-              {/* Sélection de la Grille */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Grille ciblée</label>
-                <select
-                  required
-                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  value={exportGrilleId}
-                  onChange={(e) => setExportGrilleId(e.target.value)}
-                >
-                  <option value="">-- Sélectionnez une grille --</option>
-                  {grilles.map(grille => (
-                    <option key={grille.id} value={grille.id}>
-                      {grille.nom || grille.titre || `Grille #${grille.id.substring(0, 5)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
 
               {/* Sélection de la Date */}
               <div>
@@ -1109,7 +1104,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
               Administration Plan Média
             </button>
 
-            {(vuePrincipale === 'PLAN_MEDIA' || vuePrincipale === 'PIGE_VALIDATION') && <div>
+            {vuePrincipale === 'PLAN_MEDIA' && <div>
               <select
                 className="w-full rounded-md border border-slate-300 py-1.5 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                 value={filtreGrilleId}
@@ -1173,8 +1168,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       </div>
 
       {/* Affichage conditionnel selon la vue principale choisie */}
-      {vuePrincipale === 'PLAN_MEDIA' ? (
-        /* Main Layout : Timeline - Formulaire - Liste */
+      <div className={vuePrincipale === 'PLAN_MEDIA' ? 'block' : 'hidden'}>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 300px)' }}>
 
           {/* 1. Colonne Gauche : Timeline */}
@@ -2015,10 +2009,13 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             </div>
           )}
         </div>
-      ) : vuePrincipale === 'PIGE_VALIDATION' ? (
-        <PigeValidation events={genererEvenementsPige()} chaineId={chaineActive.id} setVuePrincipale={setVuePrincipale} />
-      ) : (
-        /* Vue Administration Plan Média connectée au stock global */
+      </div>
+
+      <div className={vuePrincipale === 'PIGE_VALIDATION' ? 'block' : 'hidden'}>
+        <PigeValidation events={genererEvenementsPige()} chaineId={chaineActive.id} setVuePrincipale={setVuePrincipale} chaine={chaineActive} />
+      </div>
+      <div className={vuePrincipale === 'PLAN_MEDIA_ADMIN' ? 'block' : 'hidden'}>
+
         <PlanMediaAdministration
           planMediaId={planMediaActif?.id}
           chaineId={chaineActive?.id}
@@ -2030,7 +2027,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           datachanged={datachanged}
           setIsLoading={setIsLoading}
         />
-      )}
+      </div>
 
     </div>
   );
