@@ -2,6 +2,7 @@
 // jamais à Supabase en direct — tout passe par ce module.
 
 import { supabase } from './supabaseClient.js'
+import toast from 'react-hot-toast';
 
 function verifie({ data, error }) {
   if (error) throw error
@@ -992,11 +993,11 @@ export async function enregistrerClassificationProgramme(programme_id, scores) {
   const { data, error } = await supabase
     .from('programmes_classifications')
     .upsert(
-      { 
-        programme_id, 
-        enfant_point: scores.enfant, 
-        adult_point: scores.adult, 
-        senior_point: scores.senior 
+      {
+        programme_id,
+        enfant_point: scores.enfant,
+        adult_point: scores.adult,
+        senior_point: scores.senior
       },
       { onConflict: 'programme_id' } // Met à jour si le programme a déjà une classification
     )
@@ -1012,44 +1013,157 @@ export async function enregistrerClassificationProgramme(programme_id, scores) {
 
 
 export async function data_refrech(grille_id) {
-    try {
-        const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-programme/${grille_id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-            // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
-        });
+  try {
+    const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-programme/${grille_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+      // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+    });
 
-        const jsonIA = await reponse.json();
+    const jsonIA = await reponse.json();
 
-        if (jsonIA.succes && jsonIA.donnees) {
-            console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
-            // Déclenchez ici le rafraîchissement de votre UI si nécessaire
-        } else {
-            console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
-        }
-    } catch (erreur) {
-        console.error("Erreur de connexion avec le backend IA :", erreur);
+    if (jsonIA.succes && jsonIA.donnees) {
+      console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+      // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+    } else {
+      console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
     }
+  } catch (erreur) {
+    console.error("Erreur de connexion avec le backend IA :", erreur);
+  }
 }
 
 
 export async function data_annonce_refrech() {
-    try {
-        const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-toutes-annonces`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-            // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
-        });
+  try {
+    const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-toutes-annonces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+      // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+    });
 
-        const jsonIA = await reponse.json();
+    const jsonIA = await reponse.json();
 
-        if (jsonIA.succes && jsonIA.donnees) {
-            console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
-            // Déclenchez ici le rafraîchissement de votre UI si nécessaire
-        } else {
-            console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
-        }
-    } catch (erreur) {
-        console.error("Erreur de connexion avec le backend IA :", erreur);
+    if (jsonIA.succes && jsonIA.donnees) {
+      console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+      // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+    } else {
+      console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
     }
+  } catch (erreur) {
+    console.error("Erreur de connexion avec le backend IA :", erreur);
+  }
 }
+
+
+const timeToSec = (time) => {
+    if (!time) return 0;
+    const parts = time.toString().split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
+    return 0;
+};
+
+// Ajoutez cette fonction utilitaire dans votre composant (ou en dehors) pour calculer les anomalies à la volée avant la sauvegarde
+const calculerAnomaliesPourSauvegarde = (donneesBrutesExcel, planAnnonces, planProgrammes) => {
+  // Logique simplifiée pour extraire les stats au moment de l'upload
+  // (Vous réutilisez ici la logique de votre useMemo)
+
+  const analyser = (typeData, planRef) => {
+    let count = 0;
+    const anomaliesList = [];
+    const analysees = typeData.map(spotReel => {
+      const secReel = timeToSec(spotReel.debut);
+      const spotPrevu = planRef.find(prevu => Math.abs(timeToSec(prevu.debut) - secReel) <= (planRef === planAnnonces ? 300 : 2700));
+
+      if (spotPrevu) {
+        const secPrevu = timeToSec(spotPrevu.debut);
+        if (secPrevu !== secReel) {
+          count++;
+          anomaliesList.push({ type: 'Retard', detail: spotReel, prevu: spotPrevu, time: secReel, ecart: secReel - secPrevu });
+        }
+        return { ...spotReel, matchedPlanId: spotPrevu.id };
+      }
+      count++;
+      anomaliesList.push({ type: 'Fantôme', detail: spotReel, time: secReel });
+      return spotReel;
+    });
+
+    planRef.forEach(prevu => {
+      if (!analysees.some(reel => reel.matchedPlanId === prevu.id)) {
+        count++;
+        anomaliesList.push({ type: 'Omission', detail: prevu, time: timeToSec(prevu.debut) });
+      }
+    });
+
+    return { count, list: anomaliesList };
+  };
+
+  // Filtrage brut rapide
+  const annoncesBrutes = donneesBrutesExcel.filter(row => row['Programme'] === 'AUTO PROMOTION' || row['Genre Niv.2'] === 'AUTO PROMOTION');
+  const progsBruts = donneesBrutesExcel.filter(row => row['Programme'] && row['Programme'] !== 'AUTO PROMOTION');
+
+  const resAnnonces = analyser(annoncesBrutes, planAnnonces);
+  const resProgs = analyser(progsBruts, planProgrammes);
+
+  return {
+    stats: { annonces: resAnnonces.count, programmes: resProgs.count, total: resAnnonces.count + resProgs.count },
+    anomalies: { annonces: resAnnonces.list, programmes: resProgs.list }
+  };
+};
+
+export const sauvegarderPigeEnBase = async (fileName, excelData, chaineId, planAnnonces, planProgrammes) => {
+  const { stats, anomalies } = calculerAnomaliesPourSauvegarde(excelData, planAnnonces, planProgrammes);
+
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .insert([{
+      file_name: fileName,
+      chaine_id: chaineId,
+      raw_data: excelData,
+      stats: stats,
+      anomalies: anomalies
+    }])
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la sauvegarde :", error);
+    return null;
+  }
+  return data[0];
+};
+
+export const chargerHistoriquePiges = async () => {
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .select('id, file_name, created_at, stats')
+    .order('created_at', { ascending: false });
+
+  if (!error && data) return data;
+  return null;
+};
+
+export const handleDeletePige = async (pigeId) => {
+  const { error } = await supabase
+    .from('pige_uploads')
+    .delete()
+    .eq('id', pigeId);
+
+  if (error) {console.error("Erreur de suppression", error);toast.error("Error durant la suppression de la pige !!!")}
+  toast.success("Pige supprimer");
+  return !error; // Retourne true si succès, false sinon
+};
+
+export const chargerPigeDetail = async (pigeId) => {
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .select('raw_data, file_name')
+    .eq('id', pigeId)
+    .single();
+
+  if (error) {
+    console.error("Erreur lors du chargement des détails :", error);
+    return null;
+  }
+  return data;
+};

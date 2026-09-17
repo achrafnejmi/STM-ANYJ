@@ -361,31 +361,45 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
   const genererEvenementsTimeline = () => {
     let eventsGenerees = [];
-    const diffusionsFiltrees = diffusions.filter(diff => {
+
+    // 1. Sécurisation de la variable de recherche
+    const rechercheSafe = (rechercheTimeline || '').trim().toLowerCase();
+
+    // 2. Sécurisation de diffusions (protection si undefined)
+    const diffusionsFiltrees = (diffusions || []).filter(diff => {
+      if (!diff) return false; // Ignore les éléments nuls du tableau
       if (!filtreGrilleId) return true;
       return diff.grille_id === filtreGrilleId;
     });
-    // 1. Grouper par date depuis diffusion_lineaire et résoudre programme/épisode
-    if (diffusions && diffusions.length > 0 && filtresTimeline.includes('episode')) {
+
+    // 3. Sécurisation de l'accès à filtresTimeline
+    const filtresSafe = filtresTimeline || [];
+
+    // --- PROGRAMMES ET ÉPISODES ---
+    if (diffusionsFiltrees.length > 0 && filtresSafe.includes('episode')) {
       const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
-        const dateStr = diff.date || 'Sans date';
+        const dateStr = diff?.date || 'Sans date';
         if (!groupes[dateStr]) groupes[dateStr] = [];
         groupes[dateStr].push(diff);
         return groupes;
       }, {});
+
       Object.entries(diffusionsParDate).forEach(([date, listeDiffusions]) => {
-        listeDiffusions.forEach((diff) => {
-          const ep = episodes.find(e => e.id === diff.episode_id);
-          const prog = programmes.find(p => p.id === diff.programme_id || (ep && ep.programme_id === p.id));
+        (listeDiffusions || []).forEach((diff) => {
+          if (!diff) return;
+
+          // Sécurisation de la recherche dans episodes et programmes
+          const ep = (episodes || []).find(e => e && e.id === diff.episode_id);
+          const prog = (programmes || []).find(p => p && (p.id === diff.programme_id || (ep && ep.programme_id === p.id)));
 
           const titreEp = ep?.titre || ep?.nom || (ep?.numero ? `Épisode ${ep.numero}` : null);
           const titreProg = prog?.titre || prog?.nom || 'Programme Inconnu';
           const nomAffichage = titreEp || titreProg;
           const descParent = prog ? `Programme : ${titreProg}` : '';
 
-          if (rechercheTimeline.trim() === '' || nomAffichage.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
+          if (rechercheSafe === '' || nomAffichage.toLowerCase().includes(rechercheSafe)) {
             eventsGenerees.push({
-              id: diff.id,
+              id: diff.id || `diff-${Math.random()}`, // Fallback ID unique
               date_tri: date,
               time: diff.heure_debut || '00:00',
               name: nomAffichage,
@@ -402,26 +416,29 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       });
     }
 
-    if (planificationsMedia && planificationsMedia.length > 0 && filtresTimeline.includes('annonce')) {
-      planificationsMedia.forEach((plan) => {
+    // --- ANNONCES ET PLANIFICATIONS MEDIA ---
+    if ((planificationsMedia || []).length > 0 && filtresSafe.includes('annonce')) {
+      (planificationsMedia || []).forEach((plan) => {
+        if (!plan) return;
+
         // Filtrer par grille si un filtre de grille est actif
         if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
 
-        // Récupérer l'annonce liée depuis le stock si nécessaire pour afficher son nom/durée
-        const stockAnnonce = stockAnnonces.find(s => s.id === plan.annonce_id);
+        // Récupérer l'annonce liée avec sécurisation
+        const stockAnnonce = (stockAnnonces || []).find(s => s && s.id === plan.annonce_id);
         const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
 
-        if (rechercheTimeline.trim() === '' || titreAnnonce.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
+        if (rechercheSafe === '' || titreAnnonce.toLowerCase().includes(rechercheSafe)) {
           const dateStr = plan.date || new Date().toISOString().split('T')[0];
           const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
 
           eventsGenerees.push({
-            id: plan.id,
+            id: plan.id || `plan-${Math.random()}`, // Fallback ID unique
             date_tri: dateStr,
             time: timeStr,
             name: titreAnnonce,
             details: {
-              type: stockAnnonce.type,
+              type: stockAnnonce?.type || 'Annonce', // <-- Protection ici (évite le crash "Cannot read properties of undefined")
               duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
               description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
             }
@@ -430,20 +447,27 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       });
     }
 
-    // 3. Application du filtre par date sélectionnée
+    // 4. Application du filtre par date sélectionnée (sécurisé)
     if (dateFiltreTimeline) {
-      eventsGenerees = eventsGenerees.filter(event => event.date_tri === dateFiltreTimeline);
+      eventsGenerees = eventsGenerees.filter(event => event && event.date_tri === dateFiltreTimeline);
     }
 
-    // 4. Tri chronologique global (Date puis Heure)
+    // 5. Tri chronologique global sécurisé (Date puis Heure)
     eventsGenerees.sort((a, b) => {
-      if (a.date_tri !== b.date_tri) {
-        return a.date_tri.localeCompare(b.date_tri);
+      const dateA = a?.date_tri || '';
+      const dateB = b?.date_tri || '';
+
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
       }
-      return a.time.localeCompare(b.time);
+
+      const timeA = a?.time || '';
+      const timeB = b?.time || '';
+      return timeA.localeCompare(timeB);
     });
 
-    return eventsGenerees.length > 0 ? eventsGenerees : mockEvents;
+    // 6. Retour sécurisé
+    return eventsGenerees.length > 0 ? eventsGenerees : (mockEvents || []);
   };
 
 
@@ -453,86 +477,100 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
 
   //get pige events 
-    const genererEvenementsPige = () => {
+  const genererEvenementsPige = () => {
     let eventsGenerees = [];
-    const diffusionsFiltrees = diffusions.filter(diff => {
+
+    // Sécurisation de la chaîne de recherche (évite le crash si rechercheTimeline est null/undefined)
+    const rechercheSafe = (rechercheTimeline || '').trim().toLowerCase();
+
+    // 1. Sécurisation du tableau de base: (diffusions || [])
+    const diffusionsFiltrees = (diffusions || []).filter(diff => {
+      if (!diff) return false; // Protection contre un objet vide/null dans le tableau
       if (!filtreGrilleId) return true;
       return diff.grille_id === filtreGrilleId;
     });
-    // 1. Grouper par date depuis diffusion_lineaire et résoudre programme/épisode
-      const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
-        const dateStr = diff.date || 'Sans date';
-        if (!groupes[dateStr]) groupes[dateStr] = [];
-        groupes[dateStr].push(diff);
-        return groupes;
-      }, {});
-      Object.entries(diffusionsParDate).forEach(([date, listeDiffusions]) => {
-        listeDiffusions.forEach((diff) => {
-          const ep = episodes.find(e => e.id === diff.episode_id);
-          const prog = programmes.find(p => p.id === diff.programme_id || (ep && ep.programme_id === p.id));
 
-          const titreEp = ep?.titre || ep?.nom || (ep?.numero ? `Épisode ${ep.numero}` : null);
-          const titreProg = prog?.titre || prog?.nom || 'Programme Inconnu';
-          const nomAffichage = titreEp || titreProg;
-          const descParent = prog ? `Programme : ${titreProg}` : '';
+    const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
+      const dateStr = diff.date || 'Sans date';
+      if (!groupes[dateStr]) groupes[dateStr] = [];
+      groupes[dateStr].push(diff);
+      return groupes;
+    }, {});
 
-          if (rechercheTimeline.trim() === '' || nomAffichage.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
-            eventsGenerees.push({
-              id: diff.id,
-              date_tri: date,
-              time: diff.heure_debut || '00:00',
-              name: nomAffichage,
-              details: {
-                type: ep ? 'Épisode' : 'Programme',
-                programme: titreProg,
-                date: date,
-                duree: diff.duree || (ep?.duree ? `${ep.duree} min` : '00:00:00'),
-                description: descParent || diff.description || ''
-              }
-            });
-          }
-        });
-      });
-    
+    Object.entries(diffusionsParDate).forEach(([date, listeDiffusions]) => {
+      (listeDiffusions || []).forEach((diff) => {
+        if (!diff) return;
 
-      planificationsMedia.forEach((plan) => {
-        // Filtrer par grille si un filtre de grille est actif
-        if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+        // Sécurisation des recherches dans les tableaux (episodes et programmes)
+        const ep = (episodes || []).find(e => e && e.id === diff.episode_id);
+        const prog = (programmes || []).find(p => p && (p.id === diff.programme_id || (ep && ep.programme_id === p.id)));
 
-        // Récupérer l'annonce liée depuis le stock si nécessaire pour afficher son nom/durée
-        const stockAnnonce = stockAnnonces.find(s => s.id === plan.annonce_id);
-        const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
+        const titreEp = ep?.titre || ep?.nom || (ep?.numero ? `Épisode ${ep.numero}` : null);
+        const titreProg = prog?.titre || prog?.nom || 'Programme Inconnu';
+        const nomAffichage = titreEp || titreProg;
+        const descParent = prog ? `Programme : ${titreProg}` : '';
 
-        if (rechercheTimeline.trim() === '' || titreAnnonce.toLowerCase().includes(rechercheTimeline.toLowerCase())) {
-          const dateStr = plan.date || new Date().toISOString().split('T')[0];
-          const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
-
+        if (rechercheSafe === '' || nomAffichage.toLowerCase().includes(rechercheSafe)) {
           eventsGenerees.push({
-            id: plan.id,
-            date_tri: dateStr,
-            time: timeStr,
-            name: titreAnnonce,
+            id: diff.id || `diff-${Math.random()}`,
+            date_tri: date,
+            time: diff.heure_debut || '00:00',
+            name: nomAffichage,
             details: {
-              type: stockAnnonce.type,
-              duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
-              description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
+              type: ep ? 'Épisode' : 'Programme',
+              programme: titreProg,
+              date: date,
+              duree: diff.duree || (ep?.duree ? `${ep.duree} min` : '00:00:00'),
+              description: descParent || diff.description || ''
             }
           });
         }
       });
-    
-
-
-
-    // 4. Tri chronologique global (Date puis Heure)
-    eventsGenerees.sort((a, b) => {
-      if (a.date_tri !== b.date_tri) {
-        return a.date_tri.localeCompare(b.date_tri);
-      }
-      return a.time.localeCompare(b.time);
     });
 
-    return eventsGenerees.length > 0 ? eventsGenerees : mockEvents;
+    // 2. Sécurisation de planificationsMedia
+    (planificationsMedia || []).forEach((plan) => {
+      if (!plan) return;
+
+      if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+
+      // Sécurisation de la recherche dans stockAnnonces
+      const stockAnnonce = (stockAnnonces || []).find(s => s && s.id === plan.annonce_id);
+      const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
+
+      if (rechercheSafe === '' || titreAnnonce.toLowerCase().includes(rechercheSafe)) {
+        const dateStr = plan.date || new Date().toISOString().split('T')[0];
+        const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
+
+        eventsGenerees.push({
+          id: plan.id || `plan-${Math.random()}`,
+          date_tri: dateStr,
+          time: timeStr,
+          name: titreAnnonce,
+          details: {
+            // Utilisation de l'optional chaining pour type (évite l'erreur "Cannot read properties of undefined (reading 'type')")
+            type: stockAnnonce?.type || 'Annonce',
+            duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
+            description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
+          }
+        });
+      }
+    });
+
+    // 3. Sécurisation du tri (localeCompare plante si la variable n'est pas une string)
+    eventsGenerees.sort((a, b) => {
+      const dateA = a.date_tri || '';
+      const dateB = b.date_tri || '';
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      const timeA = a.time || '';
+      const timeB = b.time || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    // Sécurisation du retour (au cas où mockEvents n'existerait pas)
+    return eventsGenerees.length > 0 ? eventsGenerees : (mockEvents || []);
   };
 
 
@@ -1071,7 +1109,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
               Administration Plan Média
             </button>
 
-            {(vuePrincipale === 'PLAN_MEDIA' || vuePrincipale==='PIGE_VALIDATION') && <div>
+            {(vuePrincipale === 'PLAN_MEDIA' || vuePrincipale === 'PIGE_VALIDATION') && <div>
               <select
                 className="w-full rounded-md border border-slate-300 py-1.5 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                 value={filtreGrilleId}
@@ -1978,7 +2016,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           )}
         </div>
       ) : vuePrincipale === 'PIGE_VALIDATION' ? (
-        <PigeValidation events={genererEvenementsPige()} />
+        <PigeValidation events={genererEvenementsPige()} chaineId={chaineActive.id} setVuePrincipale={setVuePrincipale} />
       ) : (
         /* Vue Administration Plan Média connectée au stock global */
         <PlanMediaAdministration
