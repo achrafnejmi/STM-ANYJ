@@ -1,1390 +1,2037 @@
-import { useEffect, useId, useRef, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } from 'docx'
+import { useState } from 'react';
+import { Clock, List as ListIcon, Search, Upload, Settings } from 'lucide-react';
+import { VerticalTimeline } from '../helpers/VerticalTimeline';
+import PlanMediaAdministration from '../helpers/PlanMediaAdministration.jsx';
+import './PlanMedia.css';
+import { MdCloudSync } from "react-icons/md";
+import { Edit3 } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
+
+import { useEffect } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
-  Library,
-  PlusSquare,
-  Upload,
-  Plus,
-  Pencil,
-  Copy,
-  Trash2,
-  CheckSquare,
-  ClipboardPaste,
-  Undo2,
-  Redo2,
-  X,
-  MoreHorizontal,
-} from 'lucide-react'
-import {
-  listerProgrammesParChaine,
-  listerDiffusionsLineairesParGrille,
-  obtenirGrilleLiveParChaine,
-  listerCampagnesParChaine,
-  listerElementsSecondairesParChaine,
-  listerSpotsBibliotheque,
-  listerReglesPlanMedia,
-  creerReglePlanMedia,
-  mettreAJourReglePlanMedia,
-  supprimerReglePlanMedia,
-  creerElementSecondaire,
-  creerElementsSecondaires,
-  supprimerElementsSecondairesAutomatiquesParPeriode,
   listerPlanMediaParChaine,
   creerPlanMedia,
-  mettreAJourPlanMedia,
-  supprimerPlanMedia,
-  definirPlanMediaLive,
-} from '../lib/db.js'
-import { lireDocumentsOuverts, definirDocumentsOuverts, dupliquerPlanMedia } from '../lib/plansMedia.js'
-import { lireUtilisateur } from '../lib/session.js'
-import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fusionnerChangements } from '../lib/undoManager.js'
-import {
-  aujourdHuiISO,
-  ajouterJours,
-  formaterDateLongue,
-  minutesEnHeure,
-} from '../lib/semaine.js'
-import {
-  calculerIntervalles,
-  calculerPointsInsertion,
-  genererElementsSecondaires,
-  estPlacementValide,
-  heureHMSEnSecondes,
-} from '../lib/planMedia.js'
-import { spotDisponible } from '../lib/spots.js'
-import {
-  construireLignesPlanMedia,
-  construireLignesTextePlanMedia,
-  construireNomFichierPlanMedia,
-  TITRE_FEUILLE_PLAN_MEDIA,
-  ENTETE_PLAN_MEDIA,
-} from '../lib/exportPlanMedia.js'
-import Modal from '../components/Modal.jsx'
-import PanneauReglesGeneration from '../components/PanneauReglesGeneration.jsx'
-import BibliothequeSpots from '../components/BibliothequeSpots.jsx'
-import BoutonExporter from '../components/BoutonExporter.jsx'
-import PanneauInsertionManuelle, { COUPURE_LIBRE } from '../components/PanneauInsertionManuelle.jsx'
-import PanneauImportPlanMedia from '../components/PanneauImportPlanMedia.jsx'
-import PanneauFormulaireRegle from '../components/PanneauFormulaireRegle.jsx'
-import { useNotification } from '../components/NotificationProvider.jsx'
+  listerPlanMediaStockParPlanMedia,
+  listerGrillesParChaine,
+  listerGrillesTypeParChaine,
+  listerProgrammesParChaine,
+  listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
+  insererPlanificationsMedia, listerPlanificationsMedia,
+  data_refrech, listerClassificationsProgrammes, data_annonce_refrech, creerDemandePad
+} from '../lib/db.js';
+import { Plus, Trash2, X } from 'lucide-react';
+// Remplacez import * as XLSX from 'xlsx'; par :
+import * as XLSX from 'xlsx-js-style';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable'; // <-- Modification ici
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, AlignmentType, WidthType } from 'docx';
+import { saveAs } from 'file-saver';
+import toast from 'react-hot-toast';
+import PigeValidation from '../helpers/PigeValidation.jsx';
 
-const LIBELLES_TYPE = {
-  BANDE_ANNONCE: 'Bande-annonce',
-  ECRAN_PUBLICITAIRE: 'Écran publicitaire',
-  HABILLAGE: 'Habillage',
-  AUTOPROMOTION: 'Autopromotion',
-  SPOT: 'Spot',
-}
+export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = false }) {
 
-// Champs copiés au presse-papier interne (P24) — jamais l'id/plan_media_id
-// (une nouvelle ligne est toujours créée au collage). apres_transmission_id
-// EST copié tel quel : tous les plans média d'une chaîne travaillent sur la
-// même trame de diffusions live (Plan média ne lit que la grille live, P23),
-// coller ne change donc jamais la date/heure/coupure — juste le document.
-const CHAMPS_COPIABLES_ELEMENT = [
-  'date',
-  'heure_debut',
-  'heure_fin',
-  'duree_secondes',
-  'apres_transmission_id',
-  'type',
-  'libelle',
-  'campagne_id',
-  'origine',
-  'run_id',
-]
+  const [isLoading, setIsLoading] = useState(false);
+  // États pour le formulaire d'insertion d'annonces
+  const [formProgrammeId, setFormProgrammeId] = useState('');
+  const [formEpisodeId, setFormEpisodeId] = useState('');
+  // Nouvel état pour le filtre par grille
+  const [filtreGrilleId, setFiltreGrilleId] = useState('');
+  // Tableau dynamique pour gérer plusieurs annonces simultanément
+  // Chaque élément contient l'ID de l'annonce et son heure de début
+  /*const [formAnnonces, setFormAnnonces] = useState([
+    { idUnique: Date.now(), annonceId: '', heureDebut: '00:00:00' }
+  ]);
+*/const [selectedEpisodeId, setSelectedEpisodeId] = useState(null);
+  // Gestion des changements dans la liste dynamique d'annonces
 
-// Regroupe les éléments d'un plan média en sections lisibles comme le fichier
-// réel : une section par programme de la grille live (dernier inclus), titrée
-// par le programme, ses éléments triés par heure ; un bloc « Hors coupure »
-// pour les éléments non ancrés. `elements` peut mélanger des lignes réelles et
-// des propositions (marquées `_propose`). Utilisé par l'onglet Composition ET
-// par l'aperçu de la génération par règles.
-function grouperSectionsPlanMedia(dates, diffusions, elements, programmesParId) {
-  const diffusionsParId = new Map(diffusions.map((d) => [d.id, d]))
-  const points = calculerPointsInsertion(dates, diffusions)
-  const triDebut = (a, b) => (a.heure_debut < b.heure_debut ? -1 : a.heure_debut > b.heure_debut ? 1 : 0)
+  // Tableau dynamique pour gérer plusieurs annonces simultanément
+  const [formAnnonces, setFormAnnonces] = useState([
+    { idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }
+  ]);
 
-  const parCoupure = new Map()
-  const horsCoupureParDate = new Map()
-  for (const e of elements) {
-    if (e.apres_transmission_id == null) {
-      if (!horsCoupureParDate.has(e.date)) horsCoupureParDate.set(e.date, [])
-      horsCoupureParDate.get(e.date).push(e)
-    } else {
-      if (!parCoupure.has(e.apres_transmission_id)) parCoupure.set(e.apres_transmission_id, [])
-      parCoupure.get(e.apres_transmission_id).push(e)
-    }
-  }
+  const ajouterAnnonceAuFormulaire = () => {
+    setFormAnnonces(prev => [
+      ...prev,
+      { idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }
+    ]);
+  };
+  const handleAnnonceChange = (idUnique, champ, valeur) => {
+    setFormAnnonces(prev =>
+      prev.map(item => item.idUnique === idUnique ? { ...item, [champ]: valeur } : item)
+    );
+  };
 
-  const parJour = new Map(dates.map((d) => [d, []]))
-  for (const date of dates) {
-    const hc = (horsCoupureParDate.get(date) ?? []).slice().sort(triDebut)
-    if (hc.length > 0) {
-      parJour.get(date).push({ cle: `${date}|libre`, coupureId: COUPURE_LIBRE, contexte: 'Hors coupure', fenetre: '06:00 → 06:00', heureFinProg: null, elements: hc })
-    }
-  }
-  for (const iv of points) {
-    if (!parJour.has(iv.date)) continue
-    const d = diffusionsParId.get(iv.apresTransmissionId)
-    parJour.get(iv.date).push({
-      cle: `${iv.date}|${iv.apresTransmissionId}`,
-      coupureId: iv.apresTransmissionId,
-      contexte: programmesParId.get(d?.programme_id)?.titre ?? '—',
-      fenetre: `${d?.heure_fin?.slice(0, 5) ?? '?'} → ${minutesEnHeure(iv.fin)}`,
-      heureFinProg: d?.heure_fin ?? null,
-      elements: (parCoupure.get(iv.apresTransmissionId) ?? []).slice().sort(triDebut),
-    })
-  }
-  return dates.map((date) => [date, parJour.get(date)]).filter(([, sections]) => sections.length > 0)
-}
+  /* const ajouterAnnonceAuFormulaire = () => {
+     setFormAnnonces(prev => [
+       ...prev,
+       { idUnique: Date.now(), annonceId: '', heureDebut: '00:00:00' }
+     ]);
+   };
+ */
+  const supprimerAnnonceDuFormulaire = (idUnique) => {
+    setFormAnnonces(prev => prev.filter(item => item.idUnique !== idUnique));
+  };
 
-export default function PlanMedia({ chaineActive, roleUtilisateur }) {
-  // Le Plan média se compose JOUR par JOUR (socle : une grille linéaire d'une
-  // journée ⇒ un plan média de cette journée). Pas de vue semaine.
-  const vue = 'JOUR'
-  const [dateReference, setDateReference] = useState(aujourdHuiISO())
-  const [programmes, setProgrammes] = useState([])
-  const [diffusions, setDiffusions] = useState([])
-  const [campagnes, setCampagnes] = useState([])
-  const [elementsSecondaires, setElementsSecondaires] = useState([])
-  const [spots, setSpots] = useState([])
-  const [planMedias, setPlanMedias] = useState([])
-  const [planMediaOuvertsIds, setPlanMediaOuvertsIds] = useState([])
-  const [planMediaActifId, setPlanMediaActifId] = useState(null)
-  const [modaleDocument, setModaleDocument] = useState(null) // 'OUVRIR' | 'RENOMMER' | 'DUPLIQUER'
-  // Retouche placement/couleur : Renommer/Dupliquer/Supprimer (actions rares sur le
-  // document) regroupées derrière « … », même patron que GrilleType.jsx/GrilleLineaire.jsx.
-  const [menuDocumentOuvert, setMenuDocumentOuvert] = useState(false)
-  // P26bis : Composition (éditeur manuel, par défaut) / Génération auto
-  // (secondaire) — pure réorganisation d'affichage, aucune donnée/logique
-  // n'en dépend.
-  const [ongletPanneau, setOngletPanneau] = useState('COMPOSITION')
-  const [selectionActive, setSelectionActive] = useState(false)
-  const [elementsSelectionnesIds, setElementsSelectionnesIds] = useState(() => new Set())
-  const [presseGaPapier, setPresseGaPapier] = useState([])
-  const [pile, setPile] = useState({ peutAnnuler: false, libelleAnnuler: null, peutRetablir: false, libelleRetablir: null })
-  const [chargement, setChargement] = useState(true)
-  const [erreur, setErreur] = useState(null)
 
-  const [regles, setRegles] = useState([])
-  const [formulaireRegle, setFormulaireRegle] = useState(null) // null | 'CREER' | objet règle en édition
-  const [proposition, setProposition] = useState(null)
-  const [enregistrement, setEnregistrement] = useState(false)
-  const [bibliothequeOuverte, setBibliothequeOuverte] = useState(false)
-  const [insertionOuverte, setInsertionOuverte] = useState(false)
-  const [importOuvert, setImportOuvert] = useState(false)
-  const [spotPreselectionne, setSpotPreselectionne] = useState(null) // P26bis : raccourci "+" bibliothèque
-  // P31 : "+" en bout de coupure — { date, coupureId } pré-remplis et figés
-  // dans le formulaire d'insertion (coupureId = '__LIBRE__' pour le bloc hors coupure).
-  const [insertionCible, setInsertionCible] = useState(null)
-  const chargementIdRef = useRef(0)
-  const { confirmer } = useNotification()
 
-  // P23 : le Plan média (M5) ne place ses éléments secondaires que sur la
-  // grille LIVE de la chaîne — mélanger des grilles parallèles fausserait le
-  // calcul des espaces publicitaires disponibles. P24 : charge aussi les
-  // plans média de la chaîne. `chargementIdRef` ignore une réponse dépassée
-  // par un chargement plus récent (StrictMode double-invoque cet effet en
-  // dev, bug trouvé et corrigé en P23 — même garde ici dès le départ).
-  async function chargerTout() {
-    const idAppel = ++chargementIdRef.current
-    setChargement(true)
-    setErreur(null)
-    try {
-      const [grilleLive, lignesPlanMedia] = await Promise.all([
-        obtenirGrilleLiveParChaine(chaineActive.id),
-        listerPlanMediaParChaine(chaineActive.id),
-      ])
-      const [lignesProgrammes, lignesDiffusions, lignesCampagnes, lignesElements, lignesSpots, lignesRegles] =
-        await Promise.all([
-          listerProgrammesParChaine(chaineActive.id),
-          grilleLive ? listerDiffusionsLineairesParGrille(grilleLive.id) : Promise.resolve([]),
-          listerCampagnesParChaine(chaineActive.id),
-          listerElementsSecondairesParChaine(chaineActive.id),
-          listerSpotsBibliotheque(chaineActive.id),
-          listerReglesPlanMedia(chaineActive.id),
-        ])
-      if (idAppel !== chargementIdRef.current) return
-      setProgrammes(lignesProgrammes)
-      setDiffusions(lignesDiffusions)
-      setCampagnes(lignesCampagnes)
-      setElementsSecondaires(lignesElements)
-      setSpots(lignesSpots)
-      setRegles(lignesRegles ?? [])
-      setPlanMedias(lignesPlanMedia)
-      const live = lignesPlanMedia.find((p) => p.est_live)
-      const sauvegardees = lireDocumentsOuverts(chaineActive.code).filter((id) => lignesPlanMedia.some((p) => p.id === id))
-      const ouverts = sauvegardees.length > 0 ? sauvegardees : [live?.id].filter(Boolean)
-      setPlanMediaOuvertsIds(ouverts)
-      setPlanMediaActifId(ouverts[0] ?? null)
-      setSelectionActive(false)
-      setElementsSelectionnesIds(new Set())
-      setPresseGaPapier([])
-    } catch (err) {
-      if (idAppel === chargementIdRef.current) setErreur(err.message)
-    } finally {
-      if (idAppel === chargementIdRef.current) setChargement(false)
-    }
-  }
+  // 2. Fonction déclenchée quand l'utilisateur choisit un programme dans la liste
+  const getclassifications = () => {
+    const diffusionActuelle = diffusions.find(
+      d => d.episode_id === formEpisodeId
+    );
 
-  useEffect(() => {
-    setProposition(null)
-    chargerTout()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'au changement de chaîne
-  }, [chaineActive])
-
-  // Persiste la liste des onglets ouverts en session (par chaîne) — même
-  // pattern que GrilleLineaire.jsx (P23).
-  useEffect(() => {
-    if (planMediaOuvertsIds.length > 0) definirDocumentsOuverts(chaineActive.code, planMediaOuvertsIds)
-  }, [chaineActive.code, planMediaOuvertsIds])
-
-  const planMediaActif = useMemo(() => planMedias.find((p) => p.id === planMediaActifId) ?? null, [planMedias, planMediaActifId])
-  const planMediasOuverts = useMemo(
-    () => planMediaOuvertsIds.map((id) => planMedias.find((p) => p.id === id)).filter(Boolean),
-    [planMediaOuvertsIds, planMedias]
-  )
-
-  // Rafraîchi après chaque écriture — pile scopée par document ouvert (comme
-  // GRILLE_LINEAIRE en P23).
-  useEffect(() => {
-    if (!planMediaActif) return
-    etatPile(chaineActive.id, 'PLAN_MEDIA', planMediaActif.id).then(setPile)
-  }, [chaineActive, planMediaActif, elementsSecondaires])
-
-  useEffect(() => {
-    function onKeyDown(e) {
-      const cible = document.activeElement
-      if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault()
-        gererAnnuler()
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault()
-        gererRetablir()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- gererAnnuler/gererRetablir lisent chaineActive/planMediaActif par closure
-  }, [chaineActive, planMediaActif])
-
-  const dates = useMemo(() => [dateReference], [dateReference])
-
-  const programmesParId = useMemo(() => new Map(programmes.map((p) => [p.id, p])), [programmes])
-  const campagnesParId = useMemo(() => new Map(campagnes.map((c) => [c.id, c])), [campagnes])
-
-  // Filtrés sur le document actuellement OUVERT — chaque plan média a ses
-  // propres éléments, tous chargés en mémoire pour permettre plusieurs
-  // onglets sans aller-retour réseau (même pattern que diffusionsGrilleActive
-  // en P23).
-  const elementsSecondairesActifs = useMemo(
-    () => (planMediaActif ? elementsSecondaires.filter((e) => e.plan_media_id === planMediaActif.id) : []),
-    [elementsSecondaires, planMediaActif]
-  )
-  const elementsPeriode = useMemo(
-    () => elementsSecondairesActifs.filter((e) => dates.includes(e.date)).sort((a, b) => a.date.localeCompare(b.date) || a.heure_debut.localeCompare(b.heure_debut)),
-    [elementsSecondairesActifs, dates]
-  )
-  // Vue Composition (P31) : le Plan média se lit comme le fichier réel — une
-  // section par programme, ses BA/spots/écrans en dessous, un « + » en bout.
-  const sectionsComposition = useMemo(
-    () => grouperSectionsPlanMedia(dates, diffusions, elementsPeriode, programmesParId),
-    [dates, diffusions, elementsPeriode, programmesParId]
-  )
-
-  // Aperçu de la génération par règles : uniquement les PROGRAMMES du jour
-  // issus de la grille linéaire live (sections vides), puis, après « Générer »,
-  // les propositions du run à leur place (marquées `_propose`). Ne montre PAS
-  // la composition manuelle du document — on part de la grille.
-  const sectionsApercu = useMemo(() => {
-    const proposees = (proposition?.propositions ?? []).map((p, i) => ({ ...p, id: `prop-${i}`, _propose: true }))
-    return grouperSectionsPlanMedia(dates, diffusions, proposees, programmesParId)
-  }, [dates, diffusions, programmesParId, proposition])
-
-  function naviguer(delta) {
-    setDateReference((d) => ajouterJours(d, delta))
-  }
-
-  // Bibliothèque de règles (P32/P33) — CRUD immédiat en base, la génération
-  // auto s'en sert au clic « Générer ». Aucune existence côté Composition.
-  async function creerRegle(champs) {
-    try {
-      const cree = await creerReglePlanMedia({ chaine_id: chaineActive.id, ...champs })
-      setRegles((prev) => [...prev, cree])
-      setFormulaireRegle(null)
-    } catch (err) {
-      setErreur(err.message)
-    }
-  }
-
-  async function modifierRegle(id, champs) {
-    try {
-      const maj = await mettreAJourReglePlanMedia(id, champs)
-      setRegles((prev) => prev.map((r) => (r.id === id ? maj : r)))
-      setFormulaireRegle(null)
-    } catch (err) {
-      setErreur(err.message)
-    }
-  }
-
-  async function supprimerRegle(id) {
-    try {
-      await supprimerReglePlanMedia(id)
-      setRegles((prev) => prev.filter((r) => r.id !== id))
-      setFormulaireRegle(null)
-    } catch (err) {
-      setErreur(err.message)
-    }
-  }
-
-  async function basculerActiveRegle(id, active) {
-    setRegles((prev) => prev.map((r) => (r.id === id ? { ...r, active } : r)))
-    try {
-      await mettreAJourReglePlanMedia(id, { active })
-    } catch (err) {
-      setErreur(err.message)
-    }
-  }
-
-  // Aucune écriture ici — pure calcul (planMedia.js) : on applique les règles
-  // actives aux programmes du jour et on propose un aperçu. L'écriture n'a lieu
-  // qu'après confirmation dans confirmerGeneration().
-  function generer() {
-    if (!planMediaActif) return
-    setErreur(null)
-    const dateDebut = dates[0]
-    const dateFin = dates[dates.length - 1]
-    const points = calculerPointsInsertion(dates, diffusions)
-    const runId = crypto.randomUUID()
-    const resultat = genererElementsSecondaires({
-      dates,
-      points,
-      programmesParId,
-      diffusionsToutes: diffusions,
-      elementsExistants: elementsSecondairesActifs,
-      runId,
-      chaineActive,
-      planMediaId: planMediaActif.id,
-      spots,
-      regles,
-    })
-    const nbAutomatiquesRemplaces = elementsSecondairesActifs.filter(
-      (e) => e.origine === 'AUTOMATIQUE' && e.date >= dateDebut && e.date <= dateFin
-    ).length
-    setProposition({ ...resultat, runId, nbAutomatiquesRemplaces })
-  }
-
-  // Chaque confirmation recalcule systématiquement les éléments AUTOMATIQUE de
-  // la période, ne touche jamais les MANUELLE (ni les éléments posés à la main
-  // en Composition). P24 : enregistrerAction (delete + insert groupés) —
-  // annulable en un coup via l'Undo de la barre d'outils.
-  async function confirmerGeneration(retenues) {
-    if (!planMediaActif) return
-    setEnregistrement(true)
-    setErreur(null)
-    try {
-      const dateDebut = dates[0]
-      const dateFin = dates[dates.length - 1]
-      const supprimes = await supprimerElementsSecondairesAutomatiquesParPeriode(chaineActive.id, dateDebut, dateFin, planMediaActif.id)
-      const creees = retenues.length > 0 ? await creerElementsSecondaires(retenues) : []
-      await enregistrerAction({
-        chaineId: chaineActive.id,
-        ecran: 'PLAN_MEDIA',
-        documentId: planMediaActif.id,
-        libelle: `Génération plan média (${creees.length} élément${creees.length > 1 ? 's' : ''})`,
-        operations: [
-          ...supprimes.map((e) => ({ table: 'element_secondaire', type: 'DELETE', id: e.id, avant: e })),
-          ...creees.map((e) => ({ table: 'element_secondaire', type: 'INSERT', id: e.id, apres: e })),
-        ],
-      })
-      const idsSupprimes = new Set(supprimes.map((e) => e.id))
-      setElementsSecondaires((prev) => [...prev.filter((e) => !idsSupprimes.has(e.id)), ...creees])
-      setProposition(null)
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setEnregistrement(false)
-    }
-  }
-
-  function ajouterElementLocal(nouveau) {
-    setElementsSecondaires((prev) => [...prev, nouveau])
-  }
-
-  // Raccourci "+" de la bibliothèque (P26bis) : ferme la bibliothèque, ouvre
-  // l'insertion manuelle avec ce spot présélectionné — même formulaire, même
-  // validation, même écriture que l'insertion manuelle normale (aucun chemin
-  // parallèle).
-  function ouvrirInsertionDepuisBibliotheque(spot) {
-    setBibliothequeOuverte(false)
-    setSpotPreselectionne(spot.id)
-    setInsertionOuverte(true)
-  }
-
-  function fermerInsertion() {
-    setInsertionOuverte(false)
-    setSpotPreselectionne(null)
-    setInsertionCible(null)
-  }
-
-  // "+" en bout de coupure (ou du bloc hors coupure) : ouvre l'insertion
-  // manuelle avec la date + la coupure figées, prête à enchaîner des BA/spots
-  // jusqu'au programme suivant.
-  function ouvrirInsertionDansCoupure(date, coupureId) {
-    setInsertionCible({ date, coupureId })
-    setInsertionOuverte(true)
-  }
-
-  // Import Plan média (P26) : le document créé n'est jamais live par défaut
-  // — ouvert comme un nouvel onglet, l'utilisateur choisit ensuite
-  // explicitement « Définir comme live » s'il le souhaite (même geste que
-  // pour tout autre document, aucun raccourci silencieux ici).
-  function documentImporte(nouveauDocument, elementsCrees) {
-    setPlanMedias((prev) => [...prev, nouveauDocument])
-    setElementsSecondaires((prev) => [...prev, ...elementsCrees])
-    ouvrirDocument(nouveauDocument.id)
-    setImportOuvert(false)
-  }
-
-  function appliquerChangementsPile(changements) {
-    setElementsSecondaires((prev) => fusionnerChangements(prev, changements))
-  }
-
-  async function gererAnnuler() {
-    if (!planMediaActif) return
-    const resultat = await annulerDerniereAction(chaineActive.id, 'PLAN_MEDIA', planMediaActif.id)
-    if (!resultat.ok) {
-      setErreur(resultat.motif)
-      return
-    }
-    appliquerChangementsPile(resultat.changements)
-  }
-
-  async function gererRetablir() {
-    if (!planMediaActif) return
-    const resultat = await retablirAction(chaineActive.id, 'PLAN_MEDIA', planMediaActif.id)
-    if (!resultat.ok) {
-      setErreur(resultat.motif)
-      return
-    }
-    appliquerChangementsPile(resultat.changements)
-  }
-
-  // --- Gestion des plans média (P24) ---
-
-  function selectionnerDocument(id) {
-    setPlanMediaActifId(id)
-    setSelectionActive(false)
-    setElementsSelectionnesIds(new Set())
-  }
-
-  function ouvrirDocument(id) {
-    setPlanMediaOuvertsIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
-    selectionnerDocument(id)
-  }
-
-  function fermerOnglet(id) {
-    setPlanMediaOuvertsIds((prev) => {
-      if (prev.length <= 1) return prev
-      const next = prev.filter((x) => x !== id)
-      if (planMediaActifId === id) selectionnerDocument(next[0])
-      return next
-    })
-  }
-
-  async function creerEtOuvrirDocument(nom) {
-    const nouveau = await creerPlanMedia({ chaine_id: chaineActive.id, nom, est_live: false, cree_par: lireUtilisateur() })
-    setPlanMedias((prev) => [...prev, nouveau])
-    ouvrirDocument(nouveau.id)
-    setModaleDocument(null)
-  }
-
-  async function renommerDocumentActif(nom) {
-    const maj = await mettreAJourPlanMedia(planMediaActif.id, { nom })
-    setPlanMedias((prev) => prev.map((p) => (p.id === maj.id ? maj : p)))
-    setModaleDocument(null)
-  }
-
-  async function dupliquerDocumentActif(nom) {
-    const nouveau = await dupliquerPlanMedia(planMediaActif, nom, lireUtilisateur())
-    const lignes = await listerElementsSecondairesParChaine(chaineActive.id)
-    setPlanMedias((prev) => [...prev, nouveau])
-    setElementsSecondaires(lignes)
-    ouvrirDocument(nouveau.id)
-    setModaleDocument(null)
-  }
-
-  async function definirLive() {
-    if (!planMediaActif || planMediaActif.est_live) return
-    const liveActuel = planMedias.find((p) => p.est_live)
-    const confirme = await confirmer({
-      titre: 'Définir comme live',
-      message: `Définir « ${planMediaActif.nom} » comme plan média live de ${chaineActive.nom} ? Il remplacera « ${liveActuel?.nom ?? '—'} » pour le Conducteur et la couverture du dashboard.`,
-      labelConfirmer: 'Définir comme live',
-    })
-    if (!confirme) return
-    await definirPlanMediaLive(chaineActive.id, planMediaActif.id)
-    setPlanMedias(await listerPlanMediaParChaine(chaineActive.id))
-  }
-
-  async function supprimerDocumentActif() {
-    if (!planMediaActif || planMediaActif.est_live) return
-    const nb = elementsSecondaires.filter((e) => e.plan_media_id === planMediaActif.id).length
-    const confirme = await confirmer({
-      titre: 'Supprimer le plan média',
-      message: `Supprimer définitivement « ${planMediaActif.nom} »${nb > 0 ? ` et ses ${nb} élément(s)` : ''} ?`,
-      labelConfirmer: 'Supprimer',
-    })
-    if (!confirme) return
-    const idSupprime = planMediaActif.id
-    await supprimerPlanMedia(idSupprime)
-    setPlanMedias((prev) => prev.filter((p) => p.id !== idSupprime))
-    setElementsSecondaires((prev) => prev.filter((e) => e.plan_media_id !== idSupprime))
-    setPlanMediaOuvertsIds((prev) => {
-      const next = prev.filter((x) => x !== idSupprime)
-      const restante = next.length > 0 ? next : [planMedias.find((p) => p.est_live)?.id].filter(Boolean)
-      setPlanMediaActifId(restante[0] ?? null)
-      return restante
-    })
-  }
-
-  // --- Sélection multiple + copier/coller (P24) ---
-
-  function activerSelection() {
-    setSelectionActive(true)
-    setElementsSelectionnesIds(new Set())
-  }
-
-  function annulerSelection() {
-    setSelectionActive(false)
-    setElementsSelectionnesIds(new Set())
-  }
-
-  // Tout sélectionner / tout désélectionner les éléments de la période affichée.
-  function basculerToutSelectionner() {
-    setElementsSelectionnesIds((prev) =>
-      prev.size === elementsPeriode.length ? new Set() : new Set(elementsPeriode.map((e) => e.id))
-    )
-  }
-
-  function toggleSelectionElement(id) {
-    setElementsSelectionnesIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function copierSelection() {
-    const snapshots = elementsSecondairesActifs
-      .filter((e) => elementsSelectionnesIds.has(e.id))
-      .map((e) => Object.fromEntries(CHAMPS_COPIABLES_ELEMENT.map((c) => [c, e[c]])))
-    setPresseGaPapier(snapshots)
-    annulerSelection()
-  }
-
-  // Colle dans le document actuellement ouvert, à la MÊME coupure/horaire que
-  // la copie (cf. commentaire CHAMPS_COPIABLES_ELEMENT). Valide via
-  // estPlacementValide (même fonction que l'insertion manuelle) contre les
-  // éléments déjà présents dans cette coupure du document cible —
-  // silencieusement écarté si conflit, décompte des refus affiché.
-  async function coller() {
-    if (!planMediaActif || presseGaPapier.length === 0) return
-    const intervalles = calculerIntervalles(dates, diffusions)
-    const creees = []
-    for (const item of presseGaPapier) {
-      // P31 : un élément « hors coupure » (apres_transmission_id null) se colle
-      // dans la journée d'antenne de sa date, sans dépendre de la grille live.
-      const intervalle =
-        item.apres_transmission_id == null
-          ? { date: item.date, debut: 6 * 60, fin: 30 * 60, apresTransmissionId: null }
-          : intervalles.find((iv) => iv.apresTransmissionId === item.apres_transmission_id)
-      if (!intervalle) continue
-      const elementsCoupureCible = elementsSecondairesActifs.filter((e) =>
-        item.apres_transmission_id == null
-          ? e.apres_transmission_id == null && e.date === item.date
-          : e.apres_transmission_id === item.apres_transmission_id
+    const classificationIA = diffusionActuelle
+      ? ProgrammeClassification.find(
+        c => c.programme_id === diffusionActuelle.programme_id
       )
-      const heureDebutSecondes = heureHMSEnSecondes(item.heure_debut)
-      if (!estPlacementValide(heureDebutSecondes, item.duree_secondes, intervalle, elementsCoupureCible)) continue
-      // P38a — spot de bibliothèque hors validité / non PAD à la date cible : sauté.
-      if (item.campagne_id == null) {
-        const spot = spots.find(
-          (s) => s.libelle === item.libelle && s.type === item.type && s.duree_secondes === item.duree_secondes
-        )
-        if (spot && !spotDisponible(spot, item.date).ok) continue
-      }
-      const cree = await creerElementSecondaire({ ...item, chaine_id: chaineActive.id, plan_media_id: planMediaActif.id })
-      creees.push(cree)
-    }
-    if (creees.length === 0) {
-      setErreur("Aucun élément collé — conflit d'horaire dans la coupure cible.")
-      return
-    }
-    await enregistrerAction({
-      chaineId: chaineActive.id,
-      ecran: 'PLAN_MEDIA',
-      documentId: planMediaActif.id,
-      libelle: `Collage (${creees.length} élément${creees.length > 1 ? 's' : ''})`,
-      operations: creees.map((e) => ({ table: 'element_secondaire', type: 'INSERT', id: e.id, apres: e })),
-    })
-    setElementsSecondaires((prev) => [...prev, ...creees])
-    const refuses = presseGaPapier.length - creees.length
-    setPresseGaPapier([])
-    if (refuses > 0)
-      setErreur(`${refuses} élément(s) refusé(s) (conflit d'horaire ou spot hors validité/PAD) sur ${creees.length + refuses}.`)
-  }
+      : null;
 
-  // Export Plan média (P16b) — remplace le fichier PM réel : feuille "PM",
-  // titre "Plan Média Autopromotion", H.FIN/DUREE en cellules numériques
-  // (fraction de journée, format hh:mm:ss) pour un rendu identique au
-  // fichier d'origine à l'ouverture dans Excel/LibreOffice.
-  function exporterPlanMedia() {
+
+    if (!classificationIA) {
+      return (
+        <div className="classification-unavailable">
+          <span className="classification-unavailable-icon">ℹ</span>
+          <span>La classification n'est pas encore disponible</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="classification-container">
+        <div className="classification-title">
+          Classification du programme
+        </div>
+
+        <div className="classification-items">
+
+          <div className="classification-card classification-enfant">
+            <span className="classification-label">Enfant</span>
+            <span className="classification-score">
+              {classificationIA.enfant_point ?? 0}%
+            </span>
+          </div>
+
+          <div className="classification-card classification-adulte">
+            <span className="classification-label">Adulte</span>
+            <span className="classification-score">
+              {classificationIA.adult_point ?? 0}%
+            </span>
+          </div>
+
+          <div className="classification-card classification-senior">
+            <span className="classification-label">Grand</span>
+            <span className="classification-score">
+              {classificationIA.senior_point ?? 0}%
+            </span>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+  // Utilitaire pour ajouter des secondes à une heure au format "HH:MM:SS"
+  const ajouterSecondesHeure = (timeStr, secondsToAdd) => {
+    if (!timeStr) return '00:00:00';
+    const parts = timeStr.split(':');
+    let hours = parseInt(parts[0] || 0, 10);
+    let minutes = parseInt(parts[1] || 0, 10);
+    let seconds = parseInt(parts[2] || 0, 10);
+
+    let totalSeconds = hours * 3600 + minutes * 60 + seconds + parseInt(secondsToAdd, 10);
+
+    let h = Math.floor(totalSeconds / 3600) % 24;
+    let m = Math.floor((totalSeconds % 3600) / 60);
+    let s = totalSeconds % 60;
+
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const gererSoumissionFormulaire = async (e) => {
+    e.preventDefault();
+
     try {
-      const { lignes, cellulesHeure } = construireLignesPlanMedia(dates, diffusions, elementsSecondairesActifs, programmesParId, campagnesParId)
-      const feuilleAOA = [[TITRE_FEUILLE_PLAN_MEDIA], ENTETE_PLAN_MEDIA, ...lignes]
-      const feuille = XLSX.utils.aoa_to_sheet(feuilleAOA)
-      feuille['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
-      for (const [indexLigne, colonne] of cellulesHeure) {
-        const adresse = XLSX.utils.encode_cell({ r: indexLigne + 2, c: colonne })
-        if (feuille[adresse]) {
-          feuille[adresse].t = 'n'
-          feuille[adresse].z = 'hh:mm:ss'
+      // 1. Trouver la diffusion correspondante à l'épisode sélectionné pour récupérer la date, grille et chaîne
+      const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
+
+      if (!diffusionActuelle) {
+        toast.error("Aucune diffusion trouvée pour cet épisode.");
+        return;
+      }
+
+      // 2. Préparer le tableau des planifications à insérer
+      const planificationsPayload = formAnnonces.map(annonceItem => {
+        let timestart = '00:00:00';
+
+        if (annonceItem.mode === 'exact') {
+          timestart = annonceItem.timeExact.length === 5 ? `${annonceItem.timeExact}:00` : annonceItem.timeExact;
+        } else {
+          // Mode décalage : ajoute les secondes par rapport à l'heure de début de l'épisode
+          const heureDebutEpisode = diffusionActuelle.heure_debut || '00:00:00';
+          timestart = ajouterSecondesHeure(heureDebutEpisode, annonceItem.offsetSeconds);
         }
+
+        // Calculer l'heure de fin en fonction de la durée de l'annonce (par défaut 30s)
+        const stockAnnonce = stockAnnonces.find(s => s.id === annonceItem.annonceId);
+        const dureeSec = stockAnnonce?.duration || 30;
+        const timeend = ajouterSecondesHeure(timestart, dureeSec);
+        if (!filtreGrilleId) { toast.error("ooops no grille id"); }
+        return {
+          episode_id: formEpisodeId,
+          annonce_id: annonceItem.annonceId,
+          grille_id: filtreGrilleId,
+          chaine_id: diffusionActuelle.chaine_id || null,
+          date: diffusionActuelle.date_diffusion || diffusionActuelle.date,
+          timestart: timestart,
+          timeend: timeend
+        };
+      });
+
+
+      const heuresDeDebut = planificationsPayload.map(planification => planification.timestart);
+      const heuresUniques = new Set(heuresDeDebut);
+
+      if (heuresUniques.size !== heuresDeDebut.length) {
+        toast.error("Impossible d'insérer : Plusieurs annonces sont programmées exactement à la même heure.");
+        return; // Bloque la requête vers la base de données
       }
-      const classeur = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(classeur, feuille, 'PM')
-      XLSX.writeFile(classeur, construireNomFichierPlanMedia(vue, dates))
+      // 3. Appel de la fonction d'insertion en base de données
+      await insererPlanificationsMedia(planificationsPayload);
+
+      toast.success("Planifications enregistrées avec succès !");
+      fermerModal();
+
+      // Optionnel : Recharger vos données de planifications ici si nécessaire
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement des planifications :", error);
+      toast.error("Erreur lors de l'enregistrement des planifications");
+
+    }
+  };
+
+
+  // Navigation principale entre Gestion Plan Média, Validation Pige et Administration Plan Média
+  const [vuePrincipale, setVuePrincipale] = useState('PLAN_MEDIA');
+
+  // Stock d'annonces centralisé partagé entre la liste de droite et l'administration
+  const [chargement, setChargement] = useState(false);
+  const [planMediaActif, setPlanMediaActif] = useState(null);
+  const [grilles, setGrilles] = useState([]);
+  const [grilleTypes, setGrilleTypes] = useState([]);
+  const [programmes, setProgrammes] = useState([]);
+  const [episodes, setEpisodes] = useState([]);
+  const [diffusions, setDiffusions] = useState([]);
+  const [planificationsMedia, setPlanificationsMedia] = useState([]);  // Le stock d'annonces démarre vide, il sera peuplé par Supabase via plan_media_stock
+  const [stockAnnonces, setStockAnnonces] = useState([]);
+  // États pour les filtres et la recherche de la timeline (colonne gauche)
+  const [filtresTimeline, setFiltresTimeline] = useState(['annonce', 'episode']);
+  const [rechercheTimeline, setRechercheTimeline] = useState('');
+
+  // États pour la recherche et les 4 boutons de la liste (colonne droite)
+  const [filtreOrdre, setFiltreOrdre] = useState('enfant');
+  const [rechercheListe, setRechercheListe] = useState('');
+  const [ProgrammeClassification, setProgrammeClassification] = useState([]);
+  // État pour la Pige Validation (upload fichier excel)
+  const [fichierPige, setFichierPige] = useState(null);
+
+  const toggleFiltreTimeline = (filtre) => {
+    setFiltresTimeline(prev =>
+      prev.includes(filtre)
+        ? prev.filter(f => f !== filtre)
+        : [...prev, filtre]
+    );
+  };
+  const [dateFiltreTimeline, setDateFiltreTimeline] = useState(
+    new Date().toISOString().split('T')[0]
+  );
+  // Fake data for the timeline
+  const mockEvents = [
+  ];
+
+  // Filtrage dynamique du stock d'annonces pour la colonne de droite
+  const listeFiltree = stockAnnonces.filter((item) => {
+    const titreItem = item.nom || item.title || '';
+    const matchRecherche = rechercheListe.trim() === '' || titreItem.toLowerCase().includes(rechercheListe.toLowerCase());
+    return matchRecherche;
+  }).sort((a, b) => {
+    const scoreA = a.pourcentages?.[filtreOrdre] || a[`${filtreOrdre}percentage`] || a.grand_percentage || 0;
+    const scoreB = b.pourcentages?.[filtreOrdre] || b[`${filtreOrdre}percentage`] || b.grand_percentage || 0;
+    return scoreB - scoreA;
+  });
+  const [isModalOuvert, setIsModalOuvert] = useState(false);
+  const [datachanged, setdatachanged] = useState(false);
+
+
+
+  useEffect(() => {
+    if (!chaineActive?.id) return;
+
+    let actif = true;
+    setChargement(true);
+
+    async function chargerDonnees() {
+      try {
+        // 1. Récupérer ou créer le plan_media associé à la chaîne active
+        let plans = await listerPlanMediaParChaine(chaineActive.id);
+        let planCourant = plans && plans.length > 0 ? plans[0] : null;
+
+        if (!planCourant) {
+          planCourant = await creerPlanMedia({
+            chaine_id: chaineActive.id,
+            nom: `Plan Média - ${chaineActive.nom || 'Chaîne'}`,
+            est_live: true
+          });
+        }
+
+        if (actif) {
+          setPlanMediaActif(planCourant);
+        }
+
+        // 2. Charger en parallèle le stock lié au plan média et les autres tables de référence
+        // 2. Charger en parallèle le stock lié au plan média et les autres tables de référence
+        const [
+          stockDb,
+          grillesDb,
+          grillesTypesDb,
+          programmesDb,
+          episodesDb,
+          diffusionsDb,
+          planificationsMediaDb,
+          programmeclassificationDb
+          // <-- Ajoutez ceci
+        ] = await Promise.all([
+          planCourant?.id ? listerPlanMediaStockParPlanMedia(planCourant.id) : Promise.resolve([]),
+          listerGrillesParChaine(chaineActive.id),
+          listerGrillesTypeParChaine(chaineActive.id),
+          listerProgrammesParChaine(chaineActive.id),
+          listerTousLesEpisodes(),
+          listerDiffusionsLineairesParChaine(chaineActive.id), // <-- Ajoutez l'appel API ici
+          listerPlanificationsMedia(),
+          listerClassificationsProgrammes()]);
+
+        if (actif) {
+          setStockAnnonces(stockDb || []);
+          setGrilles(grillesDb || []);
+          setGrilleTypes(grillesTypesDb || []);
+          setProgrammes(programmesDb || []);
+          setEpisodes(episodesDb || []);
+          setDiffusions(diffusionsDb || []);
+          setPlanificationsMedia(planificationsMediaDb || []);
+          setProgrammeClassification(programmeclassificationDb)// <-- Stockez le résultat ici
+        }
+      } catch (erreur) {
+        toast.error("Erreur lors du chargement des données Plan Média :", erreur);
+      } finally {
+        if (actif) setChargement(false);
+      }
+    }
+
+    chargerDonnees();
+
+    return () => {
+      actif = false;
+    };
+  }, [chaineActive?.id, filtreGrilleId, isModalOuvert, datachanged]);
+
+
+
+
+  async function update_clasification() {
+    try {
+      setIsLoading(true);
+      if (vuePrincipale === "PLAN_MEDIA") {
+        await data_refrech(filtreGrilleId);
+        setdatachanged(!datachanged);
+      } else if (vuePrincipale === "PLAN_MEDIA_ADMIN") {
+        await data_annonce_refrech();
+        setdatachanged(!datachanged);
+      }
+
     } catch (err) {
-      setErreur(`Échec de l'export Excel : ${err.message}`)
+      toast.error("Problèmes lors de la génération des classifications ! Contactez l’administrateur.");
+    } finally {
+      setIsLoading(false);
+      toast.success("Le calcul des classifications est terminé.");
     }
   }
 
-  // Word/PDF (P31 — passe design, unification du bouton Export) : mêmes
-  // données que l'Excel métier ci-dessus (même regroupement/tri/libellés,
-  // construireLignesTextePlanMedia ne fait que reformater H.FIN/DUREE en
-  // texte plutôt qu'en fraction de journée) — présentées en tableau simple,
-  // pas de mise en forme du fichier réel à reproduire pour ces 2 formats.
-  function exporterPlanMediaPdf() {
-    try {
-      const lignes = construireLignesTextePlanMedia(dates, diffusions, elementsSecondairesActifs, programmesParId, campagnesParId)
-      const doc = new jsPDF()
-      doc.setFontSize(14)
-      doc.text(TITRE_FEUILLE_PLAN_MEDIA, 14, 16)
-      autoTable(doc, { startY: 24, head: [ENTETE_PLAN_MEDIA], body: lignes })
-      doc.save(construireNomFichierPlanMedia(vue, dates, 'pdf'))
-    } catch (err) {
-      setErreur(`Échec de l'export PDF : ${err.message}`)
+
+
+  // Construction dynamique des événements pour la Timeline
+
+  const genererEvenementsTimeline = () => {
+    let eventsGenerees = [];
+
+    // 1. Sécurisation de la variable de recherche
+    const rechercheSafe = (rechercheTimeline || '').trim().toLowerCase();
+
+    // 2. Sécurisation de diffusions (protection si undefined)
+    const diffusionsFiltrees = (diffusions || []).filter(diff => {
+      if (!diff) return false; // Ignore les éléments nuls du tableau
+      if (!filtreGrilleId) return true;
+      return diff.grille_id === filtreGrilleId;
+    });
+
+    // 3. Sécurisation de l'accès à filtresTimeline
+    const filtresSafe = filtresTimeline || [];
+
+    // --- PROGRAMMES ET ÉPISODES ---
+    if (diffusionsFiltrees.length > 0 && filtresSafe.includes('episode')) {
+      const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
+        const dateStr = diff?.date || 'Sans date';
+        if (!groupes[dateStr]) groupes[dateStr] = [];
+        groupes[dateStr].push(diff);
+        return groupes;
+      }, {});
+
+      Object.entries(diffusionsParDate).forEach(([date, listeDiffusions]) => {
+        (listeDiffusions || []).forEach((diff) => {
+          if (!diff) return;
+
+          // Sécurisation de la recherche dans episodes et programmes
+          const ep = (episodes || []).find(e => e && e.id === diff.episode_id);
+          const prog = (programmes || []).find(p => p && (p.id === diff.programme_id || (ep && ep.programme_id === p.id)));
+
+          const titreEp = ep?.titre || ep?.nom || (ep?.numero ? `Épisode ${ep.numero}` : null);
+          const titreProg = prog?.titre || prog?.nom || 'Programme Inconnu';
+          const nomAffichage = titreEp || titreProg;
+          const descParent = prog ? `Programme : ${titreProg}` : '';
+
+          if (rechercheSafe === '' || nomAffichage.toLowerCase().includes(rechercheSafe)) {
+            eventsGenerees.push({
+              id: diff.id || `diff-${Math.random()}`, // Fallback ID unique
+              date_tri: date,
+              time: diff.heure_debut || '00:00',
+              name: nomAffichage,
+              details: {
+                type: ep ? 'Épisode' : 'Programme',
+                programme: titreProg,
+                date: date,
+                duree: diff.duree || (ep?.duree ? `${ep.duree} min` : '00:00:00'),
+                description: descParent || diff.description || ''
+              }
+            });
+          }
+        });
+      });
     }
-  }
 
-  async function exporterPlanMediaWord() {
-    try {
-      const lignes = construireLignesTextePlanMedia(dates, diffusions, elementsSecondairesActifs, programmesParId, campagnesParId)
-      const ligneEntete = (libelles) =>
-        new TableRow({ children: libelles.map((l) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true })] })] })) })
-      const ligne = (valeurs) => new TableRow({ children: valeurs.map((v) => new TableCell({ children: [new Paragraph(String(v))] })) })
+    // --- ANNONCES ET PLANIFICATIONS MEDIA ---
+    if ((planificationsMedia || []).length > 0 && filtresSafe.includes('annonce')) {
+      (planificationsMedia || []).forEach((plan) => {
+        if (!plan) return;
 
-      const doc = new Document({
-        sections: [
-          {
-            children: [
-              new Paragraph({ text: TITRE_FEUILLE_PLAN_MEDIA, heading: HeadingLevel.HEADING_1 }),
-              new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                rows: [ligneEntete(ENTETE_PLAN_MEDIA), ...lignes.map(ligne)],
-              }),
-            ],
-          },
-        ],
+        // Filtrer par grille si un filtre de grille est actif
+        if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+
+        // Récupérer l'annonce liée avec sécurisation
+        const stockAnnonce = (stockAnnonces || []).find(s => s && s.id === plan.annonce_id);
+        const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
+
+        if (rechercheSafe === '' || titreAnnonce.toLowerCase().includes(rechercheSafe)) {
+          const dateStr = plan.date || new Date().toISOString().split('T')[0];
+          const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
+
+          eventsGenerees.push({
+            id: plan.id || `plan-${Math.random()}`, // Fallback ID unique
+            date_tri: dateStr,
+            time: timeStr,
+            name: titreAnnonce,
+            details: {
+              type: stockAnnonce?.type || 'Annonce', // <-- Protection ici (évite le crash "Cannot read properties of undefined")
+              duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
+              description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
+            }
+          });
+        }
+      });
+    }
+
+    // 4. Application du filtre par date sélectionnée (sécurisé)
+    if (dateFiltreTimeline) {
+      eventsGenerees = eventsGenerees.filter(event => event && event.date_tri === dateFiltreTimeline);
+    }
+
+    // 5. Tri chronologique global sécurisé (Date puis Heure)
+    eventsGenerees.sort((a, b) => {
+      const dateA = a?.date_tri || '';
+      const dateB = b?.date_tri || '';
+
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+
+      const timeA = a?.time || '';
+      const timeB = b?.time || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    // 6. Retour sécurisé
+    return eventsGenerees.length > 0 ? eventsGenerees : (mockEvents || []);
+  };
+
+
+
+
+
+
+
+  //get pige events 
+  const genererEvenementsPige = () => {
+    let eventsGenerees = [];
+
+    // Sécurisation de la chaîne de recherche (évite le crash si rechercheTimeline est null/undefined)
+    const rechercheSafe = (rechercheTimeline || '').trim().toLowerCase();
+
+    // 1. Sécurisation du tableau de base: (diffusions || [])
+    const diffusionsFiltrees = (diffusions || []).filter(diff => {
+      if (!diff) return false; // Protection contre un objet vide/null dans le tableau
+      if (!filtreGrilleId) return true;
+      return diff.grille_id === filtreGrilleId;
+    });
+
+    const diffusionsParDate = diffusionsFiltrees.reduce((groupes, diff) => {
+      const dateStr = diff.date || 'Sans date';
+      if (!groupes[dateStr]) groupes[dateStr] = [];
+      groupes[dateStr].push(diff);
+      return groupes;
+    }, {});
+
+    Object.entries(diffusionsParDate).forEach(([date, listeDiffusions]) => {
+      (listeDiffusions || []).forEach((diff) => {
+        if (!diff) return;
+
+        // Sécurisation des recherches dans les tableaux (episodes et programmes)
+        const ep = (episodes || []).find(e => e && e.id === diff.episode_id);
+        const prog = (programmes || []).find(p => p && (p.id === diff.programme_id || (ep && ep.programme_id === p.id)));
+
+        const titreEp = ep?.titre || ep?.nom || (ep?.numero ? `Épisode ${ep.numero}` : null);
+        const titreProg = prog?.titre || prog?.nom || 'Programme Inconnu';
+        const nomAffichage = titreEp || titreProg;
+        const descParent = prog ? `Programme : ${titreProg}` : '';
+
+        if (rechercheSafe === '' || nomAffichage.toLowerCase().includes(rechercheSafe)) {
+          eventsGenerees.push({
+            id: diff.id || `diff-${Math.random()}`,
+            date_tri: date,
+            time: diff.heure_debut || '00:00',
+            name: nomAffichage,
+            details: {
+              type: ep ? 'Épisode' : 'Programme',
+              programme: titreProg,
+              date: date,
+              duree: diff.duree || (ep?.duree ? `${ep.duree} min` : '00:00:00'),
+              description: descParent || diff.description || ''
+            }
+          });
+        }
+      });
+    });
+
+    // 2. Sécurisation de planificationsMedia
+    (planificationsMedia || []).forEach((plan) => {
+      if (!plan) return;
+
+      if (filtreGrilleId && plan.grille_id !== filtreGrilleId) return;
+
+      // Sécurisation de la recherche dans stockAnnonces
+      const stockAnnonce = (stockAnnonces || []).find(s => s && s.id === plan.annonce_id);
+      const titreAnnonce = stockAnnonce?.nom || stockAnnonce?.title || 'Annonce planifiée';
+
+      if (rechercheSafe === '' || titreAnnonce.toLowerCase().includes(rechercheSafe)) {
+        const dateStr = plan.date || new Date().toISOString().split('T')[0];
+        const timeStr = plan.timestart ? plan.timestart.substring(0, 5) : '00:00';
+
+        eventsGenerees.push({
+          id: plan.id || `plan-${Math.random()}`,
+          date_tri: dateStr,
+          time: timeStr,
+          name: titreAnnonce,
+          details: {
+            // Utilisation de l'optional chaining pour type (évite l'erreur "Cannot read properties of undefined (reading 'type')")
+            type: stockAnnonce?.type || 'Annonce',
+            duree: stockAnnonce?.duration ? `${stockAnnonce.duration}s` : '30s',
+            description: stockAnnonce?.client ? `Client : ${stockAnnonce.client}` : ''
+          }
+        });
+      }
+    });
+
+    // 3. Sécurisation du tri (localeCompare plante si la variable n'est pas une string)
+    eventsGenerees.sort((a, b) => {
+      const dateA = a.date_tri || '';
+      const dateB = b.date_tri || '';
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      const timeA = a.time || '';
+      const timeB = b.time || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    // Sécurisation du retour (au cas où mockEvents n'existerait pas)
+    return eventsGenerees.length > 0 ? eventsGenerees : (mockEvents || []);
+  };
+
+
+
+
+  const [rechercheEpisodeForm, setRechercheEpisodeForm] = useState('');
+  const handleEpisodeSelection = (episodeId, df_id) => {
+    setFormEpisodeId(episodeId);
+    setSelectedEpisodeId(df_id);
+    setFormAnnonces([{ idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }]);
+
+    if (episodeId) {
+      const epTrouve = episodes.find(ep => ep.id === episodeId);
+      if (epTrouve && epTrouve.programme_id) {
+        setFormProgrammeId(epTrouve.programme_id);
+      }
+      setIsModalOuvert(true); // Ouvre la modale
+    } else {
+      setFormProgrammeId('');
+    }
+  };
+  const fermerModal = () => {
+    setIsModalOuvert(false);
+    setTimeout(() => {
+      setFormEpisodeId('');
+      setFormProgrammeId('');
+      setFormAnnonces([{ idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }]);
+    }, 200); // Petit délai pour laisser l'animation de fermeture (optionnel)
+  };
+
+
+
+  const [modalExportOuvert, setModalExportOuvert] = useState(false);
+  const [exportTitre, setExportTitre] = useState('');
+  const [exportDate, setExportDate] = useState('');
+  const [exportGrilleId, setExportGrilleId] = useState('');
+
+
+
+  const preparerDonneesExport = () => {
+    const donneesFiltrees = planificationsMedia.filter(plan => {
+      if (exportGrilleId && plan.grille_id !== exportGrilleId) return false;
+      if (exportDate) {
+        if (!plan.date) return false;
+        const planDateSeule = String(plan.date).split('T')[0].trim().substring(0, 10);
+        if (planDateSeule !== exportDate) return false;
+      }
+      return true;
+    });
+
+    if (donneesFiltrees.length === 0) {
+      toast.error("Aucune annonce planifiée pour cette date et cette grille.");
+      return null;
+    }
+
+    const joursFrancais = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+    const planificationsGroupees = donneesFiltrees.reduce((acc, plan) => {
+      if (!acc[plan.episode_id]) acc[plan.episode_id] = [];
+      acc[plan.episode_id].push(plan);
+      return acc;
+    }, {});
+
+    const lignesExport = [];
+
+    Object.values(planificationsGroupees).forEach(groupe => {
+      groupe.sort((a, b) => (a.timestart || '').localeCompare(b.timestart || ''));
+      groupe.forEach((plan, index) => {
+        const dateStr = String(plan.date).trim().substring(0, 10);
+        const [annee, mois, jour] = dateStr.split('-');
+        const dateObj = new Date(annee, mois - 1, jour);
+        const jourTexte = joursFrancais[dateObj.getDay()];
+
+        const episode = episodes.find(e => e.id === plan.episode_id) || {};
+        const programme = programmes.find(p => p.id === episode.programme_id) || {};
+        const stockAnnonce = stockAnnonces.find(a => a.id === plan.annonce_id) || plan.plan_media_stock || {};
+
+        const estPremiereLigne = index === 0;
+        const titreContexte = programme.titre || programme.nom || episode.titre || episode.nom || `Épisode ${episode.numero || ''}`;
+
+        const dureeSec = stockAnnonce.duration || 0;
+        const h = Math.floor(dureeSec / 3600);
+        const m = Math.floor((dureeSec % 3600) / 60);
+        const s = dureeSec % 60;
+
+        lignesExport.push({
+          JOUR: jourTexte,
+          H: estPremiereLigne && plan.timestart ? plan.timestart.substring(0, 5) : '',
+          CONTEXTE: estPremiereLigne ? titreContexte : '',
+          CONTENU: stockAnnonce.nom || stockAnnonce.title || 'Annonce Inconnue',
+          DUREE: `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        });
+      });
+    });
+
+    return lignesExport;
+  };
+
+
+  const exporterVersPDF = (e) => {
+    e.preventDefault();
+    const lignesExport = preparerDonneesExport();
+    if (!lignesExport) return;
+
+    // Création du document
+    const doc = new jsPDF('landscape');
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(titreFinal, doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+
+    const tableData = lignesExport.map(row => [row.JOUR, row.H, row.CONTEXTE, row.CONTENU, row.DUREE]);
+
+    // ATTENTION ICI : doc doit absolument être le premier paramètre !
+    autoTable(doc, {
+      startY: 25,
+      head: [['JOUR', 'H.', 'CONTEXTE', 'CONTENU', 'DUREE']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left' },
+      styles: { fontStyle: 'bold', valign: 'middle', textColor: [20, 20, 20] },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 'auto' },
+        4: { cellWidth: 25 }
+      }
+    });
+
+    doc.save(`PM_${exportDate || 'Export'}.pdf`);
+    setModalExportOuvert(false);
+  };
+
+  const exporterVersWord = async (e) => {
+    e.preventDefault();
+    const lignesExport = preparerDonneesExport();
+    if (!lignesExport) return;
+
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+
+    // En-têtes du tableau avec fond gris clair
+    const headerRow = new TableRow({
+      tableHeader: true,
+      children: ['JOUR', 'H.', 'CONTEXTE', 'CONTENU', 'DUREE'].map(text =>
+        new TableCell({
+          shading: { fill: "F3F4F6" },
+          children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 24 })] })]
+        })
+      )
+    });
+
+    // Lignes de données (Texte en gras / bold = true)
+    const dataRows = lignesExport.map(row =>
+      new TableRow({
+        children: [row.JOUR, row.H, row.CONTEXTE, row.CONTENU, row.DUREE].map(text =>
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: text || '', bold: true, size: 22 })] })]
+          })
+        )
       })
+    );
 
-      const blob = await Packer.toBlob(doc)
-      const url = URL.createObjectURL(blob)
-      const lien = document.createElement('a')
-      lien.href = url
-      lien.download = construireNomFichierPlanMedia(vue, dates, 'docx')
-      lien.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      setErreur(`Échec de l'export Word : ${err.message}`)
+    const table = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [headerRow, ...dataRows]
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: titreFinal, bold: true, size: 32 })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 } // Espace sous le titre
+          }),
+          table
+        ]
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `PM_${exportDate || 'Export'}.docx`);
+    setModalExportOuvert(false);
+  };
+
+  const exporterVersExcel = (e) => {
+    e.preventDefault();
+
+    // 1. Filtrer les planifications selon la grille et la date sélectionnées
+
+
+
+    const donneesFiltrees = planificationsMedia.filter(plan => {
+      let correspond = true;
+      if (exportGrilleId && plan.grille_id !== exportGrilleId) correspond = false;
+      if (exportDate && plan.date !== exportDate) correspond = false;
+
+      return correspond;
+    });
+
+    if (donneesFiltrees.length === 0) {
+      toast.error("Aucune donnée ne correspond à cette grille et cette date.");
+      return;
     }
+
+    const joursFrancais = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+
+    // 2. Grouper par épisode
+    const planificationsGroupees = donneesFiltrees.reduce((acc, plan) => {
+      if (!acc[plan.episode_id]) acc[plan.episode_id] = [];
+      acc[plan.episode_id].push(plan);
+      return acc;
+    }, {});
+
+    const lignesExcel = [];
+
+    // 3. Construire les lignes
+    Object.values(planificationsGroupees).forEach(groupe => {
+      groupe.sort((a, b) => (a.timestart || '').localeCompare(b.timestart || ''));
+
+      groupe.forEach((plan, index) => {
+        // Extraction du jour en gérant la conversion de date
+        const dateStr = String(plan.date).trim().substring(0, 10);
+        const [annee, mois, jour] = dateStr.split('-');
+        const dateObj = new Date(annee, mois - 1, jour);
+        const jourTexte = joursFrancais[dateObj.getDay()];
+
+        // Résolution manuelle depuis les tableaux (pas de relations Supabase directes)
+        const episode = episodes.find(e => e.id === plan.episode_id) || {};
+        const programme = programmes.find(p => p.id === episode.programme_id) || {};
+        const stockAnnonce = stockAnnonces.find(a => a.id === plan.annonce_id) || plan.plan_media_stock || {};
+
+        const estPremiereLigne = index === 0;
+
+        // Affichage prioritaire : Titre Programme -> Titre Épisode -> Numéro Épisode
+        const titreContexte = programme.titre || programme.nom || episode.titre || episode.nom || `Épisode ${episode.numero || ''}`;
+        const contexteTexte = estPremiereLigne ? titreContexte : '';
+
+        const heureTexte = estPremiereLigne && plan.timestart ? plan.timestart.substring(0, 5) : '';
+
+        const dureeSec = stockAnnonce.duration || 0;
+        const h = Math.floor(dureeSec / 3600);
+        const m = Math.floor((dureeSec % 3600) / 60);
+        const s = dureeSec % 60;
+        const dureeFormatee = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+        lignesExcel.push({
+          'JOUR': jourTexte,
+          'H.FIN': heureTexte,
+          'CONTEXTE': contexteTexte,
+          'CONTENU': stockAnnonce.nom || stockAnnonce.title || 'Annonce Inconnue',
+          'DUREE': dureeFormatee
+        });
+      });
+    });
+
+    // 4. Création de la feuille (Décalage à la ligne 3 pour laisser place au titre)
+    const worksheet = XLSX.utils.json_to_sheet(lignesExcel, { origin: "A3" });
+    // 5. Ajout du Titre personnalisé en A1
+    const titreFinal = exportTitre || `Conducteur d'antenne du ${exportDate}`;
+    XLSX.utils.sheet_add_aoa(worksheet, [[titreFinal]], { origin: "A1" });
+
+    // Fusionner les cellules (A1 à E1) pour que le titre soit centré visuellement
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }
+    ];
+
+    // Ajustement de la largeur des colonnes
+    worksheet['!cols'] = [
+      { wch: 15 }, // JOUR
+      { wch: 10 }, // H.
+      { wch: 40 }, // CONTEXTE
+      { wch: 55 }, // CONTENU
+      { wch: 12 }  // DUREE
+    ];
+
+
+    // 6. Application des styles (Titre, En-têtes, Contenu)
+    for (const cellAddress in worksheet) {
+      // Ignorer les métadonnées de la feuille (qui commencent par '!')
+      if (cellAddress.startsWith('!')) continue;
+
+      const rowNum = parseInt(cellAddress.replace(/\D/g, ''), 10);
+
+      // Initialiser l'objet style pour la cellule
+      worksheet[cellAddress].s = {};
+
+      if (rowNum === 1) {
+        // Titre principal (Ligne 1) : Grand et centré
+        worksheet[cellAddress].s = {
+          font: { sz: 16, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+      else if (rowNum === 3) {
+        // En-têtes de colonnes (Ligne 3) : En gras et fond léger
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 12 },
+          fill: { fgColor: { rgb: "F3F4F6" } }, // Gris très clair pour détacher l'en-tête
+          alignment: { horizontal: 'left', vertical: 'center' }
+        };
+      }
+      else if (rowNum > 3) {
+        // Contenu des données (Lignes > 3) : En gras ("bald") comme demandé
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 11 },
+          alignment: { vertical: 'center' }
+        };
+      }
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Conducteur PM");
+
+    XLSX.writeFile(workbook, `PM_${exportDate || 'Export'}.xlsx`);
+
+    // Fermer le modal
+    setModalExportOuvert(false);
+  };
+
+  const [exportFormat, setExportFormat] = useState('excel');
+  const [dateFiltreEpisodes, setDateFiltreEpisodes] = useState("");
+  const gererSoumissionExport = (e) => {
+    e.preventDefault();
+
+    if (exportFormat === 'excel') {
+      exporterVersExcel(e);
+    } else if (exportFormat === 'word') {
+      exporterVersWord(e);
+    } else if (exportFormat === 'pdf') {
+      exporterVersPDF(e);
+    }
+  };
+
+
+
+  // --- NOUVEAUX ÉTATS POUR L'ÉDITION DES ANNONCES EXISTANTES ---
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [editPlanForm, setEditPlanForm] = useState({ timestart: "", duree: 30 });
+
+  // --- FONCTIONS DE GESTION (MODIFICATION & SUPPRESSION) ---
+  const gererSuppressionPlanification = async (idPlan) => {
+    if (window.confirm("Êtes-vous sûr de vouloir retirer cette annonce de l'épisode ?")) {
+      try {
+        // TODO: Ajoutez votre appel API ici (ex: await supprimerPlanificationMedia(idPlan); )
+
+        // Mise à jour de l'interface immédiatement
+        setPlanificationsMedia(prev => prev.filter(p => p.id !== idPlan));
+        toast.success("Annonce supprimée avec succès !");
+      } catch (error) {
+        toast.error("Erreur lors de la suppression.");
+      }
+    }
+  };
+
+  const gererModificationPlanification = async (idPlan) => {
+    try {
+      // Recalcule l'heure de fin en fonction de la nouvelle durée
+      const timeend = ajouterSecondesHeure(editPlanForm.timestart, editPlanForm.duree);
+
+      // TODO: Ajoutez votre appel API ici (ex: await modifierPlanificationMedia(idPlan, { timestart: editPlanForm.timestart, timeend }); )
+
+      // Mise à jour de l'interface
+      setPlanificationsMedia(prev => prev.map(p =>
+        p.id === idPlan ? { ...p, timestart: editPlanForm.timestart, timeend: timeend } : p
+      ));
+      setEditingPlanId(null);
+      toast.success("Horaires mis à jour !");
+    } catch (error) {
+      toast.error("Erreur lors de la modification.");
+    }
+  };
+
+  async function send_pad_demande(id) {
+
+    const demande = {
+      chaine_id: chaineActive.id,
+      demandeur: Utilisateur.nom_affiche,
+      statut: "EN_ATTENTE",
+      relances: 0,
+      spot_bibliotheque_id: id
+    }
+    try {
+      const result = await creerDemandePad(demande);
+      toast.success("Demande PAD envoyée ")
+
+    } catch (error) {
+
+      toast.error("Erreur création demande");
+    }
+
+
   }
+
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
-        {/* Barre d'onglets (P24) : plans média ouverts de la chaîne active. */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
-          {planMediasOuverts.map((p) => (
-            <div
-              key={p.id}
-              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
-                p.id === planMediaActifId
-                  ? 'border-snrt-navy bg-snrt-navy/5 font-medium text-snrt-navy'
-                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <button type="button" onClick={() => selectionnerDocument(p.id)} className="flex items-center gap-1.5">
-                {p.nom}
-                {p.est_live && (
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                    LIVE
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => fermerOnglet(p.id)}
-                disabled={planMediasOuverts.length <= 1}
-                title={planMediasOuverts.length <= 1 ? 'Dernier onglet ouvert' : 'Fermer (le document reste enregistré)'}
-                className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <X size={12} />
+      {isLoading && <div className="modern-overlay">
+        <div className="modern-loader-card">
+          <div className="modern-spinner"></div>
+          <div className="modern-loader-text">Chargement...</div>
+        </div>
+      </div>}
+      {/* MODAL D'EXPORTATION EXCEL */}
+      {modalExportOuvert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+
+            {/* Header Modal */}
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className=" text-slate-800 text-lg">Exporter le conducteur</h3>
+              <button onClick={() => setModalExportOuvert(false)} className="text-slate-500 hover:text-slate-600 transition-colors p-1">
+                <X size={20} />
               </button>
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setModaleDocument('OUVRIR')}
-            title="Ouvrir un plan média"
-            className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
-          >
-            <Plus size={15} />
-          </button>
 
-          {planMediaActif && (
-            <div className="ml-auto flex items-center gap-1.5">
-              <BoutonExporter
-                onExcel={exporterPlanMedia}
-                onWord={exporterPlanMediaWord}
-                onPdf={exporterPlanMediaPdf}
-                sousTitre={planMediaActif.nom}
-                className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent"
-              />
-              {!planMediaActif.est_live && (
+            {/* Formulaire */}
+            <form onSubmit={gererSoumissionExport} className="p-5 flex flex-col gap-5">
+
+              {/* Titre du document */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Titre du document Excel</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: PM VENDREDI 04 SEPT 2026"
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportTitre}
+                  onChange={(e) => setExportTitre(e.target.value)}
+                />
+              </div>
+
+              {/* Sélection de la Grille */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Grille ciblée</label>
+                <select
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportGrilleId}
+                  onChange={(e) => setExportGrilleId(e.target.value)}
+                >
+                  <option value="">-- Sélectionnez une grille --</option>
+                  {grilles.map(grille => (
+                    <option key={grille.id} value={grille.id}>
+                      {grille.nom || grille.titre || `Grille #${grille.id.substring(0, 5)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sélection de la Date */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date de programmation</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={exportDate}
+                  onChange={(e) => setExportDate(e.target.value)}
+                />
+              </div>
+
+              {/* Actions */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Format d'exportation</label>
+                <select
+                  required
+                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                >
+                  <option value="excel">Excel (.xlsx)</option>
+                  <option value="word">Word (.docx)</option>
+                  <option value="pdf">PDF (.pdf)</option>
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-2 flex gap-3 justify-end">
                 <button
                   type="button"
-                  onClick={definirLive}
-                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                  onClick={() => setModalExportOuvert(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
                 >
-                  Définir comme live
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setMenuDocumentOuvert(true)}
-                title="Autres actions (renommer, dupliquer, supprimer)"
-                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Onglets Composition / Génération auto (P26bis) — pure réorganisation
-            d'affichage, partagent le même document/dates/undo ci-dessous. */}
-        <div className="mb-4 flex rounded-md border border-slate-300 text-sm">
-          <button
-            type="button"
-            onClick={() => setOngletPanneau('COMPOSITION')}
-            className={`flex-1 px-3 py-2 font-medium ${ongletPanneau === 'COMPOSITION' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Composition
-          </button>
-          <button
-            type="button"
-            onClick={() => setOngletPanneau('GENERATION')}
-            className={`flex-1 px-3 py-2 font-medium ${ongletPanneau === 'GENERATION' ? 'bg-snrt-navy text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Génération auto
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-wrap items-end gap-4">
-            {ongletPanneau === 'COMPOSITION' && !selectionActive && (
-              <button
-                type="button"
-                onClick={activerSelection}
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                <CheckSquare size={15} />
-                Sélectionner
-              </button>
-            )}
-            {ongletPanneau === 'COMPOSITION' && selectionActive && (
-              <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-3 py-1.5 text-sm text-snrt-navy">
-                <span>{elementsSelectionnesIds.size} sélectionné(s)</span>
-                <button
-                  type="button"
-                  onClick={basculerToutSelectionner}
-                  disabled={elementsPeriode.length === 0}
-                  className="font-medium underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {elementsSelectionnesIds.size === elementsPeriode.length && elementsPeriode.length > 0
-                    ? 'Tout désélectionner'
-                    : 'Tout sélectionner'}
-                </button>
-                <button
-                  type="button"
-                  onClick={copierSelection}
-                  disabled={elementsSelectionnesIds.size === 0}
-                  className="font-medium underline hover:no-underline disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Copier
-                </button>
-                <button type="button" onClick={annulerSelection} className="text-slate-500 hover:text-slate-700">
                   Annuler
                 </button>
-              </div>
-            )}
-            {ongletPanneau === 'COMPOSITION' && presseGaPapier.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
-                <span>{presseGaPapier.length} copié(s)</span>
-                <button type="button" onClick={coller} className="flex items-center gap-1 font-medium underline hover:no-underline">
-                  <ClipboardPaste size={13} />
-                  Coller
-                </button>
-                <button type="button" onClick={() => setPresseGaPapier([])} className="text-amber-700/70 hover:text-amber-900">
-                  Vider
-                </button>
-              </div>
-            )}
-            {ongletPanneau === 'COMPOSITION' && (
-              <div className="flex rounded-md border border-slate-300">
                 <button
-                  type="button"
-                  onClick={gererAnnuler}
-                  disabled={!pile.peutAnnuler}
-                  title={pile.peutAnnuler ? `Annuler : ${pile.libelleAnnuler}` : 'Rien à annuler'}
-                  className="rounded-l-md border-r border-slate-300 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
                 >
-                  <Undo2 size={15} />
-                </button>
-                <button
-                  type="button"
-                  onClick={gererRetablir}
-                  disabled={!pile.peutRetablir}
-                  title={pile.peutRetablir ? `Rétablir : ${pile.libelleRetablir}` : 'Rien à rétablir'}
-                  className="rounded-r-md p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
-                >
-                  <Redo2 size={15} />
+                  Générer le fichier
                 </button>
               </div>
-            )}
+            </form>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => naviguer(-1)} className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50">
-              <ChevronLeft size={16} />
-            </button>
-            <span className="min-w-[12rem] text-center text-sm font-medium text-slate-700">
-              {formaterDateLongue(dateReference)}
-            </span>
-            <button type="button" onClick={() => naviguer(1)} className="rounded-md border border-slate-300 p-1.5 hover:bg-slate-50">
-              <ChevronRight size={16} />
+        </div>
+      )}
+
+      {/* Barre d'outils globale (Top) avec les 3 boutons de navigation */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <header className="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+          <h1 className="text-lg font-semibold text-slate-800" style={{ color: "#00607a" }}>Plan Média — {chaineActive?.nom || 'Workspace'}</h1>
+        </header>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          {/* Navigation 3 boutons */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setVuePrincipale('PLAN_MEDIA')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+            >
+              Gestion Plan Média
             </button>
             <button
               type="button"
-              onClick={() => setDateReference(aujourdHuiISO())}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              onClick={() => setVuePrincipale('PIGE_VALIDATION')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PIGE_VALIDATION'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
             >
-              Aujourd'hui
+              Validation Pige
             </button>
+            <button
+              type="button"
+              onClick={() => setVuePrincipale('PLAN_MEDIA_ADMIN')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA_ADMIN'
+                ? 'bg-snrt-navy text-white'
+                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+            >
+              Administration Plan Média
+            </button>
+
+            {(vuePrincipale === 'PLAN_MEDIA' || vuePrincipale === 'PIGE_VALIDATION') && <div>
+              <select
+                className="w-full rounded-md border border-slate-300 py-1.5 px-3 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                value={filtreGrilleId}
+                onChange={(e) => setFiltreGrilleId(e.target.value)}
+              >
+                <option value="">-- Toutes les grilles --</option>
+                {grilles.map(grille => {
+                  // Formatage propre de la date si elle existe (ex: JJ/MM/AAAA ou format lisible)
+                  const dateFormatee = grille.cree_le
+                    ? new Date(grille.cree_le).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    : '';
+
+                  // Libellé intelligent : Nom -> Date formatée -> ID par défaut
+                  const libelle = grille.nom + "🕒" + dateFormatee || grille.titre || (dateFormatee ? `Grille du ${dateFormatee}` : `Grille #${grille.id.substring(0, 5)}`);
+
+                  return (
+                    <option key={grille.id} value={grille.id}>
+                      {libelle}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>}
+
+            <button
+              onClick={() => { setModalExportOuvert(true) }}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-1.5 px-3 rounded shadow-sm transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Exporter
+            </button>
+
+
+            {vuePrincipale !== 'PIGE_VALIDATION' && <button type="button" className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover transition-colors" style={{ color: "orange", cursor: "pointer" }} title='refrech classifications'
+
+              onClick={async () => {
+                if (!filtreGrilleId && vuePrincipale !== "PLAN_MEDIA_ADMIN") {
+                  toast.error("Veuillez sélectionner une grille d'abord.");
+                  return;
+                }
+
+                try {
+                  await update_clasification();
+
+                  toast.success("Classifications actualisées !");
+                } catch (error) {
+                  toast.error(error);
+                  toast.error("Erreur lors de l'actualisation.");
+                }
+              }}
+            >
+              <MdCloudSync size={20} />
+
+            </button>}
           </div>
         </div>
-
-        {ongletPanneau === 'COMPOSITION' && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setInsertionOuverte(true)}
-                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-3 py-1.5 text-sm font-medium text-white hover:bg-snrt-navy-hover"
-              >
-                <PlusSquare size={15} />
-                Insertion manuelle
-              </button>
-              <div className="flex rounded-md border border-slate-300">
-                <button
-                  type="button"
-                  onClick={() => setBibliothequeOuverte(true)}
-                  className="flex items-center gap-1.5 rounded-l-md border-r border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  <Library size={15} />
-                  Bibliothèque de spots
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImportOuvert(true)}
-                  className="flex items-center gap-1.5 rounded-r-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  <Upload size={15} />
-                  Importer
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {erreur && <p className="mt-3 text-sm text-red-600">{erreur}</p>}
       </div>
 
-      {ongletPanneau === 'COMPOSITION' && (
-        <div className="space-y-6">
-          {!chargement && planMediaActif && (
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">Composition — {planMediaActif.nom}</h3>
-              {sectionsComposition.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Aucun programme sur cette période dans la grille linéaire live, et aucun élément hors coupure.
-                  Utilisez « Insertion manuelle » (option « Hors coupure ») pour ajouter des BA / spots.
-                </p>
-              ) : (
-                <div className="space-y-5">
-                  {sectionsComposition.map(([date, sections]) => (
-                    <div key={date}>
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {formaterDateLongue(date)}
-                      </div>
-                      <div className="space-y-3">
-                        {sections.map((s) => (
-                          <div key={s.cle} className="rounded-md border border-slate-200">
-                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-                              <span className="text-sm font-medium text-slate-800">{s.contexte}</span>
-                              <span className="font-mono text-xs text-slate-500">{s.fenetre}</span>
+      {/* Affichage conditionnel selon la vue principale choisie */}
+      {vuePrincipale === 'PLAN_MEDIA' ? (
+        /* Main Layout : Timeline - Formulaire - Liste */
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 300px)' }}>
+
+          {/* 1. Colonne Gauche : Timeline */}
+          <aside
+            className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col relative z-30"
+            style={{ flex: '0 0 250px', overflowY: 'auto', overflowX: 'hidden' }}
+          >
+            <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
+              <Clock size={16} className="text-snrt-navy" />
+              <span>Déroulé du jour</span>
+            </div>
+
+            {/* Filtres multi-sélection */}
+            <div className="mb-3 flex flex-wrap gap-1.5 shrink-0">
+              {['annonce', 'episode'].map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => toggleFiltreTimeline(f)}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtresTimeline.includes(f)
+                    ? 'bg-snrt-navy text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            {/* Filtre par date */}
+            <div className="mb-3 shrink-0">
+              <input
+                type="date"
+                value={dateFiltreTimeline}
+                onChange={(e) => setDateFiltreTimeline(e.target.value)}
+                className="w-full rounded-md border border-slate-200 py-1.5 px-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+              />
+            </div>
+            {/* Barre de recherche */}
+            <div className="relative mb-6 shrink-0">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={rechercheTimeline}
+                onChange={(e) => setRechercheTimeline(e.target.value)}
+                placeholder="Rechercher..."
+                className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+              />
+            </div>
+
+            {/* Composant Timeline */}
+            <VerticalTimeline events={genererEvenementsTimeline()} />
+          </aside>
+
+          {/* 2. Colonne Milieu : Formulaire */}{/* 2. Colonne Milieu : Liste des épisodes (Pleine largeur) */}
+          <main
+            className="rounded-lg border border-slate-200 bg-white flex flex-col w-full overflow-hidden"
+            style={{ flex: '1 1 auto' }}
+          >
+            <div className="flex flex-col flex-1 overflow-hidden w-full">
+
+              {/* En-tête : fixe en haut (Padding appliqué uniquement ici) */}
+              <div className="shrink-0 p-5 pb-4 border-b border-slate-100 bg-white">
+                <h2 className="pm-form-title m-0 text-lg font-semibold text-slate-800">Planifier les annonces</h2>
+                <p className="pm-form-subtitle mt-1 text-sm text-slate-500">Recherchez et sélectionnez un épisode pour y attacher des annonces.</p>
+              </div>
+
+              {/* Conteneur de recherche et liste (Pleine largeur, touche les bords) */}
+              <div className="flex flex-col flex-1 overflow-hidden w-full">
+
+                {/* Barre de recherche */}
+                <div className="p-3 border-b border-slate-200 bg-slate-50/80 shrink-0">
+                  <div className="relative" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
+                    <Search size={16} className="absolute left-3 top-2.5 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par titre, numéro ou programme..."
+                      className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-shadow"
+                      value={rechercheEpisodeForm}
+                      onChange={(e) => setRechercheEpisodeForm(e.target.value)}
+                    />
+                    <input
+                      type="date"
+
+                      style={{ maxWidth: "200px", height: "40px", fontSize: "14px" }}
+                      value={dateFiltreTimeline}
+                      onChange={(e) => setDateFiltreTimeline(e.target.value)}
+                      className="w-full rounded-md border border-slate-200 py-1.5 px-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent "
+                    />
+                  </div>
+                </div>
+
+                {/* Liste défilante des épisodes */}
+                <div className="flex-1 overflow-y-auto pm-slim-scroll bg-slate-50/30 w-full">
+                  {diffusions
+                    // 1. On part de "diffusions" et on y attache l'épisode et le programme
+                    .map(diffusion => {
+                      const ep = episodes.find(e => e.id === diffusion.episode_id);
+                      const prog = ep ? programmes.find(p => p.id === ep.programme_id) : null;
+
+                      return {
+
+                        ...ep, // Inclut toutes les propriétés de l'épisode s'il est trouvé
+                        episode_id_reel: ep?.id, // Sécurité pour vérifier si l'épisode existe
+                        diffusion_id: diffusion.id, // Identifiant unique de la diffusion
+                        programme: prog,
+                        grille_id: diffusion.grille_id,
+                        date_diffusion: diffusion.date || '',
+                        heure_debut: diffusion.heure_debut || '00:00'
+                      };
+                    })
+                    // 2. INNER JOIN : On exclut toutes les diffusions dont l'épisode n'existe pas dans le state
+                    .filter(item => item.episode_id_reel)
+                    .filter(item => !filtreGrilleId || item.grille_id === filtreGrilleId)
+                    .filter(item => !dateFiltreTimeline || item.date_diffusion === dateFiltreTimeline)
+
+                    // 3. Filtrage par recherche utilisateur
+                    .filter(item => {
+                      const titreProg = item.programme?.titre || '';
+                      const titreEp = item.titre || item.nom || `Épisode ${item.numero || ''}`;
+                      const recherche = rechercheEpisodeForm.toLowerCase();
+                      return titreEp.toLowerCase().includes(recherche) || titreProg.toLowerCase().includes(recherche);
+                    })
+
+
+                    // 4. Tri chronologique strict
+                    .sort((a, b) => {
+                      if (a.date_diffusion !== b.date_diffusion) {
+                        return a.date_diffusion.localeCompare(b.date_diffusion);
+                      }
+                      return a.heure_debut.localeCompare(b.heure_debut);
+                    })
+                    // 5. Rendu de la liste
+                    .map(item => {
+                      // On utilise item.episode_id_reel car "item" est maintenant un mix diffusion/épisode
+                      return (
+                        <div
+                          key={`diff-${item.diffusion_id}-ep-${item.episode_id_reel}`}
+                          onClick={() => handleEpisodeSelection(item.episode_id_reel, item.diffusion_id)}
+                          className={`border-b border-slate-100 cursor-pointer px-5 py-3 transition-colors border-l-4 flex items-center justify-between group
+    ${selectedEpisodeId === item.diffusion_id
+                              ? 'bg-amber-30 border-l-amber-500'
+                              : 'bg-white border-l-transparent hover:bg-amber-10 hover:border-l-amber-500'
+                            }
+`}                        >
+                          <div className="pr-4">
+                            <div
+                              className={`text-sm font-semibold transition-colors line-clamp-1 ${selectedEpisodeId === item.diffusion_id
+                                ? 'text-amber-700'
+                                : 'text-slate-700 group-hover:text-amber-700'
+                                }`}                             >
+                              {item.titre || item.nom || `Épisode ${item.numero || 'N/C'}`}
                             </div>
-                            {s.elements.length > 0 ? (
-                              <table className="w-full text-sm">
-                                <tbody>
-                                  {s.elements.map((e) => {
-                                    const campagne = e.campagne_id ? campagnesParId.get(e.campagne_id) : null
-                                    const titrePromu = campagne ? programmesParId.get(campagne.programme_id)?.titre : null
-                                    return (
-                                      <tr key={e.id} className="border-b border-slate-100 text-slate-700 last:border-0">
-                                        {selectionActive && (
-                                          <td className="w-8 py-1.5 pl-3">
-                                            <input
-                                              type="checkbox"
-                                              checked={elementsSelectionnesIds.has(e.id)}
-                                              onChange={() => toggleSelectionElement(e.id)}
-                                            />
-                                          </td>
-                                        )}
-                                        <td className="py-1.5 pl-3 pr-3 font-mono text-xs">
-                                          {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
-                                        </td>
-                                        <td className="py-1.5 pr-3">
-                                          {LIBELLES_TYPE[e.type] ?? e.type}
-                                          {s.heureFinProg && e.heure_debut < s.heureFinProg && (
-                                            <span className="ml-1.5 rounded bg-slate-100 px-1 text-[10px] text-slate-500">intra</span>
-                                          )}
-                                        </td>
-                                        <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
-                                        <td className="py-1.5 pr-3 text-slate-500">{titrePromu ?? '—'}</td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <p className="px-3 py-2 text-xs text-slate-400">Aucun élément dans cette coupure.</p>
+                            <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                              {item.programme ? (item.programme.titre || item.programme.nom) : 'Programme Inconnu'}
+                            </div>
+                          </div>
+
+                          {/* Bloc Date et Heure direct depuis la diffusion */}
+                          <div className="flex flex-col items-end shrink-0 gap-1">
+                            {item.date_diffusion && (
+                              <div className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+                                {item.date_diffusion}
+                              </div>
                             )}
-                            <div className="border-t border-slate-100 px-3 py-1.5">
+                            <div className="text-xs font-mono font-medium text-slate-500 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200">
+                              {item.heure_debut}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  {/* Message si aucun résultat */}
+                  {diffusions.length > 0 && diffusions
+                    .map(diffusion => ({
+                      ...episodes.find(e => e.id === diffusion.episode_id),
+                      programme: programmes.find(p => p.id === episodes.find(e => e.id === diffusion.episode_id)?.programme_id)
+                    }))
+                    .filter(item => item.id) // Inner join check
+                    .filter(item => {
+                      const titreProg = item.programme?.titre || '';
+                      const titreEp = item.titre || item.nom || `Épisode ${item.numero || ''}`;
+                      return titreEp.toLowerCase().includes(rechercheEpisodeForm.toLowerCase()) || titreProg.toLowerCase().includes(rechercheEpisodeForm.toLowerCase());
+                    }).length === 0 && (
+                      <div className="p-8 text-center text-sm text-slate-500 italic">
+                        Aucun épisode programmé ne correspond à votre recherche.
+                      </div>
+                    )}
+
+                  {/* Message si aucun résultat */}
+                  {episodes.length > 0 && episodes.filter(ep => {
+                    const titreProg = programmes.find(p => p.id === ep.programme_id)?.titre || '';
+                    const titreEp = ep.titre || ep.nom || `Épisode ${ep.numero || ''}`;
+                    return titreEp.toLowerCase().includes(rechercheEpisodeForm.toLowerCase()) || titreProg.toLowerCase().includes(rechercheEpisodeForm.toLowerCase());
+                  }).length === 0 && (
+                      <div className="p-8 text-center text-sm text-slate-500 italic">
+                        Aucun épisode ne correspond à votre recherche.
+                      </div>
+                    )}
+                </div>
+              </div>
+
+            </div>
+          </main>
+
+
+
+
+
+
+
+
+
+          {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
+          {isModalOuvert && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap", overflow: "auto" }}>
+
+
+
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "10px", minWidth: "800px" }}>
+
+                <div
+                  className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
+                >
+                  {/* En-tête de la modale */}
+                  <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-800">
+                        Insertion d'annonces
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Épisode sélectionné : <span className="font-medium" style={{ color: "orange" }}>
+                          {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={fermerModal}
+                      className="text-slate-500 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Corps de la modale avec défilement */}
+                  <form onSubmit={gererSoumissionFormulaire} className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-5 pm-slim-scroll bg-slate-50/30">
+                      <div className="flex items-center justify-between mb-4" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                        </div>
+                        <>{getclassifications()}</>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+
+                          <button
+                            type="button"
+                            onClick={ajouterAnnonceAuFormulaire}
+                            className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
+                          >
+                            <Plus size={14} /> Ajouter une annonce
+                          </button>
+                        </div>
+
+                      </div>
+
+                      <div className="flex flex-col gap-1" style={{ maxHeight: "200px", overflow: "auto" }}>
+                        {formAnnonces.map((annonceItem) => (
+                          <div key={annonceItem.idUnique} className="flex flex-wrap items-end gap-1 p-1.5 bg-white   rounded-md " style={{ fontSize: "11px" }}>
+
+                            <div className="flex-1 min-w-[250px] pm-form-group mb-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>Annonce depuis le stock</label>
+                              <select
+                                className="pm-select py-1 text-sm"
+                                style={{ height: "35px", fontSize: "12px" }}
+
+                                value={annonceItem.annonceId}
+                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'annonceId', e.target.value)}
+                                required
+                              >
+                                <option value="">-- Sélectionner une annonce --</option>
+                                {stockAnnonces
+                                  .filter(stock => {
+                                    // 1. Récupérer la date de diffusion de l'épisode au lieu de la date du jour
+                                    const diffusionActuelle = diffusions.find(d => d.episode_id === formEpisodeId);
+
+                                    // Si on a la date de la grille/diffusion, on l'utilise. Sinon, on prend aujourd'hui.
+                                    const dateReference = diffusionActuelle?.date_diffusion || diffusionActuelle?.date
+                                      ? new Date(diffusionActuelle.date_diffusion || diffusionActuelle.date)
+                                      : new Date();
+
+                                    dateReference.setHours(0, 0, 0, 0); // On remet à minuit
+
+                                    // 2. Préparer la date de début
+                                    let dateDebut = null;
+                                    if (stock.validite_debut) {
+                                      dateDebut = new Date(stock.validite_debut);
+                                      dateDebut.setHours(0, 0, 0, 0);
+                                    }
+                                    // 3. Préparer la date de fin
+                                    let dateFin = null;
+                                    if (stock.validite_fin) {
+                                      dateFin = new Date(stock.validite_fin);
+                                      dateFin.setHours(0, 0, 0, 0);
+                                    }
+
+                                    // Comparaison avec la date de l'épisode (dateReference)
+                                    if (dateDebut && dateDebut > dateReference) return false;
+                                    if (dateFin && dateFin < dateReference) return false;
+                                    if (!stock.PAD) return false;
+                                    return true;
+                                  })
+                                  .map(stock => (
+                                    // ... votre code option habituel.map(stock => (
+                                    <option key={stock.id} value={stock.id} style={{ backgroundColor: stock.pad ? "red" : "" }}>
+                                      {stock.nom || stock.title} · {stock.duration || 30}s · F{stock.enfantpercentage}% · J{stock.jeunepercentage}% · G{stock.grand_percentage}% · PAD{JSON.stringify(stock.pad)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            <div className="w-36 pm-form-group mb-0 shrink-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>Type de départ</label>
+                              <select
+                                className="pm-select py-1 text-sm"
+                                style={{ height: "35px", fontSize: "12px" }}
+                                value={annonceItem.mode}
+                                onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'mode', e.target.value)}
+                              >
+                                <option value="offset">Décalage (secondes)</option>
+                                <option value="exact">Heure fixe</option>
+                              </select>
+                            </div>
+
+                            <div className="w-32 pm-form-group mb-0 shrink-0">
+                              <label className="pm-label text-xs" style={{ fontSize: "12px", color: "", fontWeight: "none" }}>
+                                {annonceItem.mode === 'offset' ? 'Secondes après' : 'Heure exacte'}
+                              </label>
+                              {annonceItem.mode === 'offset' ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="pm-input py-1.5 text-sm"
+                                  value={annonceItem.offsetSeconds}
+                                  style={{ height: "35px", fontSize: "12px" }}
+                                  onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'offsetSeconds', e.target.value)}
+                                  required
+                                />
+                              ) : (
+                                <input
+                                  type="time"
+                                  step="1"
+                                  className="pm-input py-1.5 text-sm"
+                                  style={{ height: "35px", fontSize: "12px" }}
+                                  value={annonceItem.timeExact}
+                                  onChange={(e) => handleAnnonceChange(annonceItem.idUnique, 'timeExact', e.target.value)}
+                                  required
+                                />
+                              )}
+                            </div>
+
+                            {formAnnonces.length > 1 && (
                               <button
                                 type="button"
-                                onClick={() => ouvrirInsertionDansCoupure(date, s.coupureId)}
-                                className="flex items-center gap-1.5 text-xs font-medium text-snrt-navy hover:underline"
+                                onClick={() => supprimerAnnonceDuFormulaire(annonceItem.idUnique)}
+                                className="p-2 mb-[2px] text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded transition-colors"
+                                title="Retirer cette annonce"
                               >
-                                <PlusSquare size={14} />
-                                Insérer une BA / un spot ici
+                                <Trash2 size={16} />
                               </button>
-                            </div>
+                            )}
                           </div>
                         ))}
                       </div>
+
                     </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    {/* Pied de la modale (Boutons d'action) */}
+                    <div className="p-4 border-t border-slate-100 bg-white shrink-0 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="pm-btn pm-btn-secondary"
+                        onClick={fermerModal}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="pm-btn pm-btn-primary"
+                        disabled={!formEpisodeId || formAnnonces.some(a => !a.annonceId)}
+                      >
+                        Enregistrer les planifications
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
+                >
+
+
+
+                  {planificationsMedia.filter(p => p.episode_id === formEpisodeId).length > 0 && (
+                    <div
+                      className="border-t border-slate-200 p-5"
+                      style={{ maxHeight: "400px", overflow: "auto" }}
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-50 text-amber-600">
+                            <Megaphone size={13} />
+                          </span>
+
+                          <span>
+                            Annonces déjà planifiées
+                            <span className="ml-1.5 text-[10px] font-medium text-slate-500">
+                              ({planificationsMedia.filter(p => p.episode_id === formEpisodeId).length})
+                            </span>
+                          </span>
+                        </h3>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        {planificationsMedia.filter(p => p.episode_id === formEpisodeId).map(plan => {
+                          const stockAnnonce = stockAnnonces.find(s => s.id === plan.annonce_id);
+                          const isEditing = editingPlanId === plan.id;
+
+                          return (
+                            <div
+                              key={plan.id}
+                              className={`group rounded-md border transition-all duration-150 ${isEditing
+                                ? "border-amber-300 bg-amber-50/40"
+                                : "border-slate-200 bg-white hover:border-amber-200 hover:bg-slate-50/70"
+                                }`}
+                            >
+
+                              {!isEditing ? (
+                                <div className="flex items-center min-h-[30px] px-3 py-1" style={{ cursor: "pointer" }}>
+
+                                  {/* Time */}
+                                  <div className="w-[58px] shrink-0 text-center">
+                                    <div className="text-xs font-semibold font-mono text-slate-700">
+                                      {plan.timestart}
+                                    </div>
+
+                                    <div className="text-[9px] font-mono text-slate-500 mt-0.5">
+                                      → {plan.timeend}
+                                    </div>
+                                  </div>
+
+                                  <div className="w-px h-7 bg-slate-200 mx-3" />
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-slate-700 truncate">
+                                      {stockAnnonce?.nom || stockAnnonce?.title || "Annonce Inconnue"}
+                                    </div>
+
+                                    <div className="text-[10px] text-slate-500 mt-0.5">
+                                      {stockAnnonce?.duration || 30}s
+                                    </div>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingPlanId(plan.id);
+                                        setEditPlanForm({
+                                          timestart: plan.timestart,
+                                          duree: stockAnnonce?.duration || 30
+                                        });
+                                      }}
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                      title="Modifier l'heure"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      <Edit3 size={14} />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => gererSuppressionPlanification(plan.id)}
+                                      className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                      title="Retirer l'annonce"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex w-full items-end gap-2 p-2.5">
+                                  <div className="flex-1">
+                                    <label className="text-[9px] text-slate-500 uppercase tracking-wide font-semibold mb-1 block">
+                                      Heure de début
+                                    </label>
+
+                                    <input
+                                      type="time"
+                                      step="1"
+                                      value={editPlanForm.timestart}
+                                      onChange={e => setEditPlanForm({
+                                        ...editPlanForm,
+                                        timestart: e.target.value
+                                      })}
+                                      className="w-full h-8 border border-slate-200 bg-white rounded-md px-2 text-xs outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 font-mono"
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingPlanId(null)}
+                                      className="h-8 px-2.5 text-[10px] font-medium text-slate-500 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      Annuler
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => gererModificationPlanification(plan.id)}
+                                      className="h-8 px-3 text-[10px] font-medium text-white bg-amber-500 rounded-md hover:bg-amber-600 transition-colors shadow-sm"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      Sauver
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+
+
+
+
+
+
+
+              {/* 3. Colonne Droite : Liste connectée au stock global d'administration */}
+              <aside
+                className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col"
+                style={{ flex: '0 0 600px', overflowY: 'auto', height: "750px" }}
+              >
+                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
+                  <ListIcon size={16} className="text-snrt-navy" />
+                  <span>Éléments disponibles ({listeFiltree.length})</span>
+                </div>
+
+                {/* 4 Boutons de filtres (enfant, jeune, grand, budget) */}
+                <div className="mb-3 grid grid-cols-2 gap-1.5 shrink-0">
+                  {['enfant', 'jeune', 'grand', 'budget'].map((btn) => (
+                    <button
+                      key={btn}
+                      type="button"
+                      onClick={() => setFiltreOrdre(btn)}
+                      className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
+                        ? 'bg-snrt-navy text-white'
+                        : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                      {btn}
+                    </button>
                   ))}
                 </div>
-              )}
+
+                {/* Barre de recherche de la liste */}
+                <div className="relative mb-4 shrink-0">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={rechercheListe}
+                    onChange={(e) => setRechercheListe(e.target.value)}
+                    placeholder="Rechercher dans la liste..."
+                    className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-3 text-xs text-slate-700 transition-colors focus:border-snrt-accent focus:outline-none focus:ring-1 focus:ring-snrt-accent"
+                  />
+                </div>
+
+                {/* Contenu de la liste dynamique */}
+                <div className="space-y-0.5 overflow-y-auto flex-1">
+                  {listeFiltree.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic text-center py-6">Aucun élément trouvé.</p>
+                  ) : (
+                    listeFiltree.map((item) => (
+                      <div
+                        key={item.id}
+                        className="
+        group
+        flex flex-col
+        min-h-[40px]
+        rounded-md
+        border border-slate-200
+        bg-white
+        px-2 py-1
+        transition-all duration-150
+        hover:border-snrt-accent/30
+        hover:bg-slate-50/50
+        hover:shadow-sm
+    "
+                      >
+                        {/* Main row */}
+                        <div
+                          className="flex items-center gap-1 w-full"
+                          style={{
+                            justifyContent: "space-between",
+                            gap: "5px"
+                          }}
+                        >
+                          {/* Type */}
+                          <div className="w-[85px] shrink-0">
+                            <span
+                              className="
+                    inline-flex items-center
+                    rounded
+                    bg-snrt-navy/5
+                    px-1.5 py-0.5
+                    text-[9px] font-semibold uppercase
+                    tracking-wide
+                    text-snrt-navy
+                "
+                              style={{ backgroundColor: "orange" }}
+                            >
+                              {item.type}
+                            </span>
+
+                            {item.PAD && (
+                              <span
+                                className="
+                        inline-flex items-center
+                        rounded
+                        px-1.5 py-0.5 ml-1
+                        text-[9px] font-semibold uppercase
+                        tracking-wide
+                        text-green-600 bg-green-100
+                    "
+                                title="Prêt à diffuser"
+                              >
+                                PAD
+                              </span>
+                            )}
+
+                            {!item.PAD && (
+                              <span
+                                className="
+                        inline-flex items-center
+                        rounded
+                        px-1.5 py-0.5 ml-1
+                        text-[9px] font-semibold uppercase
+                        tracking-wide
+                        text-red-600 bg-red-100
+                    "
+                                title="PAD non disponible"
+                              >
+                                NO PAD
+                              </span>
+                            )}
+
+                            {item.client && (
+                              <div
+                                className="
+                        mt-0.5
+                        max-w-[80px]
+                        truncate
+                        text-[9px]
+                        text-slate-500
+                    "
+                                title={item.client}
+                              >
+                                {item.client}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Main information */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4
+                                className="
+                        min-w-0 truncate
+                        text-[12px]
+                        text-slate-700
+                        group-hover:text-slate-900
+                    "
+                                title={item.nom || item.title}
+                              >
+                                {item.nom || item.title}
+                              </h4>
+
+                              <span
+                                className="
+                        shrink-0
+                        rounded bg-slate-100
+                        px-1.5 py-0.5
+                        text-[9px] font-medium
+                        text-slate-500
+                    "
+                              >
+                                ⌚ {item.duration ?? 30}s
+                              </span>
+                            </div>
+
+                            {item.metadonne && (
+                              <p
+                                className="
+                        mt-0.5
+                        truncate
+                        text-[9px]
+                        text-slate-500
+                    "
+                                title={item.metadonne}
+                              >
+                                {item.metadonne}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Budget */}
+                          <div className="hidden w-[45px] shrink-0 md:block">
+                            <div className="text-[8px] uppercase tracking-wide text-slate-500">
+                              Budget
+                            </div>
+
+                            <div className="text-[11px] text-slate-600">
+                              {item.budget ?? 0} DH
+                            </div>
+                          </div>
+
+                          {/* Audience */}
+                          <div className="hidden w-[100px] shrink-0 lg:flex items-center gap-1">
+                            <span
+                              className="
+                    rounded bg-blue-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-blue-600
+                "
+                              title="Enfant"
+                            >
+                              E {item.enfantpercentage ?? item.pourcentages?.enfant ?? 0}%
+                            </span>
+
+                            <span
+                              className="
+                    rounded bg-violet-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-violet-600
+                "
+                              title="Jeune"
+                            >
+                              J {item.jeunepercentage ?? item.pourcentages?.jeune ?? 0}%
+                            </span>
+
+                            <span
+                              className="
+                    rounded bg-orange-50
+                    px-1.5 py-1
+                    text-[9px] font-medium
+                    text-orange-600
+                "
+                              title="Grand"
+                            >
+                              G {
+                                item.grand_percentage ??
+                                item.grandPercentage ??
+                                item.pourcentages?.grand ??
+                                0
+                              }%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* PAD request - full width underneath */}
+                        {!item.PAD && (
+                          <div className="w-full mt-1">
+                            <button
+                              type="button"
+                              className="
+                    w-full
+                    rounded-md
+                    border border-amber-200
+                    bg-amber-50
+                    px-2 py-1
+                    text-[10px]
+                    font-medium
+                    text-amber-700
+                    transition-all duration-150
+                    hover:bg-amber-100
+                    hover:border-amber-300
+                    hover:text-amber-800
+                "
+                              style={{ cursor: "pointer" }}
+                              onClick={() => { send_pad_demande(item.id) }}
+                            >
+                              Demander PAD
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+
+
+
+                </div>
+              </aside>
+
+
+
+
+
+
             </div>
           )}
         </div>
-      )}
-
-      {ongletPanneau === 'GENERATION' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_1fr]">
-          <div className="space-y-4">
-            {proposition && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-                <span>
-                  {proposition.propositions.length} élément{proposition.propositions.length > 1 ? 's' : ''} proposé
-                  {proposition.propositions.length > 1 ? 's' : ''}
-                  {proposition.nbAutomatiquesRemplaces > 0 &&
-                    ` · ${proposition.nbAutomatiquesRemplaces} élément(s) auto précédent(s) remplacé(s)`}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => confirmerGeneration(proposition.propositions)}
-                    disabled={enregistrement}
-                    className="rounded-md bg-snrt-navy px-3 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-                  >
-                    {enregistrement ? 'Écriture…' : 'Confirmer'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProposition(null)}
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="mb-1 text-sm font-semibold text-slate-900">
-                {proposition ? 'Aperçu du plan média' : 'Plan média'} — {planMediaActif?.nom}
-              </h3>
-              {!proposition && (
-                <p className="mb-3 text-xs text-slate-400">
-                  Programmes du jour issus de la grille linéaire live. Sélectionnez une règle à droite puis « Générer » —
-                  les spots / BA / écrans / habillages apparaîtront à leur place.
-                </p>
-              )}
-              {sectionsApercu.length === 0 ? (
-                <p className="text-sm text-slate-500">Aucun programme ce jour-là dans la grille linéaire live.</p>
-              ) : (
-                <div className="space-y-5">
-                  {sectionsApercu.map(([date, sections]) => (
-                    <div key={date}>
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {formaterDateLongue(date)}
-                      </div>
-                      <div className="space-y-3">
-                        {sections.map((s) => (
-                          <div key={s.cle} className="rounded-md border border-slate-200">
-                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-                              <span className="text-sm font-medium text-slate-800">{s.contexte}</span>
-                              <span className="font-mono text-xs text-slate-500">{s.fenetre}</span>
-                            </div>
-                            {s.elements.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-slate-400">—</p>
-                            ) : (
-                              <table className="w-full text-sm">
-                                <tbody>
-                                  {s.elements.map((e) => (
-                                    <tr
-                                      key={e.id}
-                                      className={`border-b border-slate-100 last:border-0 ${
-                                        e._propose ? 'bg-emerald-50 text-emerald-900' : 'text-slate-700'
-                                      }`}
-                                    >
-                                      <td className="py-1.5 pl-3 pr-3 font-mono text-xs">
-                                        {e.heure_debut?.slice(0, 5)}–{e.heure_fin?.slice(0, 5)}
-                                      </td>
-                                      <td className="py-1.5 pr-3">
-                                        {LIBELLES_TYPE[e.type] ?? e.type}
-                                        {s.heureFinProg && e.heure_debut < s.heureFinProg && (
-                                          <span className="ml-1.5 rounded bg-slate-100 px-1 text-[10px] text-slate-500">intra</span>
-                                        )}
-                                        {e._propose && (
-                                          <span className="ml-1.5 rounded bg-emerald-200 px-1 text-[10px] font-medium text-emerald-800">
-                                            proposé
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-1.5 pr-3">{e.libelle ?? '—'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="lg:sticky lg:top-6 lg:self-start">
-            <PanneauReglesGeneration
-              periodeLabel={formaterDateLongue(dateReference)}
-              onGenerer={generer}
-              chargement={chargement}
-              regles={regles}
-              onNouvelleRegle={() => setFormulaireRegle('CREER')}
-              onEditerRegle={(r) => setFormulaireRegle(r)}
-              onBasculerActiveRegle={basculerActiveRegle}
-            />
-          </div>
-        </div>
-      )}
-
-      {bibliothequeOuverte && (
-        <BibliothequeSpots
-          spots={spots}
-          roleUtilisateur={roleUtilisateur}
-          chaineActive={chaineActive}
-          onFermer={() => setBibliothequeOuverte(false)}
-          onRafraichir={chargerTout}
-          onAjouterAuPlan={ouvrirInsertionDepuisBibliotheque}
+      ) : vuePrincipale === 'PIGE_VALIDATION' ? (
+        <PigeValidation events={genererEvenementsPige()} chaineId={chaineActive.id} setVuePrincipale={setVuePrincipale} />
+      ) : (
+        /* Vue Administration Plan Média connectée au stock global */
+        <PlanMediaAdministration
+          planMediaId={planMediaActif?.id}
+          chaineId={chaineActive?.id}
+          stockAnnonces={stockAnnonces}
+          setStockAnnonces={setStockAnnonces}
+          programmes={programmes}
+          episodes={episodes}
+          setdatachanged={setdatachanged}
+          datachanged={datachanged}
+          setIsLoading={setIsLoading}
         />
       )}
 
-      {insertionOuverte && planMediaActif && (
-        <PanneauInsertionManuelle
-          chaineActive={chaineActive}
-          planMediaId={planMediaActif.id}
-          dates={dates}
-          diffusions={diffusions}
-          elementsSecondaires={elementsSecondairesActifs}
-          campagnes={campagnes}
-          spots={spots}
-          programmesParId={programmesParId}
-          spotIdInitial={spotPreselectionne}
-          dateInitiale={insertionCible?.date}
-          coupureIdInitiale={insertionCible?.coupureId}
-          onFermer={fermerInsertion}
-          onElementCree={ajouterElementLocal}
-        />
-      )}
-
-      {formulaireRegle && (
-        <PanneauFormulaireRegle
-          regleInitiale={formulaireRegle === 'CREER' ? null : formulaireRegle}
-          spots={spots}
-          onEnregistrer={(champs) =>
-            formulaireRegle === 'CREER' ? creerRegle(champs) : modifierRegle(formulaireRegle.id, champs)
-          }
-          onSupprimer={formulaireRegle === 'CREER' ? undefined : () => supprimerRegle(formulaireRegle.id)}
-          onFermer={() => setFormulaireRegle(null)}
-        />
-      )}
-
-      {importOuvert && (
-        <PanneauImportPlanMedia
-          chaineActive={chaineActive}
-          diffusions={diffusions}
-          campagnes={campagnes}
-          programmesParId={programmesParId}
-          onFermer={() => setImportOuvert(false)}
-          onImporte={documentImporte}
-        />
-      )}
-
-      {menuDocumentOuvert && planMediaActif && (
-        <Modal titre={`Plan média « ${planMediaActif.nom} »`} onFermer={() => setMenuDocumentOuvert(false)}>
-          <div className="space-y-2 text-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setMenuDocumentOuvert(false)
-                setModaleDocument('RENOMMER')
-              }}
-              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <Pencil size={16} />
-              Renommer
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuDocumentOuvert(false)
-                setModaleDocument('DUPLIQUER')
-              }}
-              className="flex w-full items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <Copy size={16} />
-              Dupliquer
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuDocumentOuvert(false)
-                supprimerDocumentActif()
-              }}
-              disabled={planMediaActif.est_live}
-              title={planMediaActif.est_live ? 'Basculez un autre document en live avant de supprimer celui-ci' : 'Supprimer'}
-              className="flex w-full items-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 size={16} />
-              Supprimer
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {modaleDocument === 'OUVRIR' && (
-        <ModaleOuvrirDocument
-          documents={planMedias}
-          documentsOuvertsIds={planMediaOuvertsIds}
-          onOuvrir={ouvrirDocument}
-          onCreer={creerEtOuvrirDocument}
-          onFermer={() => setModaleDocument(null)}
-        />
-      )}
-      {modaleDocument === 'RENOMMER' && planMediaActif && (
-        <ModaleNomDocument
-          titre="Renommer le plan média"
-          valeurInitiale={planMediaActif.nom}
-          labelBouton="Renommer"
-          onValider={renommerDocumentActif}
-          onFermer={() => setModaleDocument(null)}
-        />
-      )}
-      {modaleDocument === 'DUPLIQUER' && planMediaActif && (
-        <ModaleNomDocument
-          titre="Dupliquer le plan média"
-          valeurInitiale={`${planMediaActif.nom} (copie)`}
-          labelBouton="Dupliquer"
-          onValider={dupliquerDocumentActif}
-          onFermer={() => setModaleDocument(null)}
-        />
-      )}
     </div>
-  )
-}
-
-// Panneau "Ouvrir un plan média" (P24, miroir GrilleLineaire.jsx/P23) : liste
-// des documents de la chaîne pas encore ouverts + création d'un nouveau,
-// dans la même modale.
-function ModaleOuvrirDocument({ documents, documentsOuvertsIds, onOuvrir, onCreer, onFermer }) {
-  const [nomNouveau, setNomNouveau] = useState('')
-  const [creation, setCreation] = useState(false)
-  const [erreur, setErreur] = useState(null)
-  const idNom = useId()
-  const fermes = documents.filter((d) => !documentsOuvertsIds.includes(d.id))
-
-  async function creer(e) {
-    e.preventDefault()
-    if (!nomNouveau.trim()) return
-    setCreation(true)
-    setErreur(null)
-    try {
-      await onCreer(nomNouveau.trim())
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setCreation(false)
-    }
-  }
-
-  return (
-    <Modal titre="Ouvrir un plan média" onFermer={onFermer}>
-      <div className="space-y-4">
-        {fermes.length > 0 ? (
-          <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200">
-            {fermes.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => onOuvrir(d.id)}
-                className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50"
-              >
-                {d.nom}
-                {d.est_live && (
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                    LIVE
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">Tous les plans média de cette chaîne sont déjà ouverts.</p>
-        )}
-        <form onSubmit={creer} className="flex items-end gap-2 border-t border-slate-100 pt-4">
-          <div className="flex-1">
-            <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
-              Nouveau plan média
-            </label>
-            <input
-              id={idNom}
-              type="text"
-              value={nomNouveau}
-              onChange={(e) => setNomNouveau(e.target.value)}
-              placeholder="ex. Plan média Ramadan"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={creation || !nomNouveau.trim()}
-            className="rounded-md bg-snrt-navy px-3 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-          >
-            Créer
-          </button>
-        </form>
-        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
-      </div>
-    </Modal>
-  )
-}
-
-// Modale nom unique (P24, miroir GrilleLineaire.jsx/P23) : réutilisée par
-// Renommer et Dupliquer.
-function ModaleNomDocument({ titre, valeurInitiale, labelBouton, onValider, onFermer }) {
-  const [nom, setNom] = useState(valeurInitiale)
-  const [enCours, setEnCours] = useState(false)
-  const [erreur, setErreur] = useState(null)
-  const idNom = useId()
-
-  async function soumettre(e) {
-    e.preventDefault()
-    if (!nom.trim()) return
-    setEnCours(true)
-    setErreur(null)
-    try {
-      await onValider(nom.trim())
-    } catch (err) {
-      setErreur(err.message)
-    } finally {
-      setEnCours(false)
-    }
-  }
-
-  return (
-    <Modal titre={titre} onFermer={onFermer}>
-      <form onSubmit={soumettre} className="space-y-4">
-        <div>
-          <label htmlFor={idNom} className="mb-1 block text-sm font-medium text-slate-700">
-            Nom
-          </label>
-          <input
-            id={idNom}
-            type="text"
-            required
-            autoFocus
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        {erreur && <p className="text-sm text-red-600">{erreur}</p>}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={enCours}
-            className="rounded-md bg-snrt-navy px-4 py-2 text-sm font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-          >
-            {enCours ? 'Enregistrement…' : labelBouton}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  )
+  );
 }

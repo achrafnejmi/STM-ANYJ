@@ -69,7 +69,7 @@ export default function PanneauApercuGeneration({ proposition, ecraser, nbAutoma
               {propositions.map((p, i) => (
                 <tr key={`${p.date}-${p.heure_debut}-${p.programme_id}`} className={`border-b border-slate-100 ${exclues.has(i) ? 'opacity-40' : ''}`}>
                   <td className="py-1.5 pl-3 pr-2">
-                    <input type="checkbox" checked={!exclues.has(i)} onChange={() => basculer(i)} />
+                    <input type="checkbox" checke d={!exclues.has(i)} onChange={() => basculer(i)} />
                   </td>
                   <td className="py-1.5 pr-4 text-slate-700">{formaterDateLongue(p.date)}</td>
                   <td className="py-1.5 pr-4 text-slate-700">{p.heure_debut}</td>

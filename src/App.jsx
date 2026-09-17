@@ -16,6 +16,8 @@ import {
   marquerToutesNotificationsLues,
   obtenirUtilisateur,
 } from './lib/db.js'
+import { Toaster } from 'react-hot-toast';
+
 import { calculerNotificationsDroitsManquantes, SECTIONS_CIBLE_NOTIFICATION } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -234,7 +236,7 @@ function App() {
     const id = setInterval(() => {
       listerNotificationsParChaine(chaineActive.id)
         .then(setNotifications)
-        .catch(() => {})
+        .catch(() => { })
     }, 30000)
     return () => clearInterval(id)
   }, [chaineActive])
@@ -358,6 +360,8 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
+      <Toaster position="top-right" />
+
       <Sidebar
         section={section}
         sections={sectionsVisibles}
@@ -402,6 +406,7 @@ function App() {
             onOuvrirGrilleType={ouvrirGrilleType}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
+            Utilisateur={utilisateurCourant}
           />
         </main>
       </div>
