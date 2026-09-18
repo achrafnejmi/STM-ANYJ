@@ -222,7 +222,7 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
 
   return (
-    <div className="rounded-lg border border-slate-300 bg-white p-6 min-h-[500px] space-y-6">
+    <div className="rounded-lg border border-slate-300 bg-white p-6 min-h-[800px] space-y-6" style={{overflow:"auto"}}>
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 pb-4">
         <div>

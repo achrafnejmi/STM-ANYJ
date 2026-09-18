@@ -1479,11 +1479,43 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                     if (dateFin && dateFin < dateReference) return false;
                                     if (!stock.PAD) return false;
                                     return true;
+                                  }).sort((a, b) => {
+
+
+                                    const diffusionActuelle = (diffusions || []).find(
+                                      d => d && d.episode_id === formEpisodeId
+                                    );
+                                    const classificationTrouvee = diffusionActuelle && ProgrammeClassification
+                                      ? ProgrammeClassification.find(c => c && c.programme_id === diffusionActuelle.programme_id)
+                                      : null;
+
+                                    // On crée un objet de référence 100% sûr, avec 0 par défaut si introuvable
+                                    const classificationIA = {
+                                      enfant_point: classificationTrouvee?.enfant_point ?? 0,
+                                      adult_point: classificationTrouvee?.adult_point ?? 0,
+                                      senior_point: classificationTrouvee?.senior_point ?? 0
+                                    };
+
+                                    const a_E = a.enfantpercentage ?? 0;
+                                    const a_J = a.jeunepercentage ?? 0;
+                                    const a_G = a.grand_percentage ?? a.grandPercentage ?? 0;
+
+                                    // Extraire les stats de l'annonce B
+                                    const b_E = b.enfantpercentage ?? 0;
+                                    const b_J = b.jeunepercentage ?? 0;
+                                    const b_G = b.grand_percentage ?? b.grandPercentage ?? 0;
+
+                                    // Calcul de la différence absolue (plus c'est bas, plus c'est proche)
+                                    const diffA = Math.abs(classificationIA.enfant_point - a_E) + Math.abs(classificationIA.adult_point - a_J) + Math.abs(classificationIA.senior_point - a_G);
+                                    const diffB = Math.abs(classificationIA.enfant_point - b_E) + Math.abs(classificationIA.adult_point - b_J) + Math.abs(classificationIA.senior_point - b_G);
+
+                                    return diffA - diffB;
+
                                   })
                                   .map(stock => (
                                     // ... votre code option habituel.map(stock => (
                                     <option key={stock.id} value={stock.id} style={{ backgroundColor: stock.pad ? "red" : "" }}>
-                                      {stock.nom || stock.title} · {stock.duration || 30}s · F{stock.enfantpercentage}% · J{stock.jeunepercentage}% · G{stock.grand_percentage}% · PAD{JSON.stringify(stock.pad)}
+                                      {stock.nom || stock.title} · {stock.duration || 30}s · E{stock.enfantpercentage}% · J{stock.jeunepercentage}% · G{stock.grand_percentage}% · PAD{JSON.stringify(stock.pad)}
                                     </option>
                                   ))}
                               </select>

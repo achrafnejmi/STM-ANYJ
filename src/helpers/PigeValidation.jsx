@@ -517,7 +517,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
     // --- RENDU : ÉCRAN D'ACCUEIL (UPLOAD & HISTORIQUE) ---
     if (etape === 'upload') {
         return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[500px]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[800px]">
                 {/* --- MODALE POP-OUT (UPLOAD & HISTORIQUE) --- */}
                 {showManager && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -686,7 +686,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
     }
     // --- RENDU : ÉCRAN D'ANALYSE ---
     return (
-        <div className="flex flex-col gap-1 min-h-[600px]">
+        <div className="flex flex-col gap-1 min-h-[600px] max-h-[100%]">
             {/* --- MODALE POP-OUT (UPLOAD & HISTORIQUE) --- */}
             {showManager && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -1027,7 +1027,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
             {(page === 'annonce' || page === 'programme') && <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 overflow-hidden">
 
                 {/* TABLEAU DE DÉTAIL DE LA FENÊTRE (5 MIN) */}
-                <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-col min-h-[300px] max-h-[600px] ">
+                <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-col min-h-[550px]  max-h-[550px] ">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3 shrink-0">
                         <div className="flex items-center gap-2">
                             <Clock size={18} className="text-slate-600" />
@@ -1113,7 +1113,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
                 </div>
 
                 {/* TABLEAU DES ANOMALIES GÉNÉRÉ AUTOMATIQUEMENT */}
-                <div className="bg-white rounded-lg border border-slate-200 flex flex-col shadow-sm overflow-hidden min-h-[300px] max-h-[400px]">
+                <div className="bg-white rounded-lg border border-slate-200 flex flex-col shadow-sm overflow-hidden min-h-[300px] max-h-[550px]  ">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2 shrink-0" >
                         <AlertCircle size={18} className="text-rose-500" />
                         <h3 className="text-sm  text-slate-800">Anomalies ({listeAnomalies.length})</h3>
