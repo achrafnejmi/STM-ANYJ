@@ -28,6 +28,7 @@ import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, Align
 import { saveAs } from 'file-saver';
 import toast from 'react-hot-toast';
 import PigeValidation from '../helpers/PigeValidation.jsx';
+import AnalyseurPDF from '../helpers/AnalyseurPDF.jsx';
 
 export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = false }) {
 
@@ -2058,8 +2059,10 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           setdatachanged={setdatachanged}
           datachanged={datachanged}
           setIsLoading={setIsLoading}
+          chaineActive={chaineActive}
         />
       </div>
+
 
     </div>
   );

@@ -1248,11 +1248,11 @@ export async function data_annonce_refrech() {
 
 
 const timeToSec = (time) => {
-    if (!time) return 0;
-    const parts = time.toString().split(':').map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
-    return 0;
+  if (!time) return 0;
+  const parts = time.toString().split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
+  return 0;
 };
 
 // Ajoutez cette fonction utilitaire dans votre composant (ou en dehors) pour calculer les anomalies à la volée avant la sauvegarde
@@ -1340,7 +1340,7 @@ export const handleDeletePige = async (pigeId) => {
     .delete()
     .eq('id', pigeId);
 
-  if (error) {console.error("Erreur de suppression", error);toast.error("Error durant la suppression de la pige !!!")}
+  if (error) { console.error("Erreur de suppression", error); toast.error("Error durant la suppression de la pige !!!") }
   toast.success("Pige supprimer");
   return !error; // Retourne true si succès, false sinon
 };
@@ -1356,5 +1356,60 @@ export const chargerPigeDetail = async (pigeId) => {
     console.error("Erreur lors du chargement des détails :", error);
     return null;
   }
+  return data;
+};
+
+
+// ==========================================
+// GESTION DES CONDUCTEURS (Import PDF)
+// ==========================================
+
+// 1. SAUVEGARDER (Create)
+// 1. SAUVEGARDER
+export const sauvegarderConducteur = async (dateConducteur, idChaine, donneesExtract) => {
+  const { data, error } = await supabase
+    .from('conducteurs')
+    .insert([
+      {
+        date: dateConducteur,
+        chaine_id: idChaine, // On envoie l'ID
+        donnees: donneesExtract
+      }
+    ])
+    .select();
+
+  if (error) throw error;
+  return data[0];
+};
+
+// 2. LISTER
+export const listerConducteurs = async (idChaine = null) => {
+  let requete = supabase
+    .from('conducteurs')
+    .select('*')
+    .order('date', { ascending: false });
+
+  // Filtrage natif ultra-rapide par ID
+  if (idChaine) {
+    requete = requete.eq('chaine_id', idChaine);
+  }
+
+  const { data, error } = await requete;
+  if (error) throw error;
+  return data;
+};
+
+// 3. SUPPRIMER (Delete)
+export const supprimerConducteur = async (idConducteur) => {
+  const { data, error } = await supabase
+    .from('conducteurs')
+    .delete()
+    .eq('id', idConducteur);
+
+  if (error) {
+    console.error("Erreur Supabase (supprimerConducteur) :", error);
+    throw error;
+  }
+
   return data;
 };

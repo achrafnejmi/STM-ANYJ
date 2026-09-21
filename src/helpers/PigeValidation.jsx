@@ -517,7 +517,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
     // --- RENDU : ÉCRAN D'ACCUEIL (UPLOAD & HISTORIQUE) ---
     if (etape === 'upload') {
         return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[800px]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[700px] max-h-[100%]">
                 {/* --- MODALE POP-OUT (UPLOAD & HISTORIQUE) --- */}
                 {showManager && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -608,7 +608,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
                     </div>
                 )}
                 {/* COLONNE GAUCHE : ZONE D'UPLOAD */}
-                <div className="rounded-xl border border-slate-200 bg-white p-10 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">
+                <div className="rounded-xl border border-slate-200 bg-white p-10 text-center flex flex-col items-center justify-center space-y-4 shadow-sm" style={{maxHeight:"100%"}}>
                     <div className="rounded-full bg-slate-50 p-6 text-slate-600">
                         <Upload size={40} />
                     </div>
@@ -631,7 +631,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
                 </div>
 
                 {/* COLONNE DROITE : HISTORIQUE SUPABASE */}
-                <div className="rounded-xl border border-slate-200 bg-white flex flex-col shadow-sm overflow-hidden h-[500px]">
+                <div className="rounded-xl border border-slate-200 bg-white flex flex-col shadow-sm overflow-hidden h-[700px] max-h-[100%]">
                     <div className="p-5 border-b border-slate-100 bg-slate-50 shrink-0">
                         <h2 className="text-lg  text-slate-800 flex items-center gap-2">
                             <Database size={20} className="text-slate-600" />
@@ -686,10 +686,10 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
     }
     // --- RENDU : ÉCRAN D'ANALYSE ---
     return (
-        <div className="flex flex-col gap-1 min-h-[600px] max-h-[100%]">
+        <div className="flex flex-col gap-1 min-h-[600px] max-h-[100%]" >
             {/* --- MODALE POP-OUT (UPLOAD & HISTORIQUE) --- */}
             {showManager && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" >
                     <div className="bg-slate-50 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
                         {/* En-tête de la modale */}
@@ -701,7 +701,7 @@ export default function PigeValidation({ events, chaineId, setVuePrincipale, cha
                         </div>
 
                         {/* Corps de la modale : Grille 2 colonnes */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-[500px]">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-[500px]" >
 
                             {/* COLONNE GAUCHE : UPLOAD */}
                             <div className="p-8 flex flex-col items-center justify-center text-center bg-white">
