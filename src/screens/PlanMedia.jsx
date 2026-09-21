@@ -45,7 +45,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
   ]);
 */const [selectedEpisodeId, setSelectedEpisodeId] = useState(null);
   // Gestion des changements dans la liste dynamique d'annonces
-
+  const [page, setPage] = useState("promos");
   // Tableau dynamique pour gérer plusieurs annonces simultanément
   const [formAnnonces, setFormAnnonces] = useState([
     { idUnique: Date.now(), annonceId: '', mode: 'offset', offsetSeconds: '0', timeExact: '00:00:00' }
@@ -1231,11 +1231,47 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             <div className="flex flex-col flex-1 overflow-hidden w-full">
 
               {/* En-tête : fixe en haut (Padding appliqué uniquement ici) */}
-              <div className="shrink-0 p-5 pb-4 border-b border-slate-100 bg-white">
-                <h2 className="pm-form-title m-0 text-lg font-semibold text-slate-800">Planifier les annonces</h2>
-                <p className="pm-form-subtitle mt-1 text-sm text-slate-500">Recherchez et sélectionnez un épisode pour y attacher des annonces.</p>
-              </div>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 p-4">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800">Planifier les annonces</h2>
+                  <p className="pm-form-subtitle mt-1 text-sm text-slate-500">Recherchez et sélectionnez un épisode pour y attacher des annonces.</p>
+                </div>
 
+
+
+
+
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }} >
+
+
+                  <button
+                    onClick={() => setPage('promos')} // <-- Corrigé (sans 's')
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${page === 'promos'
+                      ? 'bg-[#243c54] text-white border-[#243c54] shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    style={{ cursor: "pointer" }}
+                  >
+                    Annonces / Promos
+                  </button>
+                  <button
+                    onClick={() => setPage('auto-promos')} // <-- Corrigé (sans 's')
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${page === 'auto-promos'
+                      ? 'bg-[#243c54] text-white border-[#243c54] shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    style={{ cursor: "pointer" }}
+                  >
+                   Auto annonces 
+                  </button>
+
+
+                </div>
+
+
+
+
+              </div>
               {/* Conteneur de recherche et liste (Pleine largeur, touche les bords) */}
               <div className="flex flex-col flex-1 overflow-hidden w-full">
 

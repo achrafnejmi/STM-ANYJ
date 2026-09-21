@@ -287,7 +287,7 @@ export default function AnalyseurPDF({ chaineActive }) {
                     </div>
                 )}
             </div>
-
+                
             {/* COLONNE DROITE : HISTORIQUE */}
             <div className="border-l border-slate-200 pl-8 flex flex-col " style={{maxHeight:"630px",overflow:"auto"}}>
                 <div className="mb-4 border-b border-slate-100 pb-4">
