@@ -17,7 +17,7 @@ import {
   listerProgrammesParChaine,
   listerTousLesEpisodes, listerDiffusionsLineairesParChaine,
   insererPlanificationsMedia, listerPlanificationsMedia,
-  data_refrech, listerClassificationsProgrammes, data_annonce_refrech, creerDemandePad
+  data_refrech, listerClassificationsProgrammes, data_annonce_refrech, creerDemandePad, sauvegarderConducteur, listerConducteurs, supprimerConducteur
 } from '../lib/db.js';
 import { Plus, Trash2, X } from 'lucide-react';
 // Remplacez import * as XLSX from 'xlsx'; par :
@@ -74,8 +74,163 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
     setFormAnnonces(prev => prev.filter(item => item.idUnique !== idUnique));
   };
 
+  // États pour piloter la génération par date
+  // États pour piloter la génération par le Conducteur sélectionné
+  const [selectedConducteurId, setSelectedConducteurId] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [planningEdite, setPlanningEdite] = useState([]);
+  /**
+   * Algorithme de génération automatique du planning publicitaire
+   */
+  const genererPlanningAuto = (ecransPdf, diffusions, stockAnnonces, classificationsIA) => {
+    const planningFinal = [];
 
+    // 🧠 NOUVEAU : La mémoire de l'algorithme
+    // Ce dictionnaire va compter combien de fois chaque annonce a été diffusée aujourd'hui
+    const compteursUtilisation = {};
 
+    ecransPdf.forEach((ecran) => {
+      const nombreDeSpotsRequis = ecran.nb_spots;
+      if (nombreDeSpotsRequis <= 0) return;
+
+      const diffusionAssociee = diffusions.find(d =>
+        d.heure_debut && d.heure_debut.startsWith(ecran.ecran)
+      );
+
+      let cibleE = 0, cibleJ = 0, cibleG = 0;
+      if (diffusionAssociee) {
+        const classification = classificationsIA.find(
+          c => c.programme_id === diffusionAssociee.programme_id
+        );
+        cibleE = classification?.enfant_point ?? 0;
+        cibleJ = classification?.adult_point ?? 0;
+        cibleG = classification?.senior_point ?? 0;
+      }
+
+      let annoncesEligibles = stockAnnonces.filter(annonce => annonce.PAD);
+
+      // Le Tri avec Pénalité
+      annoncesEligibles.sort((a, b) => {
+        // 1. Calcul de l'écart d'affinité (Base)
+        const a_E = a.enfantpercentage ?? 0, a_J = a.jeunepercentage ?? 0, a_G = a.grand_percentage ?? a.grandPercentage ?? 0;
+        const b_E = b.enfantpercentage ?? 0, b_J = b.jeunepercentage ?? 0, b_G = b.grand_percentage ?? b.grandPercentage ?? 0;
+
+        const diffA = Math.abs(cibleE - a_E) + Math.abs(cibleJ - a_J) + Math.abs(cibleG - a_G);
+        const diffB = Math.abs(cibleE - b_E) + Math.abs(cibleJ - b_J) + Math.abs(cibleG - b_G);
+
+        // 2. 🚨 APPLICATION DE LA PÉNALITÉ DE RÉPÉTITION
+        // On ajoute +1000 points de malus pour chaque fois que l'annonce a DÉJÀ été utilisée.
+        // Cela repousse instantanément les annonces déjà passées tout en bas de la liste.
+        const malusA = (compteursUtilisation[a.id] || 0) * 1000;
+        const malusB = (compteursUtilisation[b.id] || 0) * 1000;
+
+        // Le score final combine l'affinité cible et la fraîcheur de l'annonce
+        return (diffA + malusA) - (diffB + malusB);
+      });
+
+      // Sélection des spots pour cet écran (prend les premiers de la liste triée)
+      const spotsSelectionnes = annoncesEligibles.slice(0, nombreDeSpotsRequis);
+
+      // 🧠 MISE À JOUR DE LA MÉMOIRE
+      // On incrémente le compteur pour chaque annonce qu'on vient juste de sélectionner
+      spotsSelectionnes.forEach(spot => {
+        compteursUtilisation[spot.id] = (compteursUtilisation[spot.id] || 0) + 1;
+      });
+
+      // Enregistrement dans le planning
+      planningFinal.push({
+        ecran_id: ecran.id,
+        heure_ecran: ecran.ecran,
+        contexte: ecran.contexte,
+        nb_spots_requis: nombreDeSpotsRequis,
+        spots_assignes: spotsSelectionnes,
+        duree_totale_spots: spotsSelectionnes.reduce((acc, spot) => acc + (spot.duration || 30), 0),
+        // On stocke les cibles pour que l'interface UI puisse calculer l'affinité dans les Select
+        cible_enfant: cibleE,
+        cible_adulte: cibleJ,
+        cible_senior: cibleG
+      });
+    });
+
+    return planningFinal;
+  };
+  const handleGenererAuto = async () => {
+    if (!selectedConducteurId) {
+      alert("Veuillez sélectionner un conducteur (CPB).");
+      return;
+    }
+
+    // 1. Récupérer le conducteur sélectionné et sa date
+    const conducteurSelectionne = conducteurpub.find(c => c.id === selectedConducteurId);
+    if (!conducteurSelectionne || !conducteurSelectionne.donnees) {
+      alert("Données du conducteur introuvables.");
+      return;
+    }
+
+    const dateCible = conducteurSelectionne.date; // La date est auto-sélectionnée ici !
+
+    setIsGenerating(true);
+    setPlanningEdite([]);
+
+    // Délai artificiel pour l'animation de chargement
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    try {
+      // 2. Filtrer les diffusions en utilisant la date auto-sélectionnée
+      const diffusionsDuJour = diffusions.filter(d =>
+        (d.date === dateCible) || (d.date_diffusion === dateCible)
+      );
+
+      // 3. Filtrer les annonces (PAD OK + Validité à cette date)
+      const annoncesValides = stockAnnonces.filter(annonce => {
+        if (!annonce.PAD) return false;
+
+        const dateDebut = annonce.validite_debut || "2000-01-01";
+        const dateFin = annonce.validite_fin || "2099-12-31";
+
+        return dateCible >= dateDebut && dateCible <= dateFin;
+      });
+
+      if (annoncesValides.length === 0) {
+        alert(`Aucune annonce valide trouvée pour la date du ${dateCible}.`);
+        setIsGenerating(false);
+        return;
+      }
+
+      // 4. Lancement de l'algorithme avec les données filtrées
+      const planning = genererPlanningAuto(
+        conducteurSelectionne.donnees,
+        diffusionsDuJour,
+        annoncesValides,
+        ProgrammeClassification
+      );
+      console.log("generation .............")
+      console.log(planning);
+      setPlanningEdite(planning);
+    } catch (error) {
+      console.error("Erreur lors de la génération :", error);
+      alert("Une erreur est survenue lors de l'analyse.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+  // Fonction pour sauvegarder le résultat final en base de données
+  const validerEtSauvegarderPlanning = async () => {
+    try {
+      console.log("Données du planning final prêtes à être sauvegardées :", planningEdite);
+
+      // TODO: Insérez ici votre code Supabase pour enregistrer le planningEdite
+      // Exemple : await supabase.from('mon_tableau_planning').insert(planningEdite);
+
+      alert("Planning enregistré avec succès !");
+
+      // On vide l'écran de validation pour revenir à l'état initial
+      setPlanningEdite([]);
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde :", error);
+      alert("Erreur lors de l'enregistrement du planning.");
+    }
+  };
   // 2. Fonction déclenchée quand l'utilisateur choisit un programme dans la liste
   const getclassifications = () => {
     const diffusionActuelle = diffusions.find(
@@ -227,7 +382,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
   // États pour les filtres et la recherche de la timeline (colonne gauche)
   const [filtresTimeline, setFiltresTimeline] = useState(['annonce', 'episode']);
   const [rechercheTimeline, setRechercheTimeline] = useState('');
-
+  const [conducteurpub, setConducteurpub] = useState([]);
   // États pour la recherche et les 4 boutons de la liste (colonne droite)
   const [filtreOrdre, setFiltreOrdre] = useState('enfant');
   const [rechercheListe, setRechercheListe] = useState('');
@@ -298,7 +453,8 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           episodesDb,
           diffusionsDb,
           planificationsMediaDb,
-          programmeclassificationDb
+          programmeclassificationDb,
+          conducteurpubDb
           // <-- Ajoutez ceci
         ] = await Promise.all([
           planCourant?.id ? listerPlanMediaStockParPlanMedia(planCourant.id) : Promise.resolve([]),
@@ -308,7 +464,9 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           listerTousLesEpisodes(),
           listerDiffusionsLineairesParChaine(chaineActive.id), // <-- Ajoutez l'appel API ici
           listerPlanificationsMedia(),
-          listerClassificationsProgrammes()]);
+          listerClassificationsProgrammes(),
+          listerConducteurs(chaineActive.id)]);
+
 
         if (actif) {
           setStockAnnonces(stockDb || []);
@@ -319,6 +477,8 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           setDiffusions(diffusionsDb || []);
           setPlanificationsMedia(planificationsMediaDb || []);
           setProgrammeClassification(programmeclassificationDb)// <-- Stockez le résultat ici
+            , setConducteurpub(conducteurpubDb)
+
         }
       } catch (erreur) {
         toast.error("Erreur lors du chargement des données Plan Média :", erreur);
@@ -1169,7 +1329,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       </div>
 
       {/* Affichage conditionnel selon la vue principale choisie */}
-      <div className={vuePrincipale === 'PLAN_MEDIA' ? 'block' : 'hidden'}>
+      <div className={((vuePrincipale === 'PLAN_MEDIA') && (page == "promos")) ? 'block' : 'hidden'}>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 300px)' }}>
 
           {/* 1. Colonne Gauche : Timeline */}
@@ -1262,7 +1422,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                       }`}
                     style={{ cursor: "pointer" }}
                   >
-                   Auto annonces 
+                    Auto annonces
                   </button>
 
 
@@ -2079,6 +2239,234 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           )}
         </div>
       </div>
+
+
+      <div className={((vuePrincipale === 'PLAN_MEDIA') && (page == "auto-promos")) ? 'block' : 'hidden'}>
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', height: 'calc(100vh - 300px)' }}>
+
+          {/* COLONNE GAUCHE */}
+          <main
+            className={`rounded-lg border border-slate-200 bg-white flex flex-col overflow-hidden transition-all duration-300 ${(planningEdite.length > 0 || isGenerating) ? 'w-1/3' : 'w-full'}`}
+            style={{ flex: (planningEdite.length > 0 || isGenerating) ? '0 0 auto' : '1 1 auto' }}
+          >
+            <div className="flex flex-col flex-1 overflow-hidden w-full">
+
+              {/* En-tête : fixe en haut */}
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 p-4 shrink-0">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800">Planifier les annonces</h2>
+                  <p className="pm-form-subtitle mt-1 text-sm text-slate-500">Recherchez et sélectionnez un épisode pour y attacher des annonces.</p>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
+                  <button
+                    onClick={() => setPage('promos')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${page === 'promos' ? 'bg-[#243c54] text-white border-[#243c54] shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                  >
+                    Annonces / Promos
+                  </button>
+                  <button
+                    onClick={() => setPage('auto-promos')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${page === 'auto-promos' ? 'bg-[#243c54] text-white border-[#243c54] shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                  >
+                    Auto annonces
+                  </button>
+                </div>
+              </div>
+
+              {/* ZONE DE CONTRÔLE IA : Sélection de la Date et Génération */}
+              {/* ZONE DE CONTRÔLE IA : Sélection du Conducteur et Génération */}
+              <div className="p-4 border-b border-emerald-100 bg-emerald-50/50 shrink-0">
+                <label className="block text-xs font-bold text-[#243c54] mb-2 uppercase tracking-wide">
+                  Configuration de l'IA (Auto-Génération)
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+
+                  {/* Le menu déroulant pour choisir le conducteur */}
+                  <select
+                    className="rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white min-w-[250px]"
+                    value={selectedConducteurId}
+                    onChange={(e) => setSelectedConducteurId(e.target.value)}
+                  >
+                    <option value="">-- Sélectionner un conducteur --</option>
+                    {conducteurpub.map(c => (
+                      <option key={c.id} value={c.id}>
+                        Conducteur du {c.date ? new Date(c.date).toLocaleDateString('fr-FR') : 'N/C'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Badge visuel affichant la date auto-déduite */}
+                  {selectedConducteurId && (
+                    <div className="text-xs font-medium text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md flex items-center gap-1.5">
+                      <span>📅</span> Date cible : <strong>{conducteurpub.find(c => c.id === selectedConducteurId)?.date}</strong>
+                    </div>
+                  )}
+
+                  {/* Le bouton d'action */}
+                  <button
+                    onClick={handleGenererAuto}
+                    disabled={isGenerating || !selectedConducteurId}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-md text-sm font-bold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ml-auto"
+                  >
+                    {isGenerating ? (
+                      <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Analyse...</>
+                    ) : (
+                      "Lancer l'assignation automatique"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Liste défilante des épisodes (Identique à votre version précédente) */}
+              <div className="flex-1 overflow-y-auto pm-slim-scroll bg-slate-50/30 w-full">
+                {/* ... (Votre map et filter existant des épisodes/diffusions) ... */}
+              </div>
+            </div>
+          </main>
+
+          {/* COLONNE DROITE : ÉCRAN DE CHARGEMENT IA */}
+          {isGenerating && (
+            <aside className="w-2/3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center shadow-inner animate-in fade-in">
+              <div className="w-16 h-16 border-4 border-[#243c54] border-t-emerald-500 rounded-full animate-spin mb-6 shadow-md"></div>
+              <h3 className="text-xl font-bold text-[#243c54] mb-2">Croisement des données en cours</h3>
+              <p className="text-sm text-slate-500 max-w-md text-center">
+                L'IA recherche le conducteur, filtre les annonces actives,
+                et maximise l'audience en fonction de la démographie des programmes...
+              </p>
+            </aside>
+          )}
+
+          {/* COLONNE DROITE : VALIDATION DU PLANNING (S'affiche quand terminé) */}
+          {!isGenerating && planningEdite.length > 0 && (
+            <aside className="w-2/3 bg-white border border-slate-200 rounded-lg flex flex-col overflow-hidden shadow-sm animate-in slide-in-from-right-4">
+
+              <div className="bg-[#243c54] p-4 flex justify-between items-center shrink-0">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Validation du Planning IA</h2>
+                  <p className="text-xs text-slate-300">Résultat généré </p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setPlanningEdite([])} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-md transition-colors">
+                    Annuler
+                  </button>
+                  <button onClick={validerEtSauvegarderPlanning} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-md transition-colors shadow-sm">
+                    Confirmer & Enregistrer
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
+                {planningEdite.map((ecran) => {
+                  // Cibles pour calculer le % de match dans le menu déroulant (si l'IA les a assignées)
+                  const cibleE = ecran.cible_enfant || 0;
+                  const cibleJ = ecran.cible_adulte || 0;
+                  const cibleG = ecran.cible_senior || 0;
+
+                  return (
+                    <div key={ecran.ecran_id} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+
+                      {/* 1. En-tête de l'écran publicitaire */}
+                      <div className="bg-slate-100/80 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+                        <div>
+                          <span className="font-mono font-bold text-[#243c54] mr-2">{ecran.heure_ecran}</span>
+                          <span className="text-sm font-medium text-slate-700">{ecran.contexte}</span>
+                        </div>
+                        <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded">
+                          {ecran.nb_spots_requis} Spots
+                        </span>
+                      </div>
+
+                      {/* 2. Liste des spots (Dropdowns) */}
+                      <div className="p-4 space-y-3">
+                        {Array.from({ length: ecran.nb_spots_requis }).map((_, index) => {
+                          const spotActuel = ecran.spots_assignes?.[index];
+
+                          return (
+                            <div key={index} className="flex items-center gap-3">
+                              {/* Numéro du spot */}
+                              <div className="w-6 h-6 rounded bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
+                                {index + 1}
+                              </div>
+
+                              {/* Sélecteur d'annonce */}
+                              <div className="flex-1">
+                                <select
+                                  className={`w-full text-sm rounded border py-1.5 px-3 focus:outline-none transition-colors
+                                            ${spotActuel ? 'border-slate-300 focus:border-indigo-500' : 'border-rose-300 bg-rose-50 text-rose-700'}`}
+                                  value={spotActuel?.id || ""}
+                                  onChange={(e) => modifierSpot(ecran.ecran_id, index, e.target.value)}
+                                >
+                                  <option value="">-- Spot manquant, veuillez sélectionner --</option>
+
+                                  {stockAnnonces
+                                    .filter(stock => stock.PAD) // Garde que le PAD
+                                    .sort((a, b) => {
+                                      const diffA = Math.abs(cibleE - (a.enfantpercentage ?? 0)) + Math.abs(cibleJ - (a.jeunepercentage ?? 0)) + Math.abs(cibleG - (a.grand_percentage ?? 0));
+                                      const diffB = Math.abs(cibleE - (b.enfantpercentage ?? 0)) + Math.abs(cibleJ - (b.jeunepercentage ?? 0)) + Math.abs(cibleG - (b.grand_percentage ?? 0));
+                                      return diffA - diffB;
+                                    })
+                                    .map(stock => {
+                                      const diffTotale = Math.abs(cibleE - (stock.enfantpercentage ?? 0)) + Math.abs(cibleJ - (stock.jeunepercentage ?? 0)) + Math.abs(cibleG - (stock.grand_percentage ?? 0));
+                                      const affinite = Math.max(0, Math.round(100 - (diffTotale / 2)));
+
+                                      return (
+                                        <option key={stock.id} value={stock.id}>
+                                          {stock.nom || stock.title} ({stock.duration || 30}s) {cibleE > 0 ? `- Match: ${affinite}%` : ''}
+                                        </option>
+                                      );
+                                    })
+                                  }
+                                </select>
+                              </div>
+
+                              {/* Durée du spot sélectionné (ou alerte si vide) */}
+                              <div className="w-16 text-right">
+                                {spotActuel ? (
+                                  <span className="text-xs font-mono text-slate-500">{spotActuel.duration || 30}s</span>
+                                ) : (
+                                  <span className="text-xs font-bold text-rose-500">Vide</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
+        </div>
+      </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       <div className={vuePrincipale === 'PIGE_VALIDATION' ? 'block' : 'hidden'}>
         <PigeValidation events={genererEvenementsPige()} chaineId={chaineActive.id} setVuePrincipale={setVuePrincipale} chaine={chaineActive} />
