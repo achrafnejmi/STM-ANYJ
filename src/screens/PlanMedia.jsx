@@ -82,70 +82,119 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
   /**
    * Algorithme de génération automatique du planning publicitaire
    */
-  const genererPlanningAuto = (ecransPdf, diffusions, stockAnnonces, classificationsIA) => {
+
+
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':').map(Number);
+    return (parts[0] * 60) + (parts[1] || 0);
+  };
+  const genererPlanningAuto = (ecransPdf, diffusions, stockAnnonces, classificationsIA, episodes = []) => {
     const planningFinal = [];
 
-    // 🧠 NOUVEAU : La mémoire de l'algorithme
-    // Ce dictionnaire va compter combien de fois chaque annonce a été diffusée aujourd'hui
+    // 🧠 Mémoire de l'algorithme (anti-répétition)
     const compteursUtilisation = {};
 
     ecransPdf.forEach((ecran) => {
       const nombreDeSpotsRequis = ecran.nb_spots;
       if (nombreDeSpotsRequis <= 0) return;
 
-      const diffusionAssociee = diffusions.find(d =>
-        d.heure_debut && d.heure_debut.startsWith(ecran.ecran)
-      );
+      const minutesEcran = timeToMinutes(ecran.heure_prev);
 
-      let cibleE = 0, cibleJ = 0, cibleG = 0;
+      let diffusionAssociee = null;
+      let plusPetiteDifference = Infinity;
+
+      diffusions.forEach(d => {
+        if (!d.heure_debut) return;
+
+        const minutesDiffusion = timeToMinutes(d.heure_debut);
+
+        // Le programme doit avoir commencé AVANT ou EXACTEMENT À l'heure prévue (heure_prev)
+        if (minutesDiffusion <= minutesEcran) {
+          const difference = minutesEcran - minutesDiffusion;
+
+          // On cherche le programme le plus proche dans le passé
+          if (difference < plusPetiteDifference) {
+            plusPetiteDifference = difference;
+            diffusionAssociee = d;
+          }
+        }
+      });
+
+      console.log(`Recherche pour ${ecran.heure_prev} -> Trouvé :`, diffusionAssociee?.programme_id || diffusionAssociee?.episode_id);
+
+      let progIdAssocie = null;
+
+      // 2. Vérification et récupération sécurisée du programme_id
       if (diffusionAssociee) {
-        const classification = classificationsIA.find(
-          c => c.programme_id === diffusionAssociee.programme_id
-        );
-        cibleE = classification?.enfant_point ?? 0;
-        cibleJ = classification?.adult_point ?? 0;
-        cibleG = classification?.senior_point ?? 0;
+        if (diffusionAssociee.programme_id) {
+          progIdAssocie = diffusionAssociee.programme_id;
+        }
+        else if (diffusionAssociee.episode_id) {
+          const ep = episodes.find(e => e.id === diffusionAssociee.episode_id);
+          if (ep) progIdAssocie = ep.programme_id;
+        }
       }
 
+      // 🚨 NOUVELLE RÈGLE : Pas d'association = On ignore cet écran
+      // Si aucune diffusion n'est trouvée OU qu'aucun programme n'y est lié, on ne génère rien.
+      if (!diffusionAssociee || !progIdAssocie) {
+        console.warn(`[IGNORÉ] Écran ${ecran.ecran} : Aucune diffusion ou programme associé trouvé.`);
+        const msg = `[IGNORÉ] Écran ${ecran.ecran} : Aucune diffusion ou programme associé trouvé.`;
+        toast.error(msg)
+      }
+
+      // 3. Calcul des cibles via l'IA
+      let cibleE = 0, cibleJ = 0, cibleG = 0;
+
+      const classification = classificationsIA.find(c => c.programme_id === progIdAssocie);
+      console.log(progIdAssocie)
+      console.log(classificationsIA)
+      if (classification) {
+        cibleE = classification.enfant_point ?? 0;
+        cibleJ = classification.adult_point ?? 0;
+        cibleG = classification.senior_point ?? 0;
+      }
+
+      console.log(`[${ecran.ecran} MATCH] Cibles retenues - E:${cibleE}, J:${cibleJ}, G:${cibleG}`);
+
+      // 4. Filtrage et Tri des annonces (Affinité + Mémoire anti-doublon)
       let annoncesEligibles = stockAnnonces.filter(annonce => annonce.PAD);
 
-      // Le Tri avec Pénalité
       annoncesEligibles.sort((a, b) => {
-        // 1. Calcul de l'écart d'affinité (Base)
         const a_E = a.enfantpercentage ?? 0, a_J = a.jeunepercentage ?? 0, a_G = a.grand_percentage ?? a.grandPercentage ?? 0;
         const b_E = b.enfantpercentage ?? 0, b_J = b.jeunepercentage ?? 0, b_G = b.grand_percentage ?? b.grandPercentage ?? 0;
 
         const diffA = Math.abs(cibleE - a_E) + Math.abs(cibleJ - a_J) + Math.abs(cibleG - a_G);
         const diffB = Math.abs(cibleE - b_E) + Math.abs(cibleJ - b_J) + Math.abs(cibleG - b_G);
 
-        // 2. 🚨 APPLICATION DE LA PÉNALITÉ DE RÉPÉTITION
-        // On ajoute +1000 points de malus pour chaque fois que l'annonce a DÉJÀ été utilisée.
-        // Cela repousse instantanément les annonces déjà passées tout en bas de la liste.
+        // Pénalité de répétition (+1000 points par utilisation précédente)
         const malusA = (compteursUtilisation[a.id] || 0) * 1000;
         const malusB = (compteursUtilisation[b.id] || 0) * 1000;
 
-        // Le score final combine l'affinité cible et la fraîcheur de l'annonce
         return (diffA + malusA) - (diffB + malusB);
       });
 
-      // Sélection des spots pour cet écran (prend les premiers de la liste triée)
+      // 5. Sélection des spots et mise à jour de la mémoire
       const spotsSelectionnes = annoncesEligibles.slice(0, nombreDeSpotsRequis);
 
-      // 🧠 MISE À JOUR DE LA MÉMOIRE
-      // On incrémente le compteur pour chaque annonce qu'on vient juste de sélectionner
       spotsSelectionnes.forEach(spot => {
         compteursUtilisation[spot.id] = (compteursUtilisation[spot.id] || 0) + 1;
       });
 
-      // Enregistrement dans le planning
+      // 6. Enregistrement dans le planning
       planningFinal.push({
         ecran_id: ecran.id,
         heure_ecran: ecran.ecran,
         contexte: ecran.contexte,
         nb_spots_requis: nombreDeSpotsRequis,
         spots_assignes: spotsSelectionnes,
+        heure_prev: ecran.heure_prev,
+        // 🔗 Données relationnelles requises pour l'insertion en BDD (ON DELETE CASCADE)
+        episode_id: diffusionAssociee.episode_id || null,
+        grille_id: diffusionAssociee.grille_id || null,
+
         duree_totale_spots: spotsSelectionnes.reduce((acc, spot) => acc + (spot.duration || 30), 0),
-        // On stocke les cibles pour que l'interface UI puisse calculer l'affinité dans les Select
         cible_enfant: cibleE,
         cible_adulte: cibleJ,
         cible_senior: cibleG
@@ -154,6 +203,9 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
     return planningFinal;
   };
+
+
+
   const handleGenererAuto = async () => {
     if (!selectedConducteurId) {
       alert("Veuillez sélectionner un conducteur (CPB).");
@@ -177,9 +229,20 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
     try {
       // 2. Filtrer les diffusions en utilisant la date auto-sélectionnée
-      const diffusionsDuJour = diffusions.filter(d =>
+      // 1. Filtrer par date
+      const diffusionsFiltrees = diffusions.filter(d =>
         (d.date === dateCible) || (d.date_diffusion === dateCible)
       );
+
+      // 2. Garder uniquement les diffusions avec une `heure_debut` unique
+      const heuresVues = new Set();
+      const diffusionsDuJour = diffusionsFiltrees.filter(d => {
+        if (heuresVues.has(d.heure_debut)) {
+          return false; // On l'a déjà vu, on l'ignore (doublon)
+        }
+        heuresVues.add(d.heure_debut); // On le mémorise
+        return true; // On le garde
+      });
 
       // 3. Filtrer les annonces (PAD OK + Validité à cette date)
       const annoncesValides = stockAnnonces.filter(annonce => {
@@ -198,6 +261,8 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       }
 
       // 4. Lancement de l'algorithme avec les données filtrées
+      console.log("diffusuin du jours  ")
+      console.log(diffusionsDuJour)
       const planning = genererPlanningAuto(
         conducteurSelectionne.donnees,
         diffusionsDuJour,
@@ -209,29 +274,127 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       setPlanningEdite(planning);
     } catch (error) {
       console.error("Erreur lors de la génération :", error);
-      alert("Une erreur est survenue lors de l'analyse.");
+      toast.error("Une erreur est survenue lors de l'analyse.");
     } finally {
       setIsGenerating(false);
     }
   };
   // Fonction pour sauvegarder le résultat final en base de données
+  // N'oubliez pas d'importer votre fonction :
+  // import { insererPlanificationsMedia } from '../lib/db.js';
+
   const validerEtSauvegarderPlanning = async () => {
     try {
-      console.log("Données du planning final prêtes à être sauvegardées :", planningEdite);
+      if (!selectedConducteurId) {
+        alert("Erreur : Aucun conducteur n'est sélectionné.");
+        return;
+      }
 
-      // TODO: Insérez ici votre code Supabase pour enregistrer le planningEdite
-      // Exemple : await supabase.from('mon_tableau_planning').insert(planningEdite);
+      const conducteurSelectionne = conducteurpub.find(c => c.id === selectedConducteurId);
+      const dateCible = conducteurSelectionne?.date;
+
+      // On récupère l'ID de la chaîne active (depuis vos props ou contexte global)
+      const chaineIdActuelle = chaineActive?.id || conducteurSelectionne?.chaine_id;
+
+      const planificationsAInserer = [];
+
+      planningEdite.forEach((ecran) => {
+        let heureCouranteStr = ecran.heure_prev || ecran.heure_ecran;
+        if (heureCouranteStr.length === 5) heureCouranteStr += ":00";
+
+        let [h, m, s] = heureCouranteStr.split(':').map(Number);
+        let dateCourante = new Date(2000, 0, 1, h, m, s || 0);
+
+        if (ecran.spots_assignes && ecran.spots_assignes.length > 0) {
+          ecran.spots_assignes.forEach((spot, index) => {
+            if (spot && spot.id) {
+              const durationSec = spot.duration || 30;
+
+              // 1. Si l'utilisateur a forcé une heure, on recalibre l'horloge
+              const heureForcee = ecran.heures_personnalisees?.[index];
+              if (heureForcee) {
+                const [fh, fm, fs] = heureForcee.split(':').map(Number);
+                dateCourante = new Date(2000, 0, 1, fh, fm, fs || 0);
+              }
+
+              const heureDebutStr = dateCourante.toTimeString().split(' ')[0];
+
+              // 2. On avance l'horloge de la durée du spot pour avoir la fin
+              dateCourante.setSeconds(dateCourante.getSeconds() + durationSec);
+              const heureFinStr = dateCourante.toTimeString().split(' ')[0];
+
+              planificationsAInserer.push({
+                episode_id: ecran.episode_id,
+                annonce_id: spot.id,
+                grille_id: ecran.grille_id,
+                chaine_id: chaineIdActuelle,
+                date: dateCible,
+                timestart: heureDebutStr,
+                timeend: heureFinStr
+              });
+            }
+          });
+        }
+      });
+
+      if (planificationsAInserer.length === 0) {
+        alert("Le planning est vide. Assignez au moins une annonce.");
+        return;
+      }
+
+      // Appel direct de votre fonction db.js
+      await insererPlanificationsMedia(planificationsAInserer);
 
       alert("Planning enregistré avec succès !");
+      setPlanningEdite([]); // Nettoyage de l'interface
+      setdatachanged(!datachanged);
 
-      // On vide l'écran de validation pour revenir à l'état initial
-      setPlanningEdite([]);
     } catch (error) {
       console.error("Erreur lors de la sauvegarde :", error);
       alert("Erreur lors de l'enregistrement du planning.");
     }
   };
-  // 2. Fonction déclenchée quand l'utilisateur choisit un programme dans la liste
+
+  // Fonction pour forcer manuellement l'heure d'un spot
+  const modifierHeureSpot = (ecranId, indexSpot, nouvelleHeure) => {
+    const nouveauPlanning = [...planningEdite];
+    const ecranIndex = nouveauPlanning.findIndex(e => e.ecran_id === ecranId);
+
+    // On crée un dictionnaire des heures personnalisées s'il n'existe pas
+    if (!nouveauPlanning[ecranIndex].heures_personnalisees) {
+      nouveauPlanning[ecranIndex].heures_personnalisees = {};
+    }
+
+    // On enregistre l'heure forcée pour cet index précis
+    nouveauPlanning[ecranIndex].heures_personnalisees[indexSpot] = nouvelleHeure;
+
+    setPlanningEdite(nouveauPlanning);
+  };
+  const getHeureSpot = (indexSpot) => {
+    // Si l'utilisateur a forcé l'heure, on l'affiche directement
+    if (ecran.heures_personnalisees?.[indexSpot]) {
+      return ecran.heures_personnalisees[indexSpot];
+    }
+
+    const heureBase = ecran.heure_prev || ecran.heure_ecran;
+    if (!heureBase) return "00:00:00";
+
+    let [h, m, s] = heureBase.split(':').map(Number);
+    let dateTemp = new Date(2000, 0, 1, h, m, s || 0);
+
+    // On cascade en prenant en compte les temps des spots ET les forçages précédents
+    for (let i = 0; i < indexSpot; i++) {
+      if (ecran.heures_personnalisees?.[i]) {
+        const [fh, fm, fs] = ecran.heures_personnalisees[i].split(':').map(Number);
+        dateTemp = new Date(2000, 0, 1, fh, fm, fs || 0);
+      }
+      const duration = ecran.spots_assignes?.[i]?.duration || 30;
+      dateTemp.setSeconds(dateTemp.getSeconds() + duration);
+    }
+
+    return dateTemp.toTimeString().split(' ')[0];
+  }; // 2. Fonction déclenchée quand l'utilisateur choisit un programme dans la liste
+
   const getclassifications = () => {
     const diffusionActuelle = diffusions.find(
       d => d.episode_id === formEpisodeId
@@ -1602,11 +1765,75 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                           {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
                         </span>
                       </p>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide" style={{backgroundColor:"transparent"}}>Conducteur :</label>
+                        <select
+                          className="rounded border border-slate-300 py-0.5 px-2 text-xs bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                          value={selectedConducteurId}
+                          onChange={(e) => setSelectedConducteurId(e.target.value)}
+                        >
+                          <option value="">-- Aucun conducteur lié --</option>
+                          {conducteurpub.map(c => (
+                            <option key={c.id} value={c.id}>
+                              CPB du {c.date ? new Date(c.date).toLocaleDateString('fr-FR') : 'N/C'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* NOUVEAU : Indicateur dynamique des spots requis par le Conducteur */}
+                      {(() => {
+                        if (!selectedConducteurId || !formEpisodeId) return null;
+
+                        const cpb = conducteurpub.find(c => c.id === selectedConducteurId);
+                        const currentDiff = diffusions.find(d => d.episode_id === formEpisodeId);
+
+                        if (!cpb || !cpb.donnees || !currentDiff) return null;
+
+                        // On utilise la même logique infaillible que l'IA pour trouver le bon écran
+                        const minutesDiff = timeToMinutes(currentDiff.heure_debut);
+                        let ecranAssocie = null;
+                        let minDiff = Infinity;
+
+                        cpb.donnees.forEach(ecran => {
+                          const minEcran = timeToMinutes(ecran.heure_prev);
+                          if (minutesDiff <= minEcran) {
+                            const difference = minEcran - minutesDiff;
+                            if (difference < minDiff) {
+                              minDiff = difference;
+                              ecranAssocie = ecran;
+                            }
+                          }
+                        });
+
+                        if (!ecranAssocie) return null;
+
+                        // On compare ce qui est requis avec ce que l'utilisateur a déjà ajouté dans le formulaire
+                        const spotsRequis = ecranAssocie.nb_spots;
+                        const spotsAjoutes = formAnnonces.length;
+                        const isComplet = spotsAjoutes === spotsRequis;
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded w-fit border
+                                ${isComplet ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}
+                              `}>
+                              ⏱️ Conducteur ({ecranAssocie.heure_prev}) : {spotsRequis} spots requis
+                            </span>
+
+                            <span className={`text-[10px] font-bold ${isComplet ? 'text-emerald-600' : 'text-slate-500'}`}>
+                              ({spotsAjoutes} / {spotsRequis} insérés)
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <button
                       onClick={fermerModal}
                       className="text-slate-500 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
                     >
+
+
                       <X size={18} />
                     </button>
                   </div>
@@ -2341,10 +2568,13 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           {!isGenerating && planningEdite.length > 0 && (
             <aside className="w-2/3 bg-white border border-slate-200 rounded-lg flex flex-col overflow-hidden shadow-sm animate-in slide-in-from-right-4">
 
+              {/* CORRECTION 2 : Affichage d'une date lisible au lieu de l'UUID */}
               <div className="bg-[#243c54] p-4 flex justify-between items-center shrink-0">
                 <div>
                   <h2 className="text-lg font-bold text-white">Validation du Planning IA</h2>
-                  <p className="text-xs text-slate-300">Résultat généré </p>
+                  <p className="text-xs text-slate-300">
+                    Résultat généré pour le {conducteurpub.find(c => c.id === selectedConducteurId)?.date || "jour sélectionné"}
+                  </p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setPlanningEdite([])} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-md transition-colors">
@@ -2358,49 +2588,96 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
               <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
                 {planningEdite.map((ecran) => {
-                  // Cibles pour calculer le % de match dans le menu déroulant (si l'IA les a assignées)
+                  const epAssocie = episodes.find(e => e.id === ecran.episode_id);
+                  const progAssocie = epAssocie ? programmes.find(p => p.id === epAssocie.programme_id) : null;
+
+                  const nomProgramme = progAssocie ? (progAssocie.titre || progAssocie.nom) : "Programme Inconnu";
+                  const nomEpisode = epAssocie ? (epAssocie.titre || epAssocie.nom || `Épisode ${epAssocie.numero}`) : "";
+
                   const cibleE = ecran.cible_enfant || 0;
                   const cibleJ = ecran.cible_adulte || 0;
                   const cibleG = ecran.cible_senior || 0;
 
+                  // 🚨 CORRECTION 1 : Le getHeureSpot intelligent (qui lit la saisie utilisateur)
+                  const getHeureSpot = (indexSpot) => {
+                    // Si l'utilisateur a tapé une heure manuelle, on l'affiche prioritairement !
+                    if (ecran.heures_personnalisees?.[indexSpot]) {
+                      return ecran.heures_personnalisees[indexSpot];
+                    }
+
+                    const heureBase = ecran.heure_prev || ecran.heure_ecran;
+                    if (!heureBase) return "00:00:00";
+
+                    let [h, m, s] = heureBase.split(':').map(Number);
+                    let dateTemp = new Date(2000, 0, 1, h, m, s || 0);
+
+                    // Calcul en cascade
+                    for (let i = 0; i < indexSpot; i++) {
+                      // Si un spot PRÉCÉDENT a été forcé manuellement, la cascade repart de cette nouvelle heure !
+                      if (ecran.heures_personnalisees?.[i]) {
+                        const [fh, fm, fs] = ecran.heures_personnalisees[i].split(':').map(Number);
+                        dateTemp = new Date(2000, 0, 1, fh, fm, fs || 0);
+                      }
+                      const duration = ecran.spots_assignes?.[i]?.duration || 30;
+                      dateTemp.setSeconds(dateTemp.getSeconds() + duration);
+                    }
+
+                    return dateTemp.toTimeString().split(' ')[0];
+                  };
+
                   return (
                     <div key={ecran.ecran_id} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-
-                      {/* 1. En-tête de l'écran publicitaire */}
-                      <div className="bg-slate-100/80 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
-                        <div>
-                          <span className="font-mono font-bold text-[#243c54] mr-2">{ecran.heure_ecran}</span>
-                          <span className="text-sm font-medium text-slate-700">{ecran.contexte}</span>
+                      <div className="bg-slate-100/80 border-b border-slate-200 px-4 py-3 flex flex-col gap-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-mono font-bold text-[#243c54] mr-2">{ecran.heure_prev || ecran.heure_ecran}</span>
+                            <span className="text-sm font-medium text-slate-700">{ecran.contexte}</span>
+                          </div>
+                          <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded shrink-0">
+                            {ecran.nb_spots_requis} Spots
+                          </span>
                         </div>
-                        <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded">
-                          {ecran.nb_spots_requis} Spots
-                        </span>
+
+                        <div className="flex items-center gap-2 text-xs text-slate-600 bg-white p-2 rounded border border-slate-200">
+                          <span className="flex items-center justify-center w-5 h-5 rounded bg-indigo-50 text-indigo-600">📺</span>
+                          <span>
+                            Lié à : <strong className="text-slate-800">{nomProgramme}</strong>
+                            {nomEpisode ? ` - ${nomEpisode}` : ''}
+                          </span>
+                          {(!progAssocie) && (
+                            <span className="text-rose-500 font-bold ml-auto">⚠️ Aucun programme détecté</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* 2. Liste des spots (Dropdowns) */}
                       <div className="p-4 space-y-3">
                         {Array.from({ length: ecran.nb_spots_requis }).map((_, index) => {
                           const spotActuel = ecran.spots_assignes?.[index];
+                          const heurePassageExacte = getHeureSpot(index);
 
                           return (
                             <div key={index} className="flex items-center gap-3">
-                              {/* Numéro du spot */}
-                              <div className="w-6 h-6 rounded bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
-                                {index + 1}
+                              <div className="shrink-0">
+                                <input
+                                  type="time"
+                                  step="1"
+                                  className="w-24 text-center rounded border border-slate-300 py-1.5 px-1 text-xs font-mono font-bold text-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors hover:bg-slate-50"
+                                  value={heurePassageExacte}
+                                  onChange={(e) => modifierHeureSpot(ecran.ecran_id, index, e.target.value)}
+                                  title="Modifier l'heure d'insertion de ce spot"
+                                />
                               </div>
 
-                              {/* Sélecteur d'annonce */}
                               <div className="flex-1">
                                 <select
                                   className={`w-full text-sm rounded border py-1.5 px-3 focus:outline-none transition-colors
-                                            ${spotActuel ? 'border-slate-300 focus:border-indigo-500' : 'border-rose-300 bg-rose-50 text-rose-700'}`}
+                                  ${spotActuel ? 'border-slate-300 focus:border-indigo-500' : 'border-rose-300 bg-rose-50 text-rose-700'}`}
                                   value={spotActuel?.id || ""}
                                   onChange={(e) => modifierSpot(ecran.ecran_id, index, e.target.value)}
                                 >
                                   <option value="">-- Spot manquant, veuillez sélectionner --</option>
-
                                   {stockAnnonces
-                                    .filter(stock => stock.PAD) // Garde que le PAD
+                                    .filter(stock => stock.PAD)
                                     .sort((a, b) => {
                                       const diffA = Math.abs(cibleE - (a.enfantpercentage ?? 0)) + Math.abs(cibleJ - (a.jeunepercentage ?? 0)) + Math.abs(cibleG - (a.grand_percentage ?? 0));
                                       const diffB = Math.abs(cibleE - (b.enfantpercentage ?? 0)) + Math.abs(cibleJ - (b.jeunepercentage ?? 0)) + Math.abs(cibleG - (b.grand_percentage ?? 0));
@@ -2420,8 +2697,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                                 </select>
                               </div>
 
-                              {/* Durée du spot sélectionné (ou alerte si vide) */}
-                              <div className="w-16 text-right">
+                              <div className="w-16 text-right shrink-0">
                                 {spotActuel ? (
                                   <span className="text-xs font-mono text-slate-500">{spotActuel.duration || 30}s</span>
                                 ) : (
