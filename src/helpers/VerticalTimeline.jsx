@@ -7,7 +7,7 @@ export function VerticalTimeline({ events }) {
     const typeSaisi = type ? type.toLowerCase() : '';
 
     if (typeSaisi.includes('épisode') || typeSaisi.includes('episode')) {
-      return <Film size={14} style={{ color: "gold" }} />;
+      return <Film size={14} style={{ color: "rgb(36, 60, 84)" }} />;
     }
     if (typeSaisi.includes('programme')) {
       return <Tv size={14} className="text-blue-500" />;
@@ -60,14 +60,19 @@ export function VerticalTimeline({ events }) {
       {events.length === 0 ? (
         <div className="pm-timeline-empty">
           <div className="pm-empty-icon">📺</div>
-          <h3 style={{color:"gray"}}>Aucune diffusion ou annonce aujourd'hui</h3>
+          <h3 style={{ color: "gray" }}>Aucune diffusion ou annonce aujourd'hui</h3>
           <p>Il n'y a aucun événement programmé pour cette date.</p>
         </div>) : (
 
         <div className="pm-timeline">
           {
             events.map((event, index) => {
-              const eventType = event.details?.type || event.type;
+              const eventType = (event.details?.type || event.type || "").toLowerCase();
+
+              // 2. Vérification robuste (gère majuscules/minuscules et corrige la faute)
+              const isProgramme = eventType.includes('épisode') ||
+                eventType.includes('episode') ||
+                eventType.includes('programme');
 
               return (
                 <div
@@ -76,7 +81,13 @@ export function VerticalTimeline({ events }) {
                   tabIndex={0}
                   aria-describedby={`tooltip-${event.id || index}`}
                 >
-                  <div className="pm-timeline-icon-wrapper flex items-center justify-center bg-white border-1 border-slate-100 rounded-full w-7 h-7 z-10 shadow-sm shrink-0 mt-0.5" style={{ backgroundColor: "#243c54" }}>
+                  <div
+                    className="pm-timeline-icon-wrapper flex items-center justify-center border border-slate-100 rounded-full w-7 h-7 z-10 shadow-sm shrink-0 mt-0.5"
+                    style={{
+                      backgroundColor: isProgramme ?  "orange": "#243c54",
+                      // Petite astuce : on force la couleur de l'icône en blanc si le fond est bleu marine
+                    }}
+                  >
                     {renderIcon(eventType)}
                   </div>
 

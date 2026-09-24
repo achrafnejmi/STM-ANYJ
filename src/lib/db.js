@@ -672,8 +672,21 @@ export async function creerSpotBibliotheque(champs) {
   return verifiePremiere(await supabase.from('spot_bibliotheque').insert(champs).select())
 }
 
-export async function mettreAJourSpotBibliotheque(id, champs) {
-  return verifiePremiere(await supabase.from('spot_bibliotheque').update(champs).eq('id', id).select())
+export async function mettreAJourSpotBibliotheque(id, pad) {
+
+  const { data, error } = await supabase
+    .from('plan_media_stock') // Ajustez le nom de la table si besoin
+    .update({ PAD: pad.pad })
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la validation du PAD :", error);
+    throw error;
+  }
+
+  return data;
+
 }
 
 export async function supprimerSpotBibliotheque(id) {

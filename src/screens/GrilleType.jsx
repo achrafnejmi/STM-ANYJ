@@ -47,6 +47,8 @@ import {
   positionVersMinute,
   disposerEnPistes,
 } from '../lib/grilleAxe.js'
+import toast from 'react-hot-toast';
+
 import { construireDonneesGrilleType, construireLignesExcelGrilleType, construireNomFichierGrilleType, ENTETE_GRILLE_TYPE } from '../lib/exportGrilleType.js'
 import Modal from '../components/Modal.jsx'
 import PaletteGenres from '../components/PaletteGenres.jsx'

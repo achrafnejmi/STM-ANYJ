@@ -133,7 +133,8 @@ export default function PlanMediaAdministration({ planMediaId, stockAnnonces, se
 
     // 1. Validation des pourcentages
     const totalPourcentages = Number(enfantpercentage) + Number(jeunepercentage) + Number(grandPercentage);
-    if (totalPourcentages !== 100) {
+    if ((totalPourcentages !== 100) && (totalPourcentages!==0)) {
+      console.log(totalPourcentages);
       toast.error(`La somme des cibles est de ${totalPourcentages}%. Elle doit etre 100%.`);
       return; // Bloque la soumission
     }

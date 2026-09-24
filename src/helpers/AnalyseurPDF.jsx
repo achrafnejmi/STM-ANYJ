@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import toast from 'react-hot-toast';
 import { sauvegarderConducteur, listerConducteurs, supprimerConducteur } from '../lib/db.js';
 // Configuration du worker 100% compatible avec VITE (via chargement local)
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -150,7 +151,7 @@ export default function AnalyseurPDF({ chaineActive }) {
             await chargerHistorique();
 
         } catch (error) {
-            alert("Erreur lors de la sauvegarde du conducteur.");
+            toast.error("Erreur lors de la sauvegarde du conducteur.");
         } finally {
             setIsSaving(false);
         }
@@ -168,7 +169,7 @@ export default function AnalyseurPDF({ chaineActive }) {
             }
             await chargerHistorique();
         } catch (error) {
-            alert("Erreur lors de la suppression.");
+            toast.error("Erreur lors de la suppression.");
         }
     };
 

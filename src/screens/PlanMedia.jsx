@@ -208,14 +208,14 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
   const handleGenererAuto = async () => {
     if (!selectedConducteurId) {
-      alert("Veuillez sélectionner un conducteur (CPB).");
+      toast.error("Veuillez sélectionner un conducteur (CPB).");
       return;
     }
 
     // 1. Récupérer le conducteur sélectionné et sa date
     const conducteurSelectionne = conducteurpub.find(c => c.id === selectedConducteurId);
     if (!conducteurSelectionne || !conducteurSelectionne.donnees) {
-      alert("Données du conducteur introuvables.");
+      toast.error("Données du conducteur introuvables.");
       return;
     }
 
@@ -255,7 +255,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       });
 
       if (annoncesValides.length === 0) {
-        alert(`Aucune annonce valide trouvée pour la date du ${dateCible}.`);
+        toast.error(`Aucune annonce valide trouvée pour la date du ${dateCible}.`);
         setIsGenerating(false);
         return;
       }
@@ -286,7 +286,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
   const validerEtSauvegarderPlanning = async () => {
     try {
       if (!selectedConducteurId) {
-        alert("Erreur : Aucun conducteur n'est sélectionné.");
+        toast.error("Erreur : Aucun conducteur n'est sélectionné.");
         return;
       }
 
@@ -338,20 +338,20 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       });
 
       if (planificationsAInserer.length === 0) {
-        alert("Le planning est vide. Assignez au moins une annonce.");
+        toast.error("Le planning est vide. Assignez au moins une annonce.");
         return;
       }
 
       // Appel direct de votre fonction db.js
       await insererPlanificationsMedia(planificationsAInserer);
 
-      alert("Planning enregistré avec succès !");
+      toast.success("Planning enregistré avec succès !");
       setPlanningEdite([]); // Nettoyage de l'interface
       setdatachanged(!datachanged);
 
     } catch (error) {
       console.error("Erreur lors de la sauvegarde :", error);
-      alert("Erreur lors de l'enregistrement du planning.");
+      toast.error("Erreur lors de l'enregistrement du planning.");
     }
   };
 
