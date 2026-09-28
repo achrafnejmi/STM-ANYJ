@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react'
-import { ArrowLeft, Paperclip, Loader2, Trash2, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Paperclip, Loader2, Trash2, TriangleAlert, ExternalLink } from 'lucide-react'
 import {
   obtenirProgramme,
   creerProgramme,
@@ -16,7 +16,7 @@ import { lireUtilisateur } from '../lib/session.js'
 import { CHAINES } from '../lib/chaines.js'
 import { GENRES } from '../lib/genres.js'
 import { messageNouveauProgramme, messageDemandeProgAT } from '../lib/notifications.js'
-import { peutCreerProgramme, peutEditerProgramme, peutDemanderProgrammation } from '../lib/roles.js'
+import { peutCreerProgramme, peutEditerProgramme, peutEditerLienMplanner, peutDemanderProgrammation } from '../lib/roles.js'
 import { chaineAutoriseeProgramme, estExclusifAutreChaine } from '../lib/exclusivite.js'
 import EpisodesPanel from './EpisodesPanel.jsx'
 import PanneauBible from '../components/PanneauBible.jsx'
@@ -71,6 +71,7 @@ const FORM_VIDE = {
   exclusif: false,
   chaineExclusiveId: '',
   reference_contrat: '',
+  lien_mplanner: '',
 }
 
 // `chaineExclusiveId` garde toujours une valeur (jamais '') même pour un
@@ -99,6 +100,7 @@ function versFormulaire(programme, chaineActive) {
     exclusif: programme.chaine_id != null,
     chaineExclusiveId: programme.chaine_id ?? chaineActive.id,
     reference_contrat: programme.reference_contrat ?? '',
+    lien_mplanner: programme.lien_mplanner ?? '',
   }
 }
 
@@ -200,6 +202,9 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
       interpretes: form.interpretes.trim() || null,
       mots_cles: form.mots_cles.trim() || null,
       reference_contrat: form.reference_contrat.trim() || null,
+      // Champ masqué (pas effacé) quand la production repasse Externe — on ne
+      // perd jamais silencieusement une valeur saisie, cf. CLAUDE.md.
+      lien_mplanner: form.lien_mplanner.trim() || null,
     }
     if (!champs.titre) {
       setErreur('Le titre (français) est obligatoire.')
@@ -329,6 +334,10 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
   // Lecture seule (P45) : Marketing / Digital consulte la fiche (dont l'onglet
   // Historique) sans pouvoir enregistrer quoi que ce soit.
   const lectureSeule = !peutEditerProgramme(roleUtilisateur)
+  // Lien Mplanner (P54) : périmètre plus étroit que le reste de la fiche —
+  // Oumnia/Safae/Super Admin le renseignent, les autres rôles qui éditent la
+  // fiche (Younes le Programmateur, Acquisitions…) le consultent seulement.
+  const peutEditerMplanner = peutEditerLienMplanner(roleUtilisateur)
 
   // Exclusivité inter-chaînes (P37) : ce titre est-il exclusif à une AUTRE
   // chaîne que celle active, et cette chaîne a-t-elle déjà l'autorisation ?
@@ -592,6 +601,60 @@ export default function FicheProgramme({ programmeId: idInitial, chaineActive, o
                 production externe : un contrat est attendu dans l'onglet Droits.
               </p>
             </div>
+
+            {/* Mplanner (P54) : outil externe de gestion des ressources — coût,
+                acteurs… — des productions INTERNES uniquement (une production
+                externe n'a pas de ressources SNRT à planifier). Champ conservé
+                en base même masqué : rebasculer en Interne le retrouve intact.
+                Saisie réservée à Oumnia/Safae/Super Admin (peutEditerMplanner) ;
+                les autres rôles qui éditent la fiche ne font que consulter. */}
+            {form.production === 'INTERNE' && (
+              <div className="border-t border-slate-100 pt-4">
+                {peutEditerMplanner ? (
+                  <div className="flex items-end gap-3">
+                    <div className="max-w-md flex-1">
+                      <Champ
+                        label="Lien Mplanner"
+                        type="url"
+                        value={form.lien_mplanner}
+                        onChange={(v) => setForm({ ...form, lien_mplanner: v })}
+                      />
+                    </div>
+                    {programme?.lien_mplanner && (
+                      <a
+                        href={programme.lien_mplanner}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
+                      >
+                        <ExternalLink size={14} />
+                        Ouvrir Mplanner
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Lien Mplanner</span>
+                    {programme?.lien_mplanner ? (
+                      <a
+                        href={programme.lien_mplanner}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-snrt-navy hover:bg-snrt-navy/5 hover:text-snrt-navy"
+                      >
+                        <ExternalLink size={14} />
+                        Ouvrir Mplanner
+                      </a>
+                    ) : (
+                      <p className="text-sm text-slate-400">Non renseigné.</p>
+                    )}
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-slate-500">
+                  Ressources, coût et acteurs de cette production : gérés dans Mplanner, un outil externe.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
               <div>Créé par : {programme?.cree_par || '—'}</div>

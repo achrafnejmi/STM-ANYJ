@@ -26,9 +26,11 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, rol
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [filtreGenre, setFiltreGenre] = useState('')
+  const [filtreProduction, setFiltreProduction] = useState('')
   const [recherche, setRecherche] = useState('')
   const [page, setPage] = useState(0)
   const idFiltreGenre = useId()
+  const idFiltreProduction = useId()
   const idRecherche = useId()
   const requeteId = useRef(0)
 
@@ -112,13 +114,14 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, rol
 
   useEffect(() => {
     setPage(0)
-  }, [filtreGenre, recherche])
+  }, [filtreGenre, filtreProduction, recherche])
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
     const qBrut = recherche.trim()
     return programmes.filter((p) => {
       if (filtreGenre && p.genre !== filtreGenre) return false
+      if (filtreProduction && p.production !== filtreProduction) return false
       if (!q) return true
       if (p.titre.toLowerCase().includes(q)) return true
       if ((p.titre_ar ?? '').includes(qBrut)) return true
@@ -126,7 +129,7 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, rol
       const eps = episodesParProgrammeId.get(p.id) ?? []
       return eps.some((ep) => (ep.titre ?? '').toLowerCase().includes(q) || (ep.titre_ar ?? '').includes(qBrut))
     })
-  }, [programmes, filtreGenre, recherche, episodesParProgrammeId])
+  }, [programmes, filtreGenre, filtreProduction, recherche, episodesParProgrammeId])
 
   const nbPages = Math.max(1, Math.ceil(filtres.length / TAILLE_PAGE))
   const pageAffichee = Math.min(page, nbPages - 1)
@@ -244,6 +247,21 @@ export default function ListeProgrammes({ chaineActive, onOuvrir, onNouveau, rol
                     {g.fr}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={idFiltreProduction} className="mb-1 block text-sm font-medium text-slate-700">
+                Production
+              </label>
+              <select
+                id={idFiltreProduction}
+                value={filtreProduction}
+                onChange={(e) => setFiltreProduction(e.target.value)}
+                className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">-- Tous --</option>
+                <option value="INTERNE">Interne</option>
+                <option value="EXTERNE">Externe</option>
               </select>
             </div>
           </div>

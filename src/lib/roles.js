@@ -34,6 +34,7 @@ const TOUTES = [
   'GRILLE_NON_LINEAIRE',
   'CONDUCTEUR',
   'PIGE',
+  'RAPPORT_VOLUME',
   'ADMINISTRATION',
   'BIBLE',
   'SYNOPSIS_FR',
@@ -100,9 +101,16 @@ export const SECTIONS_PAR_ROLE = {
   // surtout l'onglet Historique (diffusions linéaires + non-linéaires d'un
   // titre) ; il ne crée, n'édite ni ne supprime rien.
   MARKETING: ['ACCUEIL', 'PROGRAMMES', 'GRILLE_NON_LINEAIRE'],
-  // Audit (P43) : rôle en lecture seule, une seule section — le tableau de bord
-  // « Respect de la grille type ».
-  AUDIT: ['DASHBOARD'],
+  // Audit (P43 — Taoufik, Ilyas) : rôle en LECTURE SEULE, quatre écrans de
+  // constat — « Respect de la grille type », la Grille type et la Grille
+  // linéaire elle-même (la grille type est la référence que la grille
+  // linéaire est censée respecter — l'auditeur doit pouvoir consulter l'une
+  // et l'autre, notamment depuis le lien « Consulter la grille » du tableau
+  // des violations), le rapport de volume horaire (P40) et l'historique des
+  // piges qui l'alimentent (l'import reste réservé à l'Admin de chaîne / au
+  // Super Admin, cf. peutImporterPige). Grille type et Grille linéaire en
+  // LECTURE SEULE — cf. peutEditerGrilleType / peutEditerGrilleLineaire.
+  AUDIT: ['DASHBOARD', 'GRILLE_TYPE', 'GRILLE_LINEAIRE', 'PIGE', 'RAPPORT_VOLUME'],
   // Régie publicitaire (P39a — Abir) : prépare le cadre pub (Conducteur de
   // publicité), rien d'autre.
   REGIE_PUB: ['CONDUCTEUR_PUB'],
@@ -246,6 +254,42 @@ export function peutImporterPige(role) {
 // validation humaine et le calcul des montants restent hors app.
 export function peutCalculerDroitsAuteur(role) {
   return role === 'SUPER_ADMIN' || role === 'GESTION_DROITS_STOCK'
+}
+
+// Rapport de volume horaire (P40) : le volume réellement diffusé, lu depuis la
+// pige, édité en Word — produit par l'Audit (Ilyas, Taoufik) et le Super Admin.
+// C'est un constat, pas un outil de programmation : ni le Programmateur ni
+// l'Admin de chaîne n'y ont accès. Assistant de calcul : la ventilation par
+// programme repose sur un rapprochement de nom approximatif, vérifié avant
+// édition.
+export function peutVoirRapportVolume(role) {
+  return role === 'SUPER_ADMIN' || role === 'AUDIT'
+}
+
+// Édition de la Grille linéaire (P43b) : tous les rôles qui atteignent la
+// section peuvent créer/déplacer/supprimer des diffusions, SAUF l'Audit — il
+// y accède uniquement depuis le tableau des violations de grille type, en
+// consultation (catalogue masqué, création/glisser-déposer/déprogrammer/
+// sélection multiple/undo désactivés).
+export function peutEditerGrilleLineaire(role) {
+  return role !== 'AUDIT'
+}
+
+// Lien Mplanner (P54) : renseigné par la Gestion des droits et du stock
+// (Oumnia) et l'Administrateur de chaîne (Safae), plus le Super Admin — un
+// périmètre plus étroit que peutEditerProgramme (le Programmateur/Younes et
+// le Chargé d'acquisitions éditent le reste de la fiche mais consultent ce
+// lien en lecture seule, cf. son rendu dans FicheProgramme.jsx).
+export function peutEditerLienMplanner(role) {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN_CHAINE' || role === 'GESTION_DROITS_STOCK'
+}
+
+// Édition de la Grille type (P43b) : même principe — tous les rôles qui
+// atteignent la section peuvent créer/étirer/supprimer un bloc, SAUF l'Audit,
+// qui la consulte (référence de ce que la Grille linéaire est censée
+// respecter) sans pouvoir la modifier.
+export function peutEditerGrilleType(role) {
+  return role !== 'AUDIT'
 }
 
 export function libelleRole(code) {

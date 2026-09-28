@@ -2,6 +2,7 @@
 // jamais à Supabase en direct — tout passe par ce module.
 
 import { supabase } from './supabaseClient.js'
+import toast from 'react-hot-toast';
 
 function verifie({ data, error }) {
   if (error) throw error
@@ -671,8 +672,21 @@ export async function creerSpotBibliotheque(champs) {
   return verifiePremiere(await supabase.from('spot_bibliotheque').insert(champs).select())
 }
 
-export async function mettreAJourSpotBibliotheque(id, champs) {
-  return verifiePremiere(await supabase.from('spot_bibliotheque').update(champs).eq('id', id).select())
+export async function mettreAJourSpotBibliotheque(id, pad) {
+
+  const { data, error } = await supabase
+    .from('plan_media_stock') // Ajustez le nom de la table si besoin
+    .update({ PAD: pad.pad })
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la validation du PAD :", error);
+    throw error;
+  }
+
+  return data;
+
 }
 
 export async function supprimerSpotBibliotheque(id) {
@@ -1031,6 +1045,26 @@ export async function listerDiffusionsReellesProgrammesActives() {
   )
 }
 
+// P40 : les diffusions réelles de type PROGRAMME (hors sous-lignes) d'UNE chaîne
+// sur UNE période, issues des imports pige ACTIFS — socle du rapport de volume
+// horaire. Contrairement à listerDiffusionsReellesProgrammesActives (P37b, toutes
+// chaînes), le volume horaire se lit chaîne par chaîne.
+export async function listerDiffusionsReellesParChaineEtPeriode(chaineId, debutISO, finISO) {
+  return verifie(
+    await supabase
+      .from('diffusion_reelle')
+      .select('*, import_pige!inner(actif)')
+      .eq('chaine_id', chaineId)
+      .eq('type_element', 'PROGRAMME')
+      .eq('est_sous_ligne', false)
+      .eq('import_pige.actif', true)
+      .gte('date', debutISO)
+      .lte('date', finISO)
+      .order('date')
+      .order('debut_secondes')
+  )
+}
+
 // --- droit_auteur (P37b : comptage des diffusions payantes pour la finance) ---
 // Une ligne par programme externe que le Chargé d'acquisitions a vérifié.
 // Aucun montant : seuil + exclusions (faux positifs) + override + validation.
@@ -1052,3 +1086,343 @@ export async function enregistrerDroitAuteur(programmeId, champs) {
       .select()
   )
 }
+
+
+
+// --- plan_media_stock ---
+
+export async function listerPlanMediaStockParPlanMedia(planMediaId) {
+  return verifie(
+    await supabase
+      .from('plan_media_stock')
+      .select('*')
+      .eq('plan_media_id', planMediaId)
+      .order('cree_le', { ascending: false })
+  )
+}
+
+export async function creerPlanMediaStock(champs) {
+  return verifiePremiere(
+    await supabase.from('plan_media_stock').insert(champs).select()
+  )
+}
+
+export async function mettreAJourPlanMediaStock(id, champs) {
+  return verifiePremiere(
+    await supabase.from('plan_media_stock').update(champs).eq('id', id).select()
+  )
+}
+
+export async function supprimerPlanMediaStock(id) {
+  verifie(
+    await supabase.from('plan_media_stock').delete().eq('id', id).select()
+  )
+}
+
+export async function insererPlanificationsMedia(planificationsArray) {
+  // planificationsArray est un tableau d'objets contenant les champs requis
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .insert(planificationsArray)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de l'insertion des planifications :", error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listerPlanificationsMedia() {
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .select(`
+      *,
+      episode (*),
+      plan_media_stock (*)
+    `)
+    .order('date', { ascending: true })
+    .order('timestart', { ascending: true });
+
+  if (error) {
+    console.error("Erreur lors du chargement des planifications :", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function mettreAJourPlanificationMedia(id, champsModifies) {
+  const { data, error } = await supabase
+    .from('planmediaplanifications')
+    .update(champsModifies)
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la mise à jour de la planification :", error);
+    throw error;
+  }
+  return data;
+}
+export async function supprimerPlanificationMedia(id) {
+  const { error } = await supabase
+    .from('planmediaplanifications')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error("Erreur lors de la suppression de la planification :", error);
+    throw error;
+  }
+  return true;
+}
+
+
+// Récupérer toutes les classifications
+export async function listerClassificationsProgrammes() {
+  const { data, error } = await supabase
+    .from('programmes_classifications')
+    .select('*');
+
+  if (error) {
+    console.error("Erreur lors de la récupération des classifications :", error);
+    throw error;
+  }
+  return data;
+}
+
+// Ajouter ou mettre à jour la classification d'un programme (Upsert)
+export async function enregistrerClassificationProgramme(programme_id, scores) {
+  const { data, error } = await supabase
+    .from('programmes_classifications')
+    .upsert(
+      {
+        programme_id,
+        enfant_point: scores.enfant,
+        adult_point: scores.adult,
+        senior_point: scores.senior
+      },
+      { onConflict: 'programme_id' } // Met à jour si le programme a déjà une classification
+    )
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de l'enregistrement de la classification :", error);
+    throw error;
+  }
+  return data;
+}
+
+
+
+export async function data_refrech(grille_id) {
+  try {
+    const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-programme/${grille_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+      // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+    });
+
+    const jsonIA = await reponse.json();
+
+    if (jsonIA.succes && jsonIA.donnees) {
+      console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+      // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+    } else {
+      console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
+    }
+  } catch (erreur) {
+    console.error("Erreur de connexion avec le backend IA :", erreur);
+  }
+}
+
+
+export async function data_annonce_refrech() {
+  try {
+    const reponse = await fetch(`http://localhost:3001/api/refrech-classifier-toutes-annonces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+      // Le body n'est plus nécessaire ici car la grille_id est dans l'URL
+    });
+
+    const jsonIA = await reponse.json();
+
+    if (jsonIA.succes && jsonIA.donnees) {
+      console.log(`${jsonIA.donnees.totalAnalyses} classifications IA enregistrées avec succès en masse !`);
+      // Déclenchez ici le rafraîchissement de votre UI si nécessaire
+    } else {
+      console.error("Le backend a retourné une erreur :", jsonIA.message || jsonIA.error);
+    }
+  } catch (erreur) {
+    console.error("Erreur de connexion avec le backend IA :", erreur);
+  }
+}
+
+
+const timeToSec = (time) => {
+  if (!time) return 0;
+  const parts = time.toString().split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
+  return 0;
+};
+
+// Ajoutez cette fonction utilitaire dans votre composant (ou en dehors) pour calculer les anomalies à la volée avant la sauvegarde
+const calculerAnomaliesPourSauvegarde = (donneesBrutesExcel, planAnnonces, planProgrammes) => {
+  // Logique simplifiée pour extraire les stats au moment de l'upload
+  // (Vous réutilisez ici la logique de votre useMemo)
+
+  const analyser = (typeData, planRef) => {
+    let count = 0;
+    const anomaliesList = [];
+    const analysees = typeData.map(spotReel => {
+      const secReel = timeToSec(spotReel.debut);
+      const spotPrevu = planRef.find(prevu => Math.abs(timeToSec(prevu.debut) - secReel) <= (planRef === planAnnonces ? 300 : 2700));
+
+      if (spotPrevu) {
+        const secPrevu = timeToSec(spotPrevu.debut);
+        if (secPrevu !== secReel) {
+          count++;
+          anomaliesList.push({ type: 'Retard', detail: spotReel, prevu: spotPrevu, time: secReel, ecart: secReel - secPrevu });
+        }
+        return { ...spotReel, matchedPlanId: spotPrevu.id };
+      }
+      count++;
+      anomaliesList.push({ type: 'Fantôme', detail: spotReel, time: secReel });
+      return spotReel;
+    });
+
+    planRef.forEach(prevu => {
+      if (!analysees.some(reel => reel.matchedPlanId === prevu.id)) {
+        count++;
+        anomaliesList.push({ type: 'Omission', detail: prevu, time: timeToSec(prevu.debut) });
+      }
+    });
+
+    return { count, list: anomaliesList };
+  };
+
+  // Filtrage brut rapide
+  const annoncesBrutes = donneesBrutesExcel.filter(row => row['Programme'] === 'AUTO PROMOTION' || row['Genre Niv.2'] === 'AUTO PROMOTION');
+  const progsBruts = donneesBrutesExcel.filter(row => row['Programme'] && row['Programme'] !== 'AUTO PROMOTION');
+
+  const resAnnonces = analyser(annoncesBrutes, planAnnonces);
+  const resProgs = analyser(progsBruts, planProgrammes);
+
+  return {
+    stats: { annonces: resAnnonces.count, programmes: resProgs.count, total: resAnnonces.count + resProgs.count },
+    anomalies: { annonces: resAnnonces.list, programmes: resProgs.list }
+  };
+};
+
+export const sauvegarderPigeEnBase = async (fileName, excelData, chaineId, planAnnonces, planProgrammes) => {
+  const { stats, anomalies } = calculerAnomaliesPourSauvegarde(excelData, planAnnonces, planProgrammes);
+
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .insert([{
+      file_name: fileName,
+      chaine_id: chaineId,
+      raw_data: excelData,
+      stats: stats,
+      anomalies: anomalies
+    }])
+    .select();
+
+  if (error) {
+    console.error("Erreur lors de la sauvegarde :", error);
+    return null;
+  }
+  return data[0];
+};
+
+export const chargerHistoriquePiges = async () => {
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .select('id, file_name, created_at, stats')
+    .order('created_at', { ascending: false });
+
+  if (!error && data) return data;
+  return null;
+};
+
+export const handleDeletePige = async (pigeId) => {
+  const { error } = await supabase
+    .from('pige_uploads')
+    .delete()
+    .eq('id', pigeId);
+
+  if (error) { console.error("Erreur de suppression", error); toast.error("Error durant la suppression de la pige !!!") }
+  toast.success("Pige supprimer");
+  return !error; // Retourne true si succès, false sinon
+};
+
+export const chargerPigeDetail = async (pigeId) => {
+  const { data, error } = await supabase
+    .from('pige_uploads')
+    .select('raw_data, file_name')
+    .eq('id', pigeId)
+    .single();
+
+  if (error) {
+    console.error("Erreur lors du chargement des détails :", error);
+    return null;
+  }
+  return data;
+};
+
+
+// ==========================================
+// GESTION DES CONDUCTEURS (Import PDF)
+// ==========================================
+
+// 1. SAUVEGARDER (Create)
+// 1. SAUVEGARDER
+export const sauvegarderConducteur = async (dateConducteur, idChaine, donneesExtract) => {
+  const { data, error } = await supabase
+    .from('conducteurs')
+    .insert([
+      {
+        date: dateConducteur,
+        chaine_id: idChaine, // On envoie l'ID
+        donnees: donneesExtract
+      }
+    ])
+    .select();
+
+  if (error) throw error;
+  return data[0];
+};
+
+// 2. LISTER
+export const listerConducteurs = async (idChaine = null) => {
+  let requete = supabase
+    .from('conducteurs')
+    .select('*')
+    .order('date', { ascending: false });
+
+  // Filtrage natif ultra-rapide par ID
+  if (idChaine) {
+    requete = requete.eq('chaine_id', idChaine);
+  }
+
+  const { data, error } = await requete;
+  if (error) throw error;
+  return data;
+};
+
+// 3. SUPPRIMER (Delete)
+export const supprimerConducteur = async (idConducteur) => {
+  const { data, error } = await supabase
+    .from('conducteurs')
+    .delete()
+    .eq('id', idConducteur);
+
+  if (error) {
+    console.error("Erreur Supabase (supprimerConducteur) :", error);
+    throw error;
+  }
+
+  return data;
+};

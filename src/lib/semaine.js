@@ -264,3 +264,44 @@ export function datesParPas(debutISO, finISO, pas) {
   }
   return dates
 }
+
+// --- Période glissante Jour / Semaine / Mois (P36c puis P40) ------------------
+// Trois utilitaires partagés par les écrans qui filtrent sur une période à
+// granularité variable : la section Pige (historique des imports) et le Rapport
+// de volume horaire. Extraits de Pige.jsx en P40 plutôt que dupliqués.
+// `granularite` : 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE' | 'TOUT' (TOUT = pas de
+// bornes, utilisé par la Pige seulement — un rapport exige toujours une période
+// bornée ; ANNEE sert au rapport de volume horaire annuel, P40).
+
+// Bornes ISO [début, fin] de la période affichée ([null, null] = pas de filtre).
+export function bornesPeriode(granularite, refDate) {
+  if (granularite === 'JOUR') return [refDate, refDate]
+  if (granularite === 'SEMAINE') {
+    const lundi = lundiDeLaSemaine(refDate)
+    return [lundi, ajouterJours(lundi, 6)]
+  }
+  if (granularite === 'MOIS') return [premierJourMois(refDate), dernierJourMois(refDate)]
+  if (granularite === 'ANNEE') {
+    const annee = new Date(`${refDate}T00:00:00Z`).getUTCFullYear()
+    return [`${annee}-01-01`, `${annee}-12-31`]
+  }
+  return [null, null]
+}
+
+export function labelPeriode(granularite, refDate) {
+  if (granularite === 'JOUR') return formaterDateLongue(refDate)
+  if (granularite === 'SEMAINE') return formaterPlageSemaine(lundiDeLaSemaine(refDate))
+  if (granularite === 'MOIS') return formaterMoisAnnee(refDate)
+  if (granularite === 'ANNEE') return formaterAnnee(refDate)
+  return 'Toute la période'
+}
+
+// Date de référence décalée d'une période entière (`sens` = -1 / +1). Pure :
+// l'appelant fait `setRefDate((d) => decalerRefPeriode(granularite, d, sens))`.
+export function decalerRefPeriode(granularite, refDate, sens) {
+  if (granularite === 'JOUR') return ajouterJours(refDate, sens)
+  if (granularite === 'SEMAINE') return ajouterJours(refDate, sens * 7)
+  if (granularite === 'MOIS') return ajouterMois(refDate, sens)
+  if (granularite === 'ANNEE') return ajouterAnnees(refDate, sens)
+  return refDate
+}

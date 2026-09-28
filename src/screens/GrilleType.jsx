@@ -18,6 +18,7 @@ import {
   Save,
   FileUp,
   MoreHorizontal,
+  CircleAlert,
 } from 'lucide-react'
 import {
   listerGrillesTypeParChaine,
@@ -36,6 +37,7 @@ import { enregistrerAction, etatPile, annulerDerniereAction, retablirAction, fus
 import { GENRES } from '../lib/genres.js'
 import { couleurGenre } from '../lib/couleursGenre.js'
 import { minutesEnHeure, minutesDepuisDebutAntenne, DEBUT_JOURNEE_ANTENNE, aujourdHuiISO, formaterDateJJMMAAAA } from '../lib/semaine.js'
+import { peutEditerGrilleType } from '../lib/roles.js'
 import {
   PRESETS_ZOOM,
   INDEX_ZOOM_DEFAUT,
@@ -45,6 +47,8 @@ import {
   positionVersMinute,
   disposerEnPistes,
 } from '../lib/grilleAxe.js'
+import toast from 'react-hot-toast';
+
 import { construireDonneesGrilleType, construireLignesExcelGrilleType, construireNomFichierGrilleType, ENTETE_GRILLE_TYPE } from '../lib/exportGrilleType.js'
 import Modal from '../components/Modal.jsx'
 import PaletteGenres from '../components/PaletteGenres.jsx'
@@ -141,7 +145,10 @@ function calculerNouveauxJours(joursOriginaux, jourOccurrence, mode, jourPointeu
   return [...jours].sort((a, b) => a - b)
 }
 
-export default function GrilleType({ chaineActive }) {
+export default function GrilleType({ chaineActive, roleUtilisateur, grilleTypeCible }) {
+  // P43b : même traitement que GrilleLineaire.jsx — l'Audit atteint cet écran
+  // depuis le menu, en LECTURE SEULE (peutEditerGrilleType).
+  const lectureSeule = !peutEditerGrilleType(roleUtilisateur)
   // Tous les blocs de la chaîne (toutes grilles type confondues), même
   // pattern que `diffusions`/`diffusionsGrilleActive` en Grille linéaire
   // (P23) : un seul chargement par chaîne, filtrage en mémoire par document
@@ -167,6 +174,10 @@ export default function GrilleType({ chaineActive }) {
   const [blocsSelectionnesIds, setBlocsSelectionnesIds] = useState(() => new Set())
   const [presseGaPapier, setPresseGaPapier] = useState([])
   const [importOuvert, setImportOuvert] = useState(false)
+  // Surlignage temporaire d'un bloc (bouton « Grille type » du tableau des
+  // violations, P43b — même mécanique que GrilleLineaire.jsx/Pige.jsx).
+  const [blocFlashId, setBlocFlashId] = useState(null)
+  const flashFaitPourRef = useRef(null)
   const dragRef = useRef(null)
   const colonneRefs = useRef([])
   const etatRedimRef = useRef(null) // { bloc, mode, jourOccurrence, rectsColonnes }
@@ -207,6 +218,37 @@ export default function GrilleType({ chaineActive }) {
   useEffect(() => {
     if (grillesTypeOuvertesIds.length > 0) definirGrillesTypeOuvertes(chaineActive.code, grillesTypeOuvertesIds)
   }, [chaineActive.code, grillesTypeOuvertesIds])
+
+  // Arrivée depuis le tableau des violations (P43b) : bascule sur le document
+  // qui contient le bloc visé, même s'il n'était pas déjà ouvert (un bloc
+  // récurrent n'est pas daté — pas de navigation de période à gérer, juste le
+  // bon onglet).
+  useEffect(() => {
+    if (!grilleTypeCible?.blocId) return
+    const bloc = blocsChaine.find((b) => b.id === grilleTypeCible.blocId)
+    if (!bloc) return
+    setGrillesTypeOuvertesIds((prev) => (prev.includes(bloc.grille_type_id) ? prev : [...prev, bloc.grille_type_id]))
+    setGrilleTypeActiveId(bloc.grille_type_id)
+  }, [grilleTypeCible, blocsChaine])
+
+  // Une fois le bon document effectivement actif, centre et surligne le bloc
+  // ~2,6 s. Un bloc récurrent apparaît sur plusieurs colonnes (un par jour de
+  // semaine où il est actif) : `data-bloc-id` (pas `id`, dupliqué exprès) sur
+  // chaque occurrence pour que le surlignage s'applique à toutes, en
+  // scrollant vers la première (querySelector).
+  useEffect(() => {
+    if (!grilleTypeCible?.cle || !grilleTypeCible?.blocId) return
+    if (flashFaitPourRef.current === grilleTypeCible.cle) return
+    const bloc = blocsChaine.find((b) => b.id === grilleTypeCible.blocId)
+    if (!bloc || bloc.grille_type_id !== grilleTypeActiveId) return
+    flashFaitPourRef.current = grilleTypeCible.cle
+    setBlocFlashId(grilleTypeCible.blocId)
+    document
+      .querySelector(`[data-bloc-id="${grilleTypeCible.blocId}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const t = setTimeout(() => setBlocFlashId(null), 2600)
+    return () => clearTimeout(t)
+  }, [grilleTypeCible, blocsChaine, grilleTypeActiveId])
 
   const grilleTypeActive = useMemo(() => grillesType.find((g) => g.id === grilleTypeActiveId) ?? null, [grillesType, grilleTypeActiveId])
   const grillesTypeOuvertes = useMemo(
@@ -301,7 +343,7 @@ export default function GrilleType({ chaineActive }) {
   }
 
   async function gererAnnuler() {
-    if (!grilleTypeActive) return
+    if (lectureSeule || !grilleTypeActive) return
     const resultat = await annulerDerniereAction(chaineActive.id, 'GRILLE_TYPE', grilleTypeActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
@@ -311,7 +353,7 @@ export default function GrilleType({ chaineActive }) {
   }
 
   async function gererRetablir() {
-    if (!grilleTypeActive) return
+    if (lectureSeule || !grilleTypeActive) return
     const resultat = await retablirAction(chaineActive.id, 'GRILLE_TYPE', grilleTypeActive.id)
     if (!resultat.ok) {
       setErreur(resultat.motif)
@@ -329,6 +371,7 @@ export default function GrilleType({ chaineActive }) {
   }
 
   function deposerType(jourIndex, minuteDebut) {
+    if (lectureSeule) return
     const payload = dragRef.current
     dragRef.current = null
     if (!payload) return
@@ -348,6 +391,7 @@ export default function GrilleType({ chaineActive }) {
   // glisser-déposer, valeurs génériques (renommables tout de suite dans le
   // panneau qui s'ouvre juste après, comme pour le dépôt).
   function nouveauBlocGenerique() {
+    if (lectureSeule) return
     const genre = GENRES[0]
     creerAvecVerification({
       nom: genre.fr,
@@ -373,6 +417,7 @@ export default function GrilleType({ chaineActive }) {
   // que PanneauBlocGrilleType.jsx (écriture, undo), avec confirmation en plus
   // vu le risque de clic accidentel sur une cible aussi petite.
   async function supprimerBlocDirect(bloc) {
+    if (lectureSeule) return
     const confirme = await confirmer({
       titre: 'Supprimer le bloc',
       message: `Supprimer le bloc « ${bloc.nom || bloc.genre_attendu || 'bloc'} » ?`,
@@ -398,6 +443,7 @@ export default function GrilleType({ chaineActive }) {
   // DnD (nécessaire pour un retour visuel continu). Une seule écriture au
   // relâchement ; annulation possible si chevauchement refusé.
   function demarrerRedimensionnement(e, bloc, jourOccurrence, mode) {
+    if (lectureSeule) return
     e.preventDefault()
     e.stopPropagation()
     const rectsColonnes = colonneRefs.current.map((el) => el?.getBoundingClientRect())
@@ -545,7 +591,7 @@ export default function GrilleType({ chaineActive }) {
   }
 
   async function definirLiveGrilleType() {
-    if (!grilleTypeActive || grilleTypeActive.est_live) return
+    if (lectureSeule || !grilleTypeActive || grilleTypeActive.est_live) return
     const liveActuelle = grillesType.find((g) => g.est_live)
     const confirme = await confirmer({
       titre: 'Définir comme live',
@@ -581,6 +627,7 @@ export default function GrilleType({ chaineActive }) {
   // --- Sélection multiple + copier/coller (P28b, même pattern que GrilleLineaire.jsx/P23) ---
 
   function activerSelection() {
+    if (lectureSeule) return
     setSelectionActive(true)
     setBlocsSelectionnesIds(new Set())
   }
@@ -613,7 +660,7 @@ export default function GrilleType({ chaineActive }) {
   // explicitement, même principe que coller() de Grille linéaire qui ne
   // bloque pas non plus sur un conflit d'horaire.
   async function coller() {
-    if (!grilleTypeActive || presseGaPapier.length === 0) return
+    if (lectureSeule || !grilleTypeActive || presseGaPapier.length === 0) return
     const lignes = presseGaPapier.map((item) => ({ ...item, chaine_id: chaineActive.id, grille_type_id: grilleTypeActive.id }))
     const creees = []
     for (const ligne of lignes) {
@@ -702,6 +749,7 @@ export default function GrilleType({ chaineActive }) {
   // pour changer OU fermer (bloc=null) le bloc inspecté — blocModifie est
   // reporté par PanneauBlocGrilleType.
   async function selectionnerBloc(bloc) {
+    if (lectureSeule) return
     if (Date.now() - dernierRedimTermineRef.current < 200) return // ignore le clic qui suit un étirement (mousedown/up sur le même bloc)
     if (blocSelectionne && blocModifie) {
       const ok = await confirmer({
@@ -718,6 +766,12 @@ export default function GrilleType({ chaineActive }) {
 
   return (
     <div className="space-y-6">
+      {lectureSeule && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">
+          <CircleAlert size={14} />
+          Consultation (Audit) — lecture seule : création, glisser-déposer, étirement, suppression et annuler/rétablir désactivés.
+        </div>
+      )}
       {suggestionSaisonniere && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span>
@@ -770,14 +824,16 @@ export default function GrilleType({ chaineActive }) {
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => setModaleGrilleType('OUVRIR')}
-            title="Ouvrir une grille type"
-            className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
-          >
-            <Plus size={15} />
-          </button>
+          {!lectureSeule && (
+            <button
+              type="button"
+              onClick={() => setModaleGrilleType('OUVRIR')}
+              title="Ouvrir une grille type"
+              className="rounded-md border border-dashed border-slate-300 p-1.5 text-slate-500 hover:border-snrt-navy hover:text-snrt-navy"
+            >
+              <Plus size={15} />
+            </button>
+          )}
 
           {grilleTypeActive && (
             <div className="ml-auto flex items-center gap-1.5">
@@ -788,7 +844,7 @@ export default function GrilleType({ chaineActive }) {
                 sousTitre={`${grilleTypeActive.nom} — ${blocs.length} bloc${blocs.length > 1 ? 's' : ''}`}
                 className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-snrt-accent hover:bg-snrt-accent/5 hover:text-snrt-accent"
               />
-              {!grilleTypeActive.est_live && (
+              {!lectureSeule && !grilleTypeActive.est_live && (
                 <button
                   type="button"
                   onClick={definirLiveGrilleType}
@@ -797,14 +853,16 @@ export default function GrilleType({ chaineActive }) {
                   Définir comme live
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setMenuDocumentOuvert(true)}
-                title="Autres actions (renommer, dupliquer, supprimer)"
-                className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
+              {!lectureSeule && (
+                <button
+                  type="button"
+                  onClick={() => setMenuDocumentOuvert(true)}
+                  title="Autres actions (renommer, dupliquer, supprimer)"
+                  className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-50"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -814,17 +872,19 @@ export default function GrilleType({ chaineActive }) {
             <h2 className="text-base font-semibold text-slate-900">Grille type — {chaineActive.nom}</h2>
             <p className="text-sm text-slate-500">La grille type décrit la structure de la journée, pas les titres.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={nouveauBlocGenerique}
-              disabled={!grilleTypeActive}
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
-            >
-              <Plus size={14} />
-              Ajouter un bloc
-            </button>
-          </div>
+          {!lectureSeule && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={nouveauBlocGenerique}
+                disabled={!grilleTypeActive}
+                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover disabled:opacity-60"
+              >
+                <Plus size={14} />
+                Ajouter un bloc
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
@@ -835,7 +895,7 @@ export default function GrilleType({ chaineActive }) {
               value={String(indexZoom)}
               onChange={(c) => setIndexZoom(Number(c))}
             />
-            {!selectionActive && (
+            {!lectureSeule && !selectionActive && (
               <button
                 type="button"
                 onClick={activerSelection}
@@ -845,7 +905,7 @@ export default function GrilleType({ chaineActive }) {
                 Sélectionner
               </button>
             )}
-            {selectionActive && (
+            {!lectureSeule && selectionActive && (
               <div className="flex items-center gap-2 rounded-md border border-snrt-navy bg-snrt-navy/5 px-2.5 py-1 text-xs text-snrt-navy">
                 <span>{blocsSelectionnesIds.size} sélectionné(s)</span>
                 <button
@@ -861,7 +921,7 @@ export default function GrilleType({ chaineActive }) {
                 </button>
               </div>
             )}
-            {presseGaPapier.length > 0 && (
+            {!lectureSeule && presseGaPapier.length > 0 && (
               <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
                 <span>{presseGaPapier.length} copié(s)</span>
                 <button type="button" onClick={coller} className="flex items-center gap-1 font-medium underline hover:no-underline">
@@ -873,6 +933,7 @@ export default function GrilleType({ chaineActive }) {
                 </button>
               </div>
             )}
+            {!lectureSeule && (
             <div className="flex rounded-md border border-slate-300">
               <button
                 type="button"
@@ -893,6 +954,7 @@ export default function GrilleType({ chaineActive }) {
                 <Redo2 size={15} />
               </button>
             </div>
+            )}
           </div>
         </div>
 
@@ -908,26 +970,28 @@ export default function GrilleType({ chaineActive }) {
             {pleinEcran ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
             Plein écran
           </button>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setImportOuvert(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
-              title="Importer une grille type depuis un fichier Excel"
-            >
-              <FileUp size={14} />
-              Importer
-            </button>
-            <button
-              type="button"
-              onClick={() => succes('Grille type enregistrée ✓')}
-              title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
-              className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
-            >
-              <Save size={14} />
-              Enregistrer
-            </button>
-          </div>
+          {!lectureSeule && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setImportOuvert(true)}
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                title="Importer une grille type depuis un fichier Excel"
+              >
+                <FileUp size={14} />
+                Importer
+              </button>
+              <button
+                type="button"
+                onClick={() => succes('Grille type enregistrée ✓')}
+                title="Chaque action écrit déjà en base immédiatement — ce bouton confirme simplement que tout est à jour."
+                className="flex items-center gap-1.5 rounded-md bg-snrt-navy px-2.5 py-1 text-xs font-medium text-white hover:bg-snrt-navy-hover"
+              >
+                <Save size={14} />
+                Enregistrer
+              </button>
+            </div>
+          )}
         </div>
 
         {genresPresents.length > 0 && (
@@ -948,7 +1012,7 @@ export default function GrilleType({ chaineActive }) {
       </div>
 
       <div className="flex items-start gap-4">
-        {!pleinEcran && <PaletteGenres dragRef={dragRef} />}
+        {!pleinEcran && !lectureSeule && <PaletteGenres dragRef={dragRef} />}
 
         {!chargement && (
           <div className="flex-1 rounded-lg border border-slate-200 bg-white p-4">
@@ -1035,13 +1099,21 @@ export default function GrilleType({ chaineActive }) {
                         const { fond, texte } = couleurGenre(bloc.genre_attendu)
                         const estSelectionne = blocSelectionne?.id === bloc.id
                         const estCoche = selectionActive && blocsSelectionnesIds.has(bloc.id)
+                        const enFlash = blocFlashId === bloc.id
                         return (
                           <button
                             type="button"
                             key={bloc.id}
+                            data-bloc-id={bloc.id}
                             onClick={() => (selectionActive ? toggleSelectionBloc(bloc.id) : selectionnerBloc(bloc))}
-                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${fond} ${texte} ${
-                              estCoche ? 'ring-2 ring-offset-1 ring-emerald-600' : estSelectionne ? 'ring-2 ring-offset-1 ring-snrt-navy' : ''
+                            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm transition-shadow ${lectureSeule ? 'cursor-default' : ''} ${fond} ${texte} ${
+                              enFlash
+                                ? 'ring-4 ring-offset-1 ring-amber-400'
+                                : estCoche
+                                  ? 'ring-2 ring-offset-1 ring-emerald-600'
+                                  : estSelectionne
+                                    ? 'ring-2 ring-offset-1 ring-snrt-navy'
+                                    : ''
                             }`}
                             style={{
                               top: `${top}px`,
@@ -1050,7 +1122,7 @@ export default function GrilleType({ chaineActive }) {
                               width: `${100 / nbPistes}%`,
                             }}
                           >
-                            {!selectionActive && (
+                            {!selectionActive && !lectureSeule && (
                               <>
                                 <div
                                   className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize hover:bg-black/20"

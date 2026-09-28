@@ -16,6 +16,8 @@ import {
   marquerToutesNotificationsLues,
   obtenirUtilisateur,
 } from './lib/db.js'
+import { Toaster } from 'react-hot-toast';
+
 import { calculerNotificationsDroitsManquantes, SECTIONS_CIBLE_NOTIFICATION } from './lib/notifications.js'
 import Login from './screens/Login.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -39,6 +41,7 @@ import ConducteurPub from './screens/ConducteurPub.jsx'
 import GrilleNonLineaire from './screens/GrilleNonLineaire.jsx'
 import Conducteur from './screens/Conducteur.jsx'
 import Pige from './screens/Pige.jsx'
+import RapportVolume from './screens/RapportVolume.jsx'
 import DemandesProgrammation from './screens/DemandesProgrammation.jsx'
 import PilotageDroitsStock from './screens/PilotageDroitsStock.jsx'
 import SuiviPad from './screens/SuiviPad.jsx'
@@ -64,6 +67,7 @@ const ECRANS = {
   GRILLE_NON_LINEAIRE: GrilleNonLineaire,
   CONDUCTEUR: Conducteur,
   PIGE: Pige,
+  RAPPORT_VOLUME: RapportVolume,
   DEMANDES_PROGRAMMATION: DemandesProgrammation,
   PILOTAGE_DROITS_STOCK: PilotageDroitsStock,
   SUIVI_PAD: SuiviPad,
@@ -93,6 +97,8 @@ function App() {
   const [programmeCible, setProgrammeCible] = useState(null)
   const [synopsisCible, setSynopsisCible] = useState(null)
   const [pigeCible, setPigeCible] = useState(null)
+  const [grilleCible, setGrilleCible] = useState(null)
+  const [grilleTypeCible, setGrilleTypeCible] = useState(null)
   // Centre de notifications (P29) : persistant, lu/non lu par chaîne (pas
   // d'utilisateur durable, cf. session.js). NOUVEAU_PROGRAMME est écrit au
   // moment de la création (FicheProgramme.jsx) ; DROITS_PROCHES est
@@ -230,7 +236,7 @@ function App() {
     const id = setInterval(() => {
       listerNotificationsParChaine(chaineActive.id)
         .then(setNotifications)
-        .catch(() => {})
+        .catch(() => { })
     }, 30000)
     return () => clearInterval(id)
   }, [chaineActive])
@@ -289,6 +295,25 @@ function App() {
     setPigeCible({ id: importId, ligneId, cle: crypto.randomUUID() })
   }
 
+  // Ouvre la Grille linéaire à une date précise, avec la diffusion visée
+  // surlignée (clic « Consulter la grille » depuis le tableau des violations
+  // de grille type, P43b). `diffusionId` optionnel : sans lui, on ouvre juste
+  // la bonne semaine.
+  function ouvrirGrilleADate(date, diffusionId = null) {
+    naviguer('GRILLE_LINEAIRE')
+    setGrilleCible({ date, diffusionId, cle: crypto.randomUUID() })
+  }
+
+  // Ouvre la Grille type à un bloc précis (bouton « Grille type » du tableau
+  // des violations, P43b). Un bloc de grille type est récurrent par jour de
+  // semaine, pas daté — pas de navigation de période à gérer, juste basculer
+  // sur le bon document et surligner. `blocId` optionnel : les lignes « hors
+  // bloc » n'ont aucun bloc à montrer, on ouvre juste la grille type LIVE.
+  function ouvrirGrilleType(blocId = null) {
+    naviguer('GRILLE_TYPE')
+    setGrilleTypeCible({ blocId, cle: crypto.randomUUID() })
+  }
+
   // Ouvre l'écran de rédaction du synopsis (P39/P40) présélectionné sur un
   // programme — vers la section de la langue que le rôle courant peut voir.
   function ouvrirSynopsis(id) {
@@ -335,6 +360,8 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
+      <Toaster position="top-right" />
+
       <Sidebar
         section={section}
         sections={sectionsVisibles}
@@ -369,12 +396,17 @@ function App() {
             programmeCible={programmeCible}
             synopsisCible={synopsisCible}
             pigeCible={pigeCible}
+            grilleCible={grilleCible}
+            grilleTypeCible={grilleTypeCible}
             langue={langueEcran}
             onOuvrirProgramme={ouvrirProgramme}
             onOuvrirSynopsis={ouvrirSynopsis}
             onOuvrirPige={ouvrirPige}
+            onOuvrirGrille={ouvrirGrilleADate}
+            onOuvrirGrilleType={ouvrirGrilleType}
             onNotificationCreee={rafraichirNotifications}
             roleUtilisateur={roleUtilisateur}
+            Utilisateur={utilisateurCourant}
           />
         </main>
       </div>
