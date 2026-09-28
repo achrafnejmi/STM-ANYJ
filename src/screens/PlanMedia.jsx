@@ -1313,7 +1313,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
       {/* MODAL D'EXPORTATION EXCEL */}
       {modalExportOuvert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl  w-full max-w-md overflow-hidden flex flex-col">
 
             {/* Header Modal */}
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -1372,6 +1372,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
               <div className="mt-2 flex gap-3 justify-end">
                 <button
                   type="button"
+                  style={{cursor:"pointer"}}
                   onClick={() => setModalExportOuvert(false)}
                   className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
                 >
@@ -1399,6 +1400,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
           <div className="flex gap-2">
             <button
               type="button"
+              style={{cursor:"pointer"}}
               onClick={() => setVuePrincipale('PLAN_MEDIA')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA'
                 ? 'bg-snrt-navy text-white'
@@ -1409,6 +1411,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             </button>
             <button
               type="button"
+              style={{cursor:"pointer"}}
               onClick={() => setVuePrincipale('PIGE_VALIDATION')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PIGE_VALIDATION'
                 ? 'bg-snrt-navy text-white'
@@ -1419,6 +1422,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
             </button>
             <button
               type="button"
+              style={{cursor:"pointer"}}
               onClick={() => setVuePrincipale('PLAN_MEDIA_ADMIN')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${vuePrincipale === 'PLAN_MEDIA_ADMIN'
                 ? 'bg-snrt-navy text-white'
@@ -1511,6 +1515,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                 <button
                   key={f}
                   type="button"
+                  style={{cursor:"pointer"}}
                   onClick={() => toggleFiltreTimeline(f)}
                   className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtresTimeline.includes(f)
                     ? 'bg-snrt-navy text-white'
@@ -1744,29 +1749,21 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
           {/* ----------------- MODALE D'INSERTION DES ANNONCES ----------------- */}
           {isModalOuvert && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  gap-5" style={{ flexWrap: "wrap", overflow: "auto" }}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm  " style={{ flexWrap: "wrap", overflow: "auto", backgroundColor: "#ffffff",padding:"20px",boxSizing:"border-box" }}>
 
-
-
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "10px", minWidth: "800px" }}>
-
-                <div
-                  className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
-                >
                   {/* En-tête de la modale */}
-                  <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-800">
+                  <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0" style={{width:"100%",backgroundColor:"#243c54"}}>
+                    <div style={{display:"flex",justifyContent:"center",alignItems:"flex-start",flexDirection:"column",gap:"5px"}}>
+                      <h2 className="text-lg font-semibold text-slate-100">
                         Insertion d'annonces
                       </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-100 mt-0.5">
                         Épisode sélectionné : <span className="font-medium" style={{ color: "orange" }}>
                           {episodes.find(ep => ep.id === formEpisodeId)?.titre || `Épisode ${episodes.find(ep => ep.id === formEpisodeId)?.numero || 'N/C'}`}
                         </span>
                       </p>
                       <div className="flex items-center gap-2">
-                        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide" style={{backgroundColor:"transparent"}}>Conducteur :</label>
+                        <label className="text-[11px] font-semibold text-slate-200 uppercase tracking-wide" style={{ backgroundColor: "transparent" }}>Conducteur :</label>
                         <select
                           className="rounded border border-slate-300 py-0.5 px-2 text-xs bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                           value={selectedConducteurId}
@@ -1830,13 +1827,23 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                     </div>
                     <button
                       onClick={fermerModal}
-                      className="text-slate-500 hover:text-slate-600 bg-white hover:bg-slate-100 p-1.5 rounded-full transition-colors border border-slate-200"
+                      className="text-slate-700 hover:text-slate-600  hover:bg-slate-500 p-1.5 rounded-full transition-colors border "
+                    style={{cursor:"pointer",backgroundColor:"orange"}}
                     >
 
 
                       <X size={18} />
                     </button>
                   </div>
+
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "1px",flex:1,minHeight:"100%" }}>
+
+                <div
+                  className="bg-white   w-full  flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
+               
+               >
+
 
                   {/* Corps de la modale avec défilement */}
                   <form onSubmit={gererSoumissionFormulaire} className="flex flex-col flex-1 overflow-hidden">
@@ -1849,6 +1856,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
                           <button
                             type="button"
+                            style={{cursor:"pointer"}}
                             onClick={ajouterAnnonceAuFormulaire}
                             className="flex items-center gap-1 text-xs font-medium text-white bg-snrt-navy hover:bg-snrt-navy-hover px-3 py-1.5 rounded transition-colors shadow-sm"
                           >
@@ -1988,6 +1996,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                             {formAnnonces.length > 1 && (
                               <button
                                 type="button"
+                                style={{cursor:"pointer"}}
                                 onClick={() => supprimerAnnonceDuFormulaire(annonceItem.idUnique)}
                                 className="p-2 mb-[2px] text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded transition-colors"
                                 title="Retirer cette annonce"
@@ -2018,6 +2027,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                     <div className="p-4 border-t border-slate-100 bg-white shrink-0 flex justify-end gap-3">
                       <button
                         type="button"
+                        style={{cursor:"pointer"}}
                         className="pm-btn pm-btn-secondary"
                         onClick={fermerModal}
                       >
@@ -2035,7 +2045,8 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                 </div>
 
 
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                <div className="bg-white   w-full  flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                  style={{flex:"1"}}
                   onClick={(e) => e.stopPropagation()} // Empêche le clic à l'intérieur de fermer la modale
                 >
 
@@ -2191,8 +2202,8 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
 
               {/* 3. Colonne Droite : Liste connectée au stock global d'administration */}
               <aside
-                className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col"
-                style={{ flex: '0 0 600px', overflowY: 'auto', height: "750px" }}
+                className="border border-slate-100 bg-white  flex flex-col"
+                style={{  overflowY: 'auto',flex:0.7 ,height:"100%",padding:"20px",boxSizing:"border-box"}}
               >
                 <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0">
                   <ListIcon size={16} className="text-snrt-navy" />
@@ -2205,6 +2216,7 @@ export default function PlanMedia({ chaineActive, Utilisateur, isReadOnly = fals
                     <button
                       key={btn}
                       type="button"
+                      style={{cursor:"pointer"}}
                       onClick={() => setFiltreOrdre(btn)}
                       className={`rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors ${filtreOrdre === btn
                         ? 'bg-snrt-navy text-white'
